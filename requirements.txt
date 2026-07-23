@@ -1,4 +1,4 @@
-binance-connector-python
+python-binance
 python-dotenv
 groq
 numpy
