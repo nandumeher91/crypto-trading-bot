@@ -1,0 +1,8 @@
+binance-connector-python
+python-dotenv
+groq
+numpy
+pandas
+streamlit
+requests
+flask
