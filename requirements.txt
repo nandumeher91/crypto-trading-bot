@@ -1,8 +1,7 @@
 python-binance
-python-dotenv
 groq
+requests
 numpy
 pandas
 streamlit
-requests
-flask
+python-dotenv
