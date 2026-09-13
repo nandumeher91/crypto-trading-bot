@@ -11,8 +11,30 @@ from memory import (
 from strategy import get_enhanced_signal
 import logging
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write("OK - Crypto Trading Bot Active 🚀".encode('utf-8'))
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    try:
+        port = int(os.environ.get("PORT", 10000))
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        print(f"[HEALTH] HTTP Health Check Server running on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"[HEALTH] Warning: Could not start HTTP server: {e}")
+
+threading.Thread(target=start_health_server, daemon=True).start()
 
 def write_market_state(signal_data, current_price, brain_decision):
     try:
