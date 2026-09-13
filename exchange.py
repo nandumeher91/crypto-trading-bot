@@ -9,7 +9,8 @@ from binance.client import Client
 
 logger = logging.getLogger(__name__)
 
-ENV_PATH = os.path.join("C:/Users/nandu/OneDrive/Desktop/BOT", ".env")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(ENV_PATH)
 
 API_KEY = os.getenv("BINANCE_TESTNET_API_KEY")

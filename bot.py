@@ -12,9 +12,11 @@ from strategy import get_enhanced_signal
 import logging
 import os
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def write_market_state(signal_data, current_price, brain_decision):
     try:
-        state_file = os.path.join("C:/Users/nandu/OneDrive/Desktop/BOT", "market_state.json")
+        state_file = os.path.join(BASE_DIR, "market_state.json")
         data = {
             "price": current_price,
             "signal": signal_data.get("signal", "HOLD"),
@@ -35,7 +37,7 @@ def write_market_state(signal_data, current_price, brain_decision):
         print(f"[BOT] Warning: Failed to write market_state.json: {e}")
 
 # ====== LOGGING SETUP (File + Console both) ======
-log_path = os.path.join("C:/Users/nandu/OneDrive/Desktop/BOT", "bot.log")
+log_path = os.path.join(BASE_DIR, "bot.log")
 
 file_handler = logging.FileHandler(log_path, mode='w')
 file_handler.setLevel(logging.INFO)

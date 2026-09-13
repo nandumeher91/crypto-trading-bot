@@ -9,7 +9,8 @@ from strategy import get_enhanced_signal
 from exchange import get_current_price
 from memory import get_open_trades, get_recent_ledger, get_all_learnings, get_stats, get_recent_learnings
 
-ENV_PATH = os.path.join("C:/Users/nandu/OneDrive/Desktop/BOT", ".env")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(ENV_PATH)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")

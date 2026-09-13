@@ -3,8 +3,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-# FIXED: Use absolute path so .exe always writes to BOT folder
-BASE_DIR = os.path.join("C:/Users/nandu/OneDrive/Desktop/BOT")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEDGER_FILE = Path(os.path.join(BASE_DIR, "ledger.json"))
 LEARNINGS_FILE = Path(os.path.join(BASE_DIR, "learnings.txt"))
 STATS_FILE = Path(os.path.join(BASE_DIR, "stats.json"))
