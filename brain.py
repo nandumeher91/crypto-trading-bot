@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time as time_module
 from dotenv import load_dotenv
 from groq import Groq
@@ -8,30 +9,46 @@ from strategy import get_enhanced_signal
 from exchange import get_current_price
 from memory import get_open_trades, get_recent_ledger, get_all_learnings, get_stats, get_recent_learnings
 
-load_dotenv()
+ENV_PATH = os.path.join("C:/Users/nandu/OneDrive/Desktop/BOT", ".env")
+load_dotenv(ENV_PATH)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
 
-MODEL_NAME = "llama-3.3-70b-versatile"
+# UPDATED MODELS - Valid Groq models
+MODEL_NAME = "openai/gpt-oss-120b"
+FALLBACK_MODEL_NAME = "openai/gpt-oss-20b"
+
+
+def safe_print(msg):
+    """Safely print messages on Windows without crashing on Unicode characters"""
+    try:
+        print(msg)
+    except Exception:
+        try:
+            print(str(msg).encode('ascii', errors='replace').decode('ascii'))
+        except Exception:
+            pass
 
 
 def build_context(symbol="BTCUSDT"):
-    # Get enhanced market data
+    """Build market context for LLM decision making"""
+    if not isinstance(symbol, str):
+        safe_print(f"[BRAIN] WARNING: build_context got non-string symbol: {type(symbol).__name__}. Using BTCUSDT.")
+        symbol = "BTCUSDT"
+
     signal_data = get_enhanced_signal(symbol)
     price = get_current_price(symbol)
     open_trades = get_open_trades()
     recent_trades = get_recent_ledger(limit=5)
     stats = get_stats()
     recent_learnings = get_recent_learnings(limit=10)
-    
-    # Format recent trades for LLM
+
     trades_text = ""
     for t in recent_trades:
-        outcome = "✅ PROFIT" if t.get('pnl', 0) >= 0 else "❌ LOSS"
+        outcome = "PROFIT" if t.get('pnl', 0) >= 0 else "LOSS"
         trades_text += f"\n  - Trade #{t['trade_id']}: {t['side']} at ${t['entry_price']}, closed at ${t['exit_price']}, PnL: ${t.get('pnl', 0):.4f} ({outcome})"
-    
-    # Format open trades
+
     open_text = "None"
     if open_trades:
         ot = open_trades[0]
@@ -40,7 +57,7 @@ def build_context(symbol="BTCUSDT"):
             open_text += f", SL: ${ot['stop_loss']}"
         if ot.get('take_profit'):
             open_text += f", TP: ${ot['take_profit']}"
-    
+
     return {
         "symbol": symbol,
         "current_price": price,
@@ -52,108 +69,166 @@ def build_context(symbol="BTCUSDT"):
     }
 
 
-def ask_brain(symbol="BTCUSDT"):
+def extract_json(text):
+    """Extract JSON from any text response - handles markdown, reasoning, etc."""
+    if not text:
+        return None
+    text = text.strip()
+
+    # 1. Try direct JSON load
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # 2. Try markdown code block regex
+    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except Exception:
+            pass
+
+    # 3. Try finding outer curly braces
+    first_brace = text.find('{')
+    last_brace = text.rfind('}')
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        candidate = text[first_brace:last_brace + 1]
+        try:
+            return json.loads(candidate)
+        except Exception:
+            pass
+
+    return None
+
+
+def ask_brain(brain_input=None, symbol="BTCUSDT"):
+    """Ask Groq AI for trading decision."""
+    if brain_input is not None:
+        if isinstance(brain_input, dict):
+            symbol = brain_input.get("symbol", "BTCUSDT")
+            safe_print(f"[BRAIN] Called with dict input. Using symbol: {symbol}")
+        elif isinstance(brain_input, str):
+            symbol = brain_input
+            safe_print(f"[BRAIN] Called with string: {symbol}")
+        else:
+            safe_print(f"[BRAIN] WARNING: Unexpected input type: {type(brain_input).__name__}. Using BTCUSDT.")
+            symbol = "BTCUSDT"
+
     context = build_context(symbol)
     sd = context['signal_data']
-    
-    # Enhanced prompt with structured data
-    prompt = f"""You are an expert crypto trading analyst with strict risk management rules.
 
-## CURRENT MARKET DATA
+    prompt = f"""You are an elite Crypto Derivatives Quant & Smart Money Concepts (SMC) Execution Specialist for BTCUSDT.
+
+## CURRENT MARKET & SMC TRIAD DATA
 - Symbol: {context['symbol']}
 - Price: ${context['current_price']:,.2f}
 - Technical Signal: {sd['signal']} (Score: {sd['score']}/100, Confirmations: {sd['confirmations']})
-- Short EMA (9): ${sd['short_ema']:,.2f}
-- Long EMA (21): ${sd['long_ema']:,.2f}
-- RSI: {sd['rsi']:.1f} (30=oversold, 70=overbought)
-- MACD Histogram: {sd['macd_hist']:.4f}
+- Liquidity Sweep Signal: {sd.get('sweep_signal', 'NONE')}
+- 15m/5m Macro Trend: {sd.get('macro_trend', 'NEUTRAL')}
+- 5m Fib OTE Sweet Spot (0.705): ${sd.get('fib_ote_sweet_spot', 0) or 0:,.2f}
 - ATR (Volatility): ${sd['atr']:.2f}
-- ADX (Trend Strength): {sd['adx']:.1f} (<20=weak, >40=strong)
-- Volume Ratio: {sd['volume_ratio']:.2f}x average
-- Reasons: {', '.join(sd['reasons'])}
+- Reasons & Checklist: {', '.join(sd['reasons'])}
 
-## TRADING PERFORMANCE
+## TRADING PERFORMANCE & CAPITAL RISK
 - Total Trades: {context['stats']['total_trades']}
 - Win Rate: {context['stats'].get('win_rate', 0)}%
-- Current Streak: {context['stats']['current_streak']} ({'win' if context['stats']['current_streak'] > 0 else 'loss' if context['stats']['current_streak'] < 0 else 'neutral'})
+- Current Streak: {context['stats']['current_streak']}
 - Total PnL: ${context['stats']['total_pnl']:.4f}
-- Max Drawdown: ${context['stats']['max_drawdown']:.4f}
 
 ## OPEN POSITION
 {context['open_trades_text']}
 
-## RECENT TRADES
-{context['recent_trades_text']}
-
 ## PAST LEARNINGS
 {context['learnings']}
 
-## YOUR TASK
-Based on the technical signal, market conditions, and past performance, decide the best action.
+## MANDATORY EXECUTION RULES:
+1. Approve BUY ONLY if 15m/5m Sell-Side Liquidity Sweep (SSL) + 5m Displacement + 0.618-0.786 Fib OTE Retracement + 1m CHoCH trigger is confirmed (Signal = STRONG_BUY).
+2. Approve SELL ONLY if Buy-Side Liquidity Sweep (BSL) + 5m Displacement + 0.618-0.786 Fib OTE Retracement + 1m CHoCH trigger is confirmed (Signal = STRONG_SELL).
+3. Require Minimum 1:3.0 Risk-to-Reward Ratio (R:R) for full execution.
+4. If ANY checklist item is incomplete, output "action": "HOLD".
 
-CRITICAL RULES:
-1. If ADX < 20 (weak trend), prefer HOLD unless signal is VERY strong
-2. If on a losing streak (streak <= -2), reduce confidence and prefer HOLD
-3. If drawdown > $1, prefer HOLD to protect capital
-4. If there's an open position, only reverse if signal is STRONG and opposite
-5. Consider fees: each trade costs ~0.2% round-trip
-
-Respond ONLY with valid JSON:
-{{"action": "BUY" or "SELL" or "HOLD", "confidence": 1-10, "reasoning": "brief explanation", "risk_level": "LOW" or "MEDIUM" or "HIGH"}}
+Output MUST be a JSON object with keys: "action" ("BUY", "SELL", or "HOLD"), "confidence" (1-10 integer), "reasoning" (string), "risk_level" ("LOW", "MEDIUM", or "HIGH").
 """
 
-    max_retries = 3
+    models_to_try = [MODEL_NAME, FALLBACK_MODEL_NAME]
     response = None
-    for attempt in range(max_retries):
+    last_error = None
+
+    for model in models_to_try:
         try:
+            safe_print(f"[BRAIN] Calling Groq API model: {model}...")
             response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,  # Lower = more consistent
-                max_tokens=200
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a professional crypto trading AI assistant. Always output a valid JSON object."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=1000,
+                response_format={"type": "json_object"}
             )
-            break
+            if response and response.choices:
+                break
         except Exception as e:
-            print(f"[WARNING] Brain call failed (attempt {attempt + 1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                time_module.sleep(10)
+            last_error = str(e)
+            safe_print(f"[WARNING] Groq API call with {model} failed: {e}")
+            time_module.sleep(2)
 
     if response is None:
-        return "HOLD", "Brain unavailable - safety fallback", 0, "HIGH"
+        safe_print(f"[BRAIN] All models failed. Last error: {last_error}")
+        return {"action": "HOLD", "confidence": 0, "reason": "Brain API unavailable - safety fallback", "risk_level": "HIGH"}
 
     text = response.choices[0].message.content.strip()
 
-    # Clean code blocks
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
+    decision = extract_json(text)
 
-    try:
-        decision = json.loads(text)
-        action = decision.get("action", "HOLD").upper()
-        confidence = decision.get("confidence", 5)
-        reasoning = decision.get("reasoning", "No reasoning provided")
-        risk_level = decision.get("risk_level", "MEDIUM").upper()
-        
-        # Validate action
-        if action not in ["BUY", "SELL", "HOLD"]:
-            action = "HOLD"
-        
-        return action, reasoning, confidence, risk_level
-        
-    except json.JSONDecodeError:
-        print(f"[WARNING] Could not parse brain response: {text[:200]}")
-        return "HOLD", "Failed to parse response", 0, "HIGH"
+    if decision is None:
+        safe_print(f"[WARNING] Could not parse brain response")
+        return {"action": "HOLD", "confidence": 0, "reason": "Failed to parse response", "risk_level": "HIGH"}
+
+    action = decision.get("action", "HOLD").upper()
+    confidence = decision.get("confidence", 5)
+    reasoning = decision.get("reasoning", "No reasoning provided")
+    risk_level = decision.get("risk_level", "MEDIUM").upper()
+
+    if action not in ["BUY", "SELL", "HOLD"]:
+        action = "HOLD"
+
+    # Sanitize reasoning text for printing safely
+    clean_reason = reasoning.encode('ascii', errors='replace').decode('ascii')
+    safe_print(f"[BRAIN] Parsed: {action} | Confidence: {confidence}/10 | Risk: {risk_level}")
+    safe_print(f"[BRAIN] Reasoning: {clean_reason}")
+
+    return {
+        "action": action,
+        "confidence": confidence,
+        "reason": clean_reason,
+        "risk_level": risk_level
+    }
 
 
 def test_brain():
-    print("Testing enhanced Groq brain...\n")
-    action, reasoning, confidence, risk = ask_brain("BTCUSDT")
-    print(f"Action: {action}")
-    print(f"Confidence: {confidence}/10")
-    print(f"Risk Level: {risk}")
-    print(f"Reasoning: {reasoning}")
+    safe_print("Testing enhanced Groq brain...\n")
+    safe_print("--- Test 1: Direct string call ---")
+    result = ask_brain(symbol="BTCUSDT")
+    safe_print(f"Action: {result['action']}")
+    safe_print(f"Confidence: {result['confidence']}/10")
+    safe_print(f"Risk Level: {result['risk_level']}")
+    safe_print(f"Reason: {result['reason']}")
+
+    safe_print("\n--- Test 2: Dict call (bot.py style) ---")
+    brain_input = {
+        "signal": "BUY",
+        "score": 75,
+        "price": 65000.0,
+        "stats": {"total_trades": 4, "win_rate": 25},
+        "open_positions": 0
+    }
+    result = ask_brain(brain_input)
+    safe_print(f"Action: {result['action']}")
+    safe_print(f"Confidence: {result['confidence']}/10")
+    safe_print(f"Reason: {result['reason']}")
 
 
 if __name__ == "__main__":
