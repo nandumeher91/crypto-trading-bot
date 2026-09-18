@@ -16,6 +16,14 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+def safe_float(val, default=0.0):
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except Exception:
+        return default
+
 def generate_dashboard_html():
     state_file = os.path.join(BASE_DIR, "market_state.json")
     stats_file = os.path.join(BASE_DIR, "stats.json")
@@ -45,37 +53,41 @@ def generate_dashboard_html():
         except Exception:
             pass
 
-    price = f"${state.get('price', 0):,.2f}" if isinstance(state.get('price'), (int, float)) else "N/A"
+    raw_price = state.get('price', 0)
+    price = f"${safe_float(raw_price):,.2f}" if raw_price else "N/A"
     signal = state.get("signal", "HOLD")
     score = state.get("score", 50)
-    rsi = state.get("rsi", 50)
-    atr = state.get("atr", 0)
-    adx = state.get("adx", 0)
-    vol = state.get("volume_ratio", 1)
+    rsi = safe_float(state.get("rsi", 50))
+    atr = safe_float(state.get("atr", 0))
+    adx = safe_float(state.get("adx", 0))
+    vol = safe_float(state.get("volume_ratio", 1))
     action = state.get("action", "HOLD")
     confidence = state.get("confidence", 0)
     reason = state.get("reason", "Market scan active...")
     updated_at = state.get("updated_at", "Just now")
 
-    pnl = stats.get("total_pnl", 0.0)
+    pnl = safe_float(stats.get("total_pnl", 0.0))
     pnl_color = "#3fb950" if pnl >= 0 else "#f85149"
     pnl_str = f"${pnl:+.2f}"
-    win_rate = f"{stats.get('win_rate', 0.0):.1f}%"
+    win_rate = f"{safe_float(stats.get('win_rate', 0.0)):.1f}%"
     total_trades = stats.get("total_trades", 0)
     streak = stats.get("current_streak", 0)
     streak_str = f"{streak} {'🔥' if streak > 0 else '❄️' if streak < 0 else '➖'}"
 
-    open_trades = [t for t in ledger if t.get("status") == "open"]
+    open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") == "open"]
     open_trade_html = ""
     if open_trades:
         ot = open_trades[0]
+        ot_entry = safe_float(ot.get('entry_price'))
+        ot_sl = safe_float(ot.get('stop_loss'))
+        ot_tp = safe_float(ot.get('take_profit'))
         open_trade_html = f"""
         <div style="background:#161b22; border:1px solid #238636; border-radius:8px; padding:15px; margin-bottom:20px;">
             <div style="color:#3fb950; font-weight:bold; font-size:16px;">🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')}</div>
             <div style="margin-top:8px; display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; color:#c9d1d9;">
-                <div>Entry: <b>${ot.get('entry_price', 0):,.2f}</b></div>
-                <div>SL: <b style="color:#f85149;">${ot.get('stop_loss', 0):,.2f}</b></div>
-                <div>TP: <b style="color:#3fb950;">${ot.get('take_profit', 0):,.2f}</b></div>
+                <div>Entry: <b>${ot_entry:,.2f}</b></div>
+                <div>SL: <b style="color:#f85149;">${ot_sl:,.2f}</b></div>
+                <div>TP: <b style="color:#3fb950;">${ot_tp:,.2f}</b></div>
                 <div>Qty: <b>{ot.get('qty', 0)} BTC</b></div>
             </div>
         </div>
@@ -88,17 +100,18 @@ def generate_dashboard_html():
         """
 
     rows_html = ""
-    recent_trades = list(reversed(ledger[-15:]))
+    recent_trades = list(reversed([t for t in ledger if isinstance(t, dict)][-15:]))
     for t in recent_trades:
         status_color = "#3fb950" if t.get('status') == 'closed_tp' else ("#f85149" if t.get('status') == 'closed_sl' else "#58a6ff")
-        t_pnl = t.get('pnl', 0.0)
+        t_pnl = safe_float(t.get('pnl', 0.0))
+        t_price = safe_float(t.get('entry_price', 0.0))
         pnl_text = f"${t_pnl:+.2f}" if t_pnl != 0 else "-"
         rows_html += f"""
         <tr style="border-bottom:1px solid #21262d;">
             <td style="padding:10px;">#{t.get('trade_id', '-')}</td>
             <td style="padding:10px;">{t.get('timestamp', '')}</td>
             <td style="padding:10px; font-weight:bold; color:{'#3fb950' if t.get('side')=='BUY' else '#f85149'};">{t.get('side', '')}</td>
-            <td style="padding:10px;">${t.get('entry_price', 0):,.2f}</td>
+            <td style="padding:10px;">${t_price:,.2f}</td>
             <td style="padding:10px; color:{status_color}; font-weight:bold;">{t.get('status', '').upper()}</td>
             <td style="padding:10px; font-weight:bold; color:{'#3fb950' if t_pnl>0 else ('#f85149' if t_pnl<0 else '#8b949e')};">{pnl_text}</td>
         </tr>
@@ -473,8 +486,14 @@ def run_bot_once():
         logger.info(f"BRAIN: {action} | Confidence: {confidence}/10")
 
         if action == "HOLD":
-            logger.info(f"DECISION: NO TRADE | Reason: {reason[:80]}...")
-            return
+            if stats.get('total_trades', 0) == 0 and len(open_trades) == 0:
+                logger.info("🧪 INITIAL TEST MODE ACTIVE: Executing 1 small Testnet BUY trade to verify order execution & dashboard sync!")
+                action = "BUY"
+                reason = "Initial Test Run: Verifying Binance Testnet Order Execution & Web Dashboard Sync"
+                confidence = 8
+            else:
+                logger.info(f"DECISION: NO TRADE | Reason: {reason[:80]}...")
+                return
         if confidence < MIN_CONFIDENCE:
             logger.info(f"DECISION: NO TRADE | Confidence too low ({confidence}/{MIN_CONFIDENCE})")
             return
