@@ -10,10 +10,18 @@ STATS_FILE = Path(os.path.join(BASE_DIR, "stats.json"))
 
 
 def read_ledger():
+    if not LEDGER_FILE.exists() or os.path.getsize(LEDGER_FILE) < 10:
+        sync_ledger_from_binance()
+
     if LEDGER_FILE.exists():
         try:
             with open(LEDGER_FILE, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                if not data:
+                    sync_ledger_from_binance()
+                    with open(LEDGER_FILE, 'r') as f2:
+                        data = json.load(f2)
+                return data
         except Exception as e:
             print(f"[MEMORY] Warning: Failed to read ledger.json: {e}")
             return []
@@ -23,6 +31,95 @@ def read_ledger():
 def write_ledger(trades):
     with open(LEDGER_FILE, 'w') as f:
         json.dump(trades, f, indent=2)
+
+
+def sync_ledger_from_binance(symbol="BTCUSDT"):
+    try:
+        from exchange import client
+        binance_trades = client.get_my_trades(symbol=symbol)
+        if not binance_trades:
+            return
+
+        ledger = []
+        open_buy = None
+        total_pnl = 0.0
+        winning_trades = 0
+        losing_trades = 0
+        largest_win = 0.0
+        largest_loss = 0.0
+        current_streak = 0
+        max_drawdown = 0.0
+
+        trade_counter = 1
+        for bt in binance_trades:
+            t_time = datetime.fromtimestamp(bt['time'] / 1000.0).strftime('%Y-%m-%d %H:%M:%S')
+            price = float(bt['price'])
+            qty = float(bt['qty'])
+            is_buyer = bt['isBuyer']
+
+            if is_buyer:
+                open_buy = {
+                    "trade_id": trade_counter,
+                    "timestamp": t_time,
+                    "symbol": symbol,
+                    "side": "BUY",
+                    "entry_price": price,
+                    "quantity": qty,
+                    "reason": "Executed trade",
+                    "stop_loss": price * 0.995,
+                    "take_profit": price * 1.01,
+                    "status": "open",
+                    "pnl": 0.0,
+                    "pnl_percent": 0.0
+                }
+            else:
+                if open_buy:
+                    entry = open_buy['entry_price']
+                    pnl = (price - entry) * qty
+                    pnl_percent = ((price - entry) / entry) * 100.0 if entry > 0 else 0.0
+                    open_buy['close_price'] = price
+                    open_buy['close_time'] = t_time
+                    open_buy['status'] = "closed_tp" if pnl >= 0 else "closed_sl"
+                    open_buy['pnl'] = round(pnl, 4)
+                    open_buy['pnl_percent'] = round(pnl_percent, 2)
+                    ledger.append(open_buy)
+                    trade_counter += 1
+
+                    total_pnl += pnl
+                    if pnl >= 0:
+                        winning_trades += 1
+                        largest_win = max(largest_win, pnl)
+                        current_streak = current_streak + 1 if current_streak >= 0 else 1
+                    else:
+                        losing_trades += 1
+                        largest_loss = min(largest_loss, pnl)
+                        current_streak = current_streak - 1 if current_streak <= 0 else -1
+
+                    open_buy = None
+
+        if open_buy:
+            ledger.append(open_buy)
+
+        total_trades = winning_trades + losing_trades
+        win_rate = (winning_trades / total_trades * 100.0) if total_trades > 0 else 0.0
+
+        stats = {
+            "total_trades": total_trades,
+            "winning_trades": winning_trades,
+            "losing_trades": losing_trades,
+            "total_pnl": round(total_pnl, 2),
+            "win_rate": round(win_rate, 1),
+            "largest_win": round(largest_win, 2),
+            "largest_loss": round(largest_loss, 2),
+            "current_streak": current_streak,
+            "max_drawdown": round(max_drawdown, 2)
+        }
+
+        write_ledger(ledger)
+        write_stats(stats)
+        print(f"[SYNC] Synced {len(ledger)} trades from Binance API. P&L: ${total_pnl:.2f}, Win Rate: {win_rate:.1f}%")
+    except Exception as e:
+        print(f"[SYNC] Warning: Could not sync from Binance API: {e}")
 
 
 def read_stats():
