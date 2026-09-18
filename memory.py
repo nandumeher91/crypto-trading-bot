@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEDGER_FILE = Path(os.path.join(BASE_DIR, "ledger.json"))
@@ -52,7 +52,7 @@ def sync_ledger_from_binance(symbol="BTCUSDT"):
 
         trade_counter = 1
         for bt in binance_trades:
-            t_time = datetime.fromtimestamp(bt['time'] / 1000.0).strftime('%Y-%m-%d %H:%M:%S')
+            t_time = (datetime.utcfromtimestamp(bt['time'] / 1000.0) + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d %H:%M:%S IST')
             price = float(bt['price'])
             qty = float(bt['qty'])
             is_buyer = bt['isBuyer']

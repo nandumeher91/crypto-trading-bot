@@ -265,7 +265,7 @@ def write_market_state(signal_data, current_price, brain_decision):
             "confidence": brain_decision.get("confidence", 0),
             "reason": brain_decision.get("reason", ""),
             "risk_level": brain_decision.get("risk_level", "MEDIUM"),
-            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "updated_at": (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M:%S IST")
         }
         with open(state_file, "w") as f:
             json.dump(data, f, indent=2)
