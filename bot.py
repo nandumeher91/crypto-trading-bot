@@ -80,7 +80,7 @@ def generate_dashboard_html():
         ot = open_trades[0]
         ot_entry = safe_float(ot.get('entry_price'))
         ot_sl = safe_float(ot.get('stop_loss'))
-        ot_tp = safe_float(ot.get('take_profit'))
+        ot_qty = safe_float(ot.get('quantity', ot.get('qty', 0)))
         open_trade_html = f"""
         <div style="background:#161b22; border:1px solid #238636; border-radius:8px; padding:15px; margin-bottom:20px;">
             <div style="color:#3fb950; font-weight:bold; font-size:16px;">🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')}</div>
@@ -88,7 +88,7 @@ def generate_dashboard_html():
                 <div>Entry: <b>${ot_entry:,.2f}</b></div>
                 <div>SL: <b style="color:#f85149;">${ot_sl:,.2f}</b></div>
                 <div>TP: <b style="color:#3fb950;">${ot_tp:,.2f}</b></div>
-                <div>Qty: <b>{ot.get('qty', 0)} BTC</b></div>
+                <div>Qty: <b>{ot_qty:.5f} BTC</b></div>
             </div>
         </div>
         """
@@ -486,14 +486,8 @@ def run_bot_once():
         logger.info(f"BRAIN: {action} | Confidence: {confidence}/10")
 
         if action == "HOLD":
-            if stats.get('total_trades', 0) == 0 and len(open_trades) == 0:
-                logger.info("🧪 INITIAL TEST MODE ACTIVE: Executing 1 small Testnet BUY trade to verify order execution & dashboard sync!")
-                action = "BUY"
-                reason = "Initial Test Run: Verifying Binance Testnet Order Execution & Web Dashboard Sync"
-                confidence = 8
-            else:
-                logger.info(f"DECISION: NO TRADE | Reason: {reason[:80]}...")
-                return
+            logger.info(f"DECISION: NO TRADE | Reason: {reason[:80]}...")
+            return
         if confidence < MIN_CONFIDENCE:
             logger.info(f"DECISION: NO TRADE | Confidence too low ({confidence}/{MIN_CONFIDENCE})")
             return
