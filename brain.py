@@ -143,13 +143,26 @@ def ask_brain(brain_input=None, symbol="BTCUSDT"):
 ## PAST LEARNINGS
 {context['learnings']}
 
-## MANDATORY EXECUTION RULES:
-1. Approve BUY ONLY if 15m/5m Sell-Side Liquidity Sweep (SSL) + 5m Displacement + 0.618-0.786 Fib OTE Retracement + 1m CHoCH trigger is confirmed (Signal = STRONG_BUY).
-2. Approve SELL ONLY if Buy-Side Liquidity Sweep (BSL) + 5m Displacement + 0.618-0.786 Fib OTE Retracement + 1m CHoCH trigger is confirmed (Signal = STRONG_SELL).
-3. Require Minimum 1:3.0 Risk-to-Reward Ratio (R:R) for full execution.
-4. If ANY checklist item is incomplete, output "action": "HOLD".
+## STRATEGY PLAYBOOK & EXECUTION RULES:
+The strategy evaluates TWO High-Probability Setups targeting 1:3.2+ Asymmetric Risk-to-Reward:
+
+### SETUP A: DEEP OTE / LIQUIDITY SWEEP REVERSAL
+- 1H Macro Trend Alignment
+- Deep 1H Fib Golden Zone Retracement (0.618 - 0.786) OR 15m/5m Liquidity Sweep (SSL/BSL) OR Oversold/Overbought RSI
+- Output: "action": "BUY" (or "SELL"), "confidence": 7-9.
+
+### SETUP B: TREND CONTINUATION FVG ENTRY
+- 1H Macro Trend Alignment (1H Trend = BULL or BEAR)
+- 5m Fair Value Gap (FVG) / Order Block Bounce with healthy RSI momentum
+- High Volume Institutional Displacement
+- Output: "action": "BUY" (or "SELL"), "confidence": 6-8.
+
+### STRICT FILTERS:
+1. If market is in choppy consolidation with no clean trend, FVG, or sweep, output "action": "HOLD", "confidence": 1-4.
+2. Target Minimum 1:3.2 Risk-to-Reward Ratio (R:R) for optimal asymmetric returns (Tight SL, Big Profit Target).
 
 Output MUST be a JSON object with keys: "action" ("BUY", "SELL", or "HOLD"), "confidence" (1-10 integer), "reasoning" (string), "risk_level" ("LOW", "MEDIUM", or "HIGH").
+
 """
 
     models_to_try = [MODEL_NAME, FALLBACK_MODEL_NAME]

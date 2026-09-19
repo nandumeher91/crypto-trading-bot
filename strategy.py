@@ -60,6 +60,46 @@ def calculate_ema(prices, period):
     return np.convolve(prices, weights, mode="valid")[-1]
 
 
+def calculate_rsi(closes, period=14):
+    if len(closes) < period + 1:
+        return 50.0
+    deltas = np.diff(closes)
+    seed = deltas[:period]
+    up = seed[seed >= 0].sum() / period
+    down = -seed[seed < 0].sum() / period
+    rs = up / down if down != 0 else 0
+    rsi = np.zeros_like(closes)
+    rsi[:period] = 100. - 100. / (1. + rs)
+
+    for i in range(period, len(closes)):
+        delta = deltas[i - 1]
+        if delta > 0:
+            upval = delta
+            downval = 0.
+        else:
+            upval = 0.
+            downval = -delta
+        up = (up * (period - 1) + upval) / period
+        down = (down * (period - 1) + downval) / period
+        rs = up / down if down != 0 else 0
+        rsi[i] = 100. - 100. / (1. + rs)
+    return round(float(rsi[-1]), 1)
+
+
+def detect_fvg(data_5m):
+    """Detect Fair Value Gap (FVG) on 5m candles"""
+    highs = data_5m["high"]
+    lows = data_5m["low"]
+    if len(highs) < 4:
+        return False, False
+    # Bullish FVG: Candle 1 High < Candle 3 Low (Gap between candle 1 and 3)
+    bullish_fvg = lows[-1] > highs[-3]
+    # Bearish FVG: Candle 1 Low > Candle 3 High
+    bearish_fvg = highs[-1] < lows[-3]
+    return bool(bullish_fvg), bool(bearish_fvg)
+
+
+
 def detect_1h_macro_fib(data_1h):
     """Calculate 1-Hour Macro Swing Points & Golden Zone Fib Levels"""
     highs = data_1h["high"]
@@ -131,59 +171,81 @@ def get_enhanced_signal(symbol="BTCUSDT", interval="5m"):
     # 1. 1H Macro Fib Golden Zone
     fib_1h = detect_1h_macro_fib(data_1h)
 
-    # 2. 15m/5m Sweeps
+    # 2. 15m/5m Sweeps & FVG
     ssl_sweep, bsl_sweep, ssl_target, bsl_target = detect_liquidity_sweeps(data_15m, data_5m)
+    bullish_fvg, bearish_fvg = detect_fvg(data_5m)
+    rsi = calculate_rsi(data_5m["close"])
 
-    # 3. 1H EMA Trend Direction
+    # 3. 1H EMA Macro Trend Direction (Structure-based)
     ema_20_1h = calculate_ema(data_1h["close"], 20)
     ema_50_1h = calculate_ema(data_1h["close"], 50)
-    bullish_1h_trend = (ema_20_1h and ema_50_1h and current_price > ema_20_1h and ema_20_1h > ema_50_1h)
-    bearish_1h_trend = (ema_20_1h and ema_50_1h and current_price < ema_20_1h and ema_20_1h < ema_50_1h)
+    bullish_1h_trend = bool(ema_20_1h and ema_50_1h and ema_20_1h >= ema_50_1h * 0.998)
+    bearish_1h_trend = bool(ema_20_1h and ema_50_1h and ema_20_1h <= ema_50_1h * 1.002)
 
     # 4. Check Golden Zone Overlap
-    in_bullish_golden_zone = fib_1h and (fib_1h["fib_0.786"] <= current_price <= fib_1h["fib_0.618"])
-    in_bearish_golden_zone = fib_1h and (fib_1h["fib_0.618"] <= current_price <= fib_1h["fib_0.786"])
+    in_bullish_golden_zone = bool(fib_1h and (fib_1h["fib_0.786"] <= current_price <= fib_1h["fib_0.618"]))
+    in_bearish_golden_zone = bool(fib_1h and (fib_1h["fib_0.618"] <= current_price <= fib_1h["fib_0.786"]))
 
     score = 50
     signal = "HOLD"
     reasons = []
 
-    # HIGH WIN-RATE BUY CONFLUENCE (75-80%+ Win Target)
-    if (ssl_sweep or in_bullish_golden_zone) and bullish_1h_trend:
+    # HIGH-PROBABILITY BUY CONFLUENCES:
+    # Setup A: Deep OTE Golden Zone / SSL Liquidity Sweep
+    # Setup B: Trend Continuation FVG Re-test with 1H Trend Alignment
+    if (ssl_sweep or in_bullish_golden_zone or rsi <= 35) and bullish_1h_trend:
         signal = "STRONG_BUY"
         score = 85
         reasons = [
             "🔥 1H Macro Bullish Trend Aligned",
-            f"1H Fib Golden Zone Active (${fib_1h['fib_0.705']:.2f})" if fib_1h else "1H Fib Support",
-            "SSL Liquidity Sweep Confirmed" if ssl_sweep else "Golden Zone Dip",
-            "High Probability 75-80% Setup Target (1:2.5+ R:R)"
+            f"1H Fib Golden Zone Active (${fib_1h['fib_0.705']:.2f})" if fib_1h else "Deep Dip Value Support",
+            "SSL Liquidity Sweep Confirmed" if ssl_sweep else ("RSI Oversold Bottom Reversal" if rsi <= 35 else "Golden Zone Dip"),
+            "Targeting 1:3.2+ High Asymmetric Risk-to-Reward"
         ]
-    elif (bsl_sweep or in_bearish_golden_zone) and bearish_1h_trend:
+    elif bullish_1h_trend and bullish_fvg and rsi <= 62:
+        signal = "STRONG_BUY"
+        score = 80
+        reasons = [
+            "🔥 1H Macro Bullish Trend Aligned",
+            "5m Fair Value Gap (FVG) Institutional Buying Detected",
+            f"RSI Healthy at {rsi} (Trend Continuation)",
+            "Targeting 1:3.2+ High Asymmetric Risk-to-Reward"
+        ]
+    elif (bsl_sweep or in_bearish_golden_zone or rsi >= 68) and bearish_1h_trend:
         signal = "STRONG_SELL"
         score = 15
         reasons = [
             "🔥 1H Macro Bearish Trend Aligned",
-            f"1H Fib Golden Zone Active (${fib_1h['fib_0.705']:.2f})" if fib_1h else "1H Fib Resistance",
-            "BSL Liquidity Sweep Confirmed" if bsl_sweep else "Golden Zone Premium",
-            "High Probability 75-80% Setup Target (1:2.5+ R:R)"
+            f"1H Fib Golden Zone Active (${fib_1h['fib_0.705']:.2f})" if fib_1h else "Resistance Peak",
+            "BSL Liquidity Sweep Confirmed" if bsl_sweep else ("RSI Overbought Top Rejection" if rsi >= 68 else "Golden Zone Premium"),
+            "Targeting 1:3.2+ High Asymmetric Risk-to-Reward"
+        ]
+    elif bearish_1h_trend and bearish_fvg and rsi >= 38:
+        signal = "STRONG_SELL"
+        score = 20
+        reasons = [
+            "🔥 1H Macro Bearish Trend Aligned",
+            "5m Fair Value Gap (FVG) Institutional Selling Detected",
+            f"RSI Bearish at {rsi} (Trend Continuation)",
+            "Targeting 1:3.2+ High Asymmetric Risk-to-Reward"
         ]
     else:
-        reasons.append("Waiting for 1H Fib Golden Zone + Liquidity Sweep Confluence (Target: 75-80% Win Rate Setup).")
+        reasons.append(f"Waiting for 1H Trend + FVG/OTE Confluence. 1H: {'BULL' if bullish_1h_trend else 'BEAR' if bearish_1h_trend else 'NEUTRAL'}, RSI: {rsi}.")
 
     confirmations = 3 if signal != "HOLD" else 1
 
-    print(f"[STRATEGY] Signal: {signal} | Score: {score} | 1H Fib Zone: {in_bullish_golden_zone or in_bearish_golden_zone} | 1H Trend: {'BULL' if bullish_1h_trend else 'BEAR' if bearish_1h_trend else 'NEUTRAL'}")
+    print(f"[STRATEGY] Signal: {signal} | Score: {score} | RSI: {rsi} | FVG: {bullish_fvg or bearish_fvg} | 1H Trend: {'BULL' if bullish_1h_trend else 'BEAR' if bearish_1h_trend else 'NEUTRAL'}")
 
     return {
         "signal": signal,
         "score": score,
         "confirmations": confirmations,
         "current_price": current_price,
-        "rsi": 50.0,
+        "rsi": rsi,
         "atr": atr,
         "adx": 35.0,
         "volume_ratio": 1.5,
-        "sweep_signal": "BULLISH_SWEEP" if ssl_sweep else "BEARISH_SWEEP" if bsl_sweep else "NONE",
+        "sweep_signal": "BULLISH_SWEEP" if ssl_sweep else "BEARISH_SWEEP" if bsl_sweep else ("BULLISH_FVG" if bullish_fvg else "BEARISH_FVG" if bearish_fvg else "NONE"),
         "macro_trend": "BULLISH" if bullish_1h_trend else "BEARISH" if bearish_1h_trend else "NEUTRAL",
         "fib_ote_sweet_spot": fib_1h["fib_0.705"] if fib_1h else None,
         "reasons": reasons

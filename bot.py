@@ -78,24 +78,26 @@ def generate_dashboard_html():
     open_trade_html = ""
     if open_trades:
         ot = open_trades[0]
+        ot_sym = ot.get('symbol', PRIMARY_SYMBOL)
         ot_entry = safe_float(ot.get('entry_price'))
         ot_sl = safe_float(ot.get('stop_loss'))
+        ot_tp = safe_float(ot.get('take_profit'))
         ot_qty = safe_float(ot.get('quantity', ot.get('qty', 0)))
         open_trade_html = f"""
         <div style="background:#161b22; border:1px solid #238636; border-radius:8px; padding:15px; margin-bottom:20px;">
-            <div style="color:#3fb950; font-weight:bold; font-size:16px;">🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')}</div>
+            <div style="color:#3fb950; font-weight:bold; font-size:16px;">🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})</div>
             <div style="margin-top:8px; display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; color:#c9d1d9;">
                 <div>Entry: <b>${ot_entry:,.2f}</b></div>
                 <div>SL: <b style="color:#f85149;">${ot_sl:,.2f}</b></div>
                 <div>TP: <b style="color:#3fb950;">${ot_tp:,.2f}</b></div>
-                <div>Qty: <b>{ot_qty:.5f} BTC</b></div>
+                <div>Qty: <b>{ot_qty}</b></div>
             </div>
         </div>
         """
     else:
         open_trade_html = """
         <div style="background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px; margin-bottom:20px; color:#8b949e;">
-            ℹ️ No open positions right now. Searching for SMC 1H Fib OTE setups...
+            ℹ️ No open positions right now. Scanning BTC, ETH, SOL for 1:3.2+ R:R setups...
         </div>
         """
 
@@ -105,11 +107,13 @@ def generate_dashboard_html():
         status_color = "#3fb950" if t.get('status') == 'closed_tp' else ("#f85149" if t.get('status') == 'closed_sl' else "#58a6ff")
         t_pnl = safe_float(t.get('pnl', 0.0))
         t_price = safe_float(t.get('entry_price', 0.0))
+        t_sym = t.get('symbol', 'BTCUSDT')
         pnl_text = f"${t_pnl:+.2f}" if t_pnl != 0 else "-"
         rows_html += f"""
         <tr style="border-bottom:1px solid #21262d;">
             <td style="padding:10px;">#{t.get('trade_id', '-')}</td>
             <td style="padding:10px;">{t.get('timestamp', '')}</td>
+            <td style="padding:10px; font-weight:bold; color:#58a6ff;">{t_sym}</td>
             <td style="padding:10px; font-weight:bold; color:{'#3fb950' if t.get('side')=='BUY' else '#f85149'};">{t.get('side', '')}</td>
             <td style="padding:10px;">${t_price:,.2f}</td>
             <td style="padding:10px; color:{status_color}; font-weight:bold;">{t.get('status', '').upper()}</td>
@@ -118,7 +122,7 @@ def generate_dashboard_html():
         """
 
     if not rows_html:
-        rows_html = "<tr><td colspan='6' style='padding:15px; text-align:center; color:#8b949e;'>No trades recorded yet. Bot is scanning market.</td></tr>"
+        rows_html = "<tr><td colspan='7' style='padding:15px; text-align:center; color:#8b949e;'>No trades recorded yet. Bot is scanning market.</td></tr>"
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -206,6 +210,7 @@ def generate_dashboard_html():
                     <tr>
                         <th>ID</th>
                         <th>Time</th>
+                        <th>Pair</th>
                         <th>Side</th>
                         <th>Price</th>
                         <th>Status</th>
@@ -290,29 +295,30 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 # ====== CONFIGURATION ======
-SYMBOL = "BTCUSDT"
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+PRIMARY_SYMBOL = "BTCUSDT"
 CHECK_INTERVAL_SECONDS = 300
 MAX_TRADES_PER_DAY = 10
-COOLDOWN_SECONDS = 300
-MIN_CONFIDENCE = 5
-MAX_DRAWDOWN_USD = 2.0
+COOLDOWN_SECONDS = 180
+MIN_CONFIDENCE = 6
+MAX_DRAWDOWN_USD = 10.0
+MAX_OPEN_POSITIONS = 2
 
 RISK_PER_TRADE_PERCENT = 2.0
-ATR_MULTIPLIER_SL = 1.5
-RISK_REWARD_RATIO = 2.0
+ATR_MULTIPLIER_SL = 1.2   # Tighter SL -> Asymmetric R:R
+RISK_REWARD_RATIO = 3.2   # Big Profit Target: 1:3.2+ R:R!
 
 # State tracking
 trades_today = 0
 last_trade_time = None
 last_reset_date = None
 
-
 MIN_NOTIONAL_USD = 10.0  # Binance minimum order value in USDT
 
-def get_position_size(entry_price, stop_loss, confidence):
-    """Calculate position size based on risk with safety checks"""
+def get_position_size(symbol, entry_price, stop_loss, confidence):
+    """Calculate position size based on risk with multi-asset precision"""
     balance = 100.0
-    risk_amount = balance * (RISK_PER_TRADE_PERCENT / 100)
+    risk_amount = balance * (RISK_PER_TRADE_PERCENT / 100) # $2.00
     price_risk = abs(entry_price - stop_loss)
 
     if price_risk == 0:
@@ -324,22 +330,35 @@ def get_position_size(entry_price, stop_loss, confidence):
     notional_value = position_size * entry_price
     if notional_value < MIN_NOTIONAL_USD:
         position_size = MIN_NOTIONAL_USD / entry_price
-        print(f"[POSITION] Adjusted size to meet Binance MIN_NOTIONAL (${MIN_NOTIONAL_USD:.2f}): {position_size:.5f} BTC")
 
-    position_size = round(position_size, 5)
+    # Precision formatting per asset
+    if "BTC" in symbol:
+        position_size = round(position_size, 5)
+    elif "ETH" in symbol:
+        position_size = round(position_size, 4)
+    elif "SOL" in symbol:
+        position_size = round(position_size, 2)
+    else:
+        position_size = round(position_size, 4)
 
     if position_size < MIN_QTY:
         position_size = MIN_QTY
 
-    print(f"[POSITION] Entry: ${entry_price:.2f}, SL: ${stop_loss:.2f}, Risk: ${price_risk:.2f}, Size: {position_size} (${position_size * entry_price:.2f} USD)")
+    print(f"[POSITION] {symbol} Entry: ${entry_price:.2f}, SL: ${stop_loss:.2f}, Risk: ${price_risk:.2f}, Size: {position_size} (${position_size * entry_price:.2f} USD)")
     return position_size
 
 
-def manage_open_positions(current_price, atr=None):
 
+def manage_open_positions():
     open_trades = get_open_trades()
     for trade in open_trades:
         trade_id = trade["trade_id"]
+        t_sym = trade.get("symbol", PRIMARY_SYMBOL)
+        try:
+            current_price = get_current_price(t_sym)
+        except Exception:
+            continue
+
         entry = float(trade["entry_price"])
         sl = float(trade["stop_loss"]) if trade.get("stop_loss") else None
         tp = float(trade["take_profit"]) if trade.get("take_profit") else None
@@ -348,87 +367,73 @@ def manage_open_positions(current_price, atr=None):
         if side == "BUY":
             # 1. Stop Loss Hit
             if sl and current_price <= sl:
-                logger.info(f"STOP LOSS HIT | Trade #{trade_id} | Price: ${current_price:.2f} | SL: ${sl:.2f}")
+                logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
                 close_open_position(trade, current_price, "Stop Loss hit", "stop_loss")
                 continue
 
-            # 2. Take Profit Hit
+            # 2. Take Profit Hit (1:3.2+ Target)
             if tp and current_price >= tp:
-                logger.info(f"TAKE PROFIT HIT | Trade #{trade_id} | Price: ${current_price:.2f} | TP: ${tp:.2f}")
+                logger.info(f"TAKE PROFIT HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP: ${tp:.2f}")
                 close_open_position(trade, current_price, "Take Profit hit", "take_profit")
                 continue
 
-            # 3. Breakeven Lock & Trailing Stop-Loss
+            # 3. Breakeven Lock at 35% of target
             if tp and sl:
                 tp_distance = tp - entry
-                # Move to Breakeven if price reaches 50% towards TP
-                be_trigger_price = entry + (tp_distance * 0.5)
+                be_trigger_price = entry + (tp_distance * 0.35)
                 be_sl_price = entry * 1.001  # Entry + 0.1% fee buffer
 
                 if current_price >= be_trigger_price and sl < be_sl_price:
-                    logger.info(f"PROTECTION | Trade #{trade_id} | Moving SL to Breakeven (+0.1%): ${be_sl_price:.2f}")
+                    logger.info(f"PROTECTION | Trade #{trade_id} ({t_sym}) | Moving SL to Breakeven (+0.1%): ${be_sl_price:.2f}")
                     update_trade_stop_loss(trade_id, be_sl_price)
-                    write_learning(f"Trade #{trade_id}: Profit reached 50% target. SL moved to Breakeven (${be_sl_price:.2f}).", category="risk_management", trade_id=trade_id)
+                    write_learning(f"Trade #{trade_id} ({t_sym}): Moved SL to Breakeven (${be_sl_price:.2f}).", category="risk_management", trade_id=trade_id)
                     sl = be_sl_price
-
-                # Trailing Stop-Loss if ATR is available
-                if atr and atr > 0:
-                    trail_sl = current_price - (atr * 1.5)
-                    if trail_sl > sl:
-                        logger.info(f"TRAILING STOP | Trade #{trade_id} | Trailed SL up from ${sl:.2f} to ${trail_sl:.2f}")
-                        update_trade_stop_loss(trade_id, trail_sl)
 
         else:  # SELL position
             # 1. Stop Loss Hit
             if sl and current_price >= sl:
-                logger.info(f"STOP LOSS HIT | Trade #{trade_id} | Price: ${current_price:.2f} | SL: ${sl:.2f}")
+                logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
                 close_open_position(trade, current_price, "Stop Loss hit", "stop_loss")
                 continue
 
             # 2. Take Profit Hit
             if tp and current_price <= tp:
-                logger.info(f"TAKE PROFIT HIT | Trade #{trade_id} | Price: ${current_price:.2f} | TP: ${tp:.2f}")
+                logger.info(f"TAKE PROFIT HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP: ${tp:.2f}")
                 close_open_position(trade, current_price, "Take Profit hit", "take_profit")
                 continue
 
-            # 3. Breakeven Lock & Trailing Stop-Loss
+            # 3. Breakeven Lock
             if tp and sl:
                 tp_distance = entry - tp
-                be_trigger_price = entry - (tp_distance * 0.5)
+                be_trigger_price = entry - (tp_distance * 0.35)
                 be_sl_price = entry * 0.999
 
                 if current_price <= be_trigger_price and sl > be_sl_price:
-                    logger.info(f"PROTECTION | Trade #{trade_id} | Moving SL to Breakeven (-0.1%): ${be_sl_price:.2f}")
+                    logger.info(f"PROTECTION | Trade #{trade_id} ({t_sym}) | Moving SL to Breakeven (-0.1%): ${be_sl_price:.2f}")
                     update_trade_stop_loss(trade_id, be_sl_price)
-                    write_learning(f"Trade #{trade_id}: Profit reached 50% target. SL moved to Breakeven (${be_sl_price:.2f}).", category="risk_management", trade_id=trade_id)
+                    write_learning(f"Trade #{trade_id} ({t_sym}): Moved SL to Breakeven (${be_sl_price:.2f}).", category="risk_management", trade_id=trade_id)
                     sl = be_sl_price
-
-                if atr and atr > 0:
-                    trail_sl = current_price + (atr * 1.5)
-                    if trail_sl < sl:
-                        logger.info(f"TRAILING STOP | Trade #{trade_id} | Trailed SL down from ${sl:.2f} to ${trail_sl:.2f}")
-                        update_trade_stop_loss(trade_id, trail_sl)
-
 
 
 def close_open_position(open_trade, current_price, reason, closed_by="brain"):
     global last_trade_time
+    trade_symbol = open_trade.get("symbol", PRIMARY_SYMBOL)
     opposite_side = "SELL" if open_trade["side"].upper() == "BUY" else "BUY"
     try:
-        order = place_test_order(symbol=SYMBOL, side=opposite_side, quantity=open_trade["quantity"])
+        order = place_test_order(symbol=trade_symbol, side=opposite_side, quantity=open_trade["quantity"])
         closed = close_trade(open_trade["trade_id"], current_price, closed_by)
         pnl = closed["pnl"]
         pnl_pct = closed.get("pnl_percent", 0)
         outcome = "[PROFIT]" if pnl >= 0 else "[LOSS]"
-        logger.info(f"CLOSED | Trade #{open_trade['trade_id']} | {outcome} ${pnl:.4f} ({pnl_pct:.2f}%) | {closed_by}")
-        lesson = (f"Trade #{open_trade['trade_id']} ({open_trade['side']} ${open_trade['entry_price']}) "
+        logger.info(f"CLOSED | Trade #{open_trade['trade_id']} ({trade_symbol}) | {outcome} ${pnl:.4f} ({pnl_pct:.2f}%) | {closed_by}")
+        lesson = (f"Trade #{open_trade['trade_id']} ({trade_symbol} {open_trade['side']} ${open_trade['entry_price']}) "
                   f"closed at ${current_price}. Result: {outcome} ${abs(pnl):.4f}. "
                   f"Original: {open_trade['reason']}. Close reason: {reason}")
         write_learning(lesson, category="trade_close", trade_id=open_trade['trade_id'])
         last_trade_time = datetime.now()
         return True
     except Exception as e:
-        logger.error(f"[ERROR] Failed to close position: {e}")
+        logger.error(f"[ERROR] Failed to close position for {trade_symbol}: {e}")
         return False
 
 
@@ -445,94 +450,104 @@ def reset_daily_limits():
 def run_bot_once():
     global trades_today, last_trade_time
     reset_daily_limits()
+
+    # 1. Manage all open positions first
+    manage_open_positions()
+
     if last_trade_time and (datetime.now() - last_trade_time).total_seconds() < COOLDOWN_SECONDS:
         return
-    try:
-        print(f"[BOT] Getting signal for symbol: {SYMBOL} (type: {type(SYMBOL).__name__})")
-        signal_data = get_enhanced_signal(SYMBOL)
-        signal = signal_data["signal"]
-        score = signal_data["score"]
 
-        current_price = get_current_price(SYMBOL)
-        manage_open_positions(current_price, atr=signal_data.get("atr"))
-        open_trades = get_open_trades()
-        stats = get_stats()
+    open_trades = get_open_trades()
+    open_symbols = [t.get("symbol") for t in open_trades if t.get("status") == "open"]
+    stats = get_stats()
 
-        brain_input = {
-            "signal": signal,
-            "score": score,
-            "price": current_price,
-            "stats": stats,
-            "open_positions": len(open_trades)
-        }
+    if len(open_trades) >= MAX_OPEN_POSITIONS:
+        return
 
-        print(f"[BOT] Calling brain with input keys: {list(brain_input.keys())}")
-        brain_decision = ask_brain(brain_input)
+    # 2. Multi-Symbol Scanning: BTCUSDT, ETHUSDT, SOLUSDT
+    for sym in SYMBOLS:
+        if sym in open_symbols:
+            continue
 
-        if not isinstance(brain_decision, dict):
-            print(f"[BOT] WARNING: brain_decision is not dict, got {type(brain_decision).__name__}. Using HOLD.")
-            brain_decision = {"action": "HOLD", "confidence": 0, "reason": "Invalid brain response"}
+        try:
+            signal_data = get_enhanced_signal(sym)
+            signal = signal_data["signal"]
+            score = signal_data["score"]
+            current_price = signal_data["current_price"]
 
-        action = brain_decision.get("action", "HOLD")
-        confidence = brain_decision.get("confidence", 0)
-        reason = brain_decision.get("reason", "")
+            brain_input = {
+                "symbol": sym,
+                "signal": signal,
+                "score": score,
+                "price": current_price,
+                "stats": stats,
+                "open_positions": len(open_trades)
+            }
 
-        # Write latest state to market_state.json for GUI real-time display
-        write_market_state(signal_data, current_price, brain_decision)
+            brain_decision = ask_brain(brain_input, symbol=sym)
+            if not isinstance(brain_decision, dict):
+                brain_decision = {"action": "HOLD", "confidence": 0, "reason": "Invalid brain response"}
 
-        logger.info("=" * 50)
-        logger.info(f"CHECK #{stats.get('total_trades', 0) + 1} | {SYMBOL} | ${current_price:.2f}")
-        logger.info(f"SIGNAL: {signal} | Score: {score}/100")
-        logger.info(f"BRAIN: {action} | Confidence: {confidence}/10")
+            action = brain_decision.get("action", "HOLD")
+            confidence = brain_decision.get("confidence", 0)
+            reason = brain_decision.get("reason", "")
 
-        if action == "HOLD":
-            logger.info(f"DECISION: NO TRADE | Reason: {reason[:80]}...")
-            return
-        if confidence < MIN_CONFIDENCE:
-            logger.info(f"DECISION: NO TRADE | Confidence too low ({confidence}/{MIN_CONFIDENCE})")
-            return
-        if trades_today >= MAX_TRADES_PER_DAY:
-            logger.info(f"DECISION: NO TRADE | Daily limit reached ({trades_today}/{MAX_TRADES_PER_DAY})")
-            return
-        total_pnl = stats.get("total_pnl", 0)
-        if total_pnl < -MAX_DRAWDOWN_USD:
-            logger.info(f"DECISION: NO TRADE | Max drawdown exceeded (${total_pnl:.2f})")
-            return
-        if action in ["BUY", "SELL"]:
-            if action == "SELL" and len(open_trades) == 0:
-                logger.info(f"DECISION: NO TRADE | Spot trading: Cannot open SELL (short) position without holding base asset.")
-                return
+            # Write primary state for live dashboard
+            if sym == PRIMARY_SYMBOL or action in ["BUY", "SELL"]:
+                write_market_state(signal_data, current_price, brain_decision)
 
-            atr = signal_data.get("atr", current_price * 0.01)
-            if action == "BUY":
-                stop_loss = current_price - (atr * ATR_MULTIPLIER_SL)
-                take_profit = current_price + (atr * ATR_MULTIPLIER_SL * RISK_REWARD_RATIO)
-            else:
-                stop_loss = current_price + (atr * ATR_MULTIPLIER_SL)
-                take_profit = current_price - (atr * ATR_MULTIPLIER_SL * RISK_REWARD_RATIO)
+            logger.info("=" * 50)
+            logger.info(f"SCAN | {sym} | ${current_price:,.2f} | Score: {score}/100 | Brain: {action} ({confidence}/10)")
 
-            position_size = get_position_size(current_price, stop_loss, confidence)
+            if action == "HOLD":
+                continue
+            if confidence < MIN_CONFIDENCE:
+                logger.info(f"DECISION ({sym}): NO TRADE | Confidence too low ({confidence}/{MIN_CONFIDENCE})")
+                continue
+            if trades_today >= MAX_TRADES_PER_DAY:
+                logger.info(f"DECISION ({sym}): NO TRADE | Daily limit reached ({trades_today}/{MAX_TRADES_PER_DAY})")
+                break
+            total_pnl = stats.get("total_pnl", 0)
+            if total_pnl < -MAX_DRAWDOWN_USD:
+                logger.info(f"DECISION ({sym}): NO TRADE | Max drawdown exceeded (${total_pnl:.2f})")
+                break
 
-            print(f"[BOT] Executing {action} | Price: ${current_price:.2f} | Qty: {position_size}")
+            if action in ["BUY", "SELL"]:
+                if action == "SELL" and len(open_trades) == 0:
+                    logger.info(f"DECISION ({sym}): NO TRADE | Spot trading: Cannot open SELL short without holding base asset.")
+                    continue
 
-            order = place_test_order(symbol=SYMBOL, side=action, quantity=position_size)
-            trade_id = log_new_trade(
-                symbol=SYMBOL, side=action, entry_price=current_price,
-                quantity=position_size, reason=reason,
-                stop_loss=stop_loss, take_profit=take_profit
-            )
-            trades_today += 1
-            last_trade_time = datetime.now()
-            logger.info(f"TRADE EXECUTED | #{trade_id} | {action} | ${current_price:.2f} | Qty: {position_size}")
-            logger.info(f"SL: ${stop_loss:.2f} | TP: ${take_profit:.2f}")
-            write_learning(
-                f"New trade #{trade_id}: {action} {SYMBOL} at ${current_price} "
-                f"with SL=${stop_loss:.2f}, TP=${take_profit:.2f}. Reason: {reason}",
-                category="trade_open", trade_id=trade_id
-            )
-    except Exception as e:
-        logger.error(f"[ERROR] Bot cycle failed: {e}")
-        print(f"[BOT] ERROR in cycle: {e}")
+                atr = signal_data.get("atr", current_price * 0.01)
+                if action == "BUY":
+                    stop_loss = current_price - (atr * ATR_MULTIPLIER_SL)
+                    take_profit = current_price + (atr * ATR_MULTIPLIER_SL * RISK_REWARD_RATIO)
+                else:
+                    stop_loss = current_price + (atr * ATR_MULTIPLIER_SL)
+                    take_profit = current_price - (atr * ATR_MULTIPLIER_SL * RISK_REWARD_RATIO)
+
+                position_size = get_position_size(sym, current_price, stop_loss, confidence)
+
+                print(f"[BOT] Executing {action} on {sym} | Price: ${current_price:,.2f} | Qty: {position_size}")
+                order = place_test_order(symbol=sym, side=action, quantity=position_size)
+                trade_id = log_new_trade(
+                    symbol=sym, side=action, entry_price=current_price,
+                    quantity=position_size, reason=reason,
+                    stop_loss=stop_loss, take_profit=take_profit
+                )
+                trades_today += 1
+                last_trade_time = datetime.now()
+                logger.info(f"TRADE EXECUTED | #{trade_id} ({sym}) | {action} | ${current_price:,.2f} | Qty: {position_size}")
+                logger.info(f"SL: ${stop_loss:,.2f} | TP: ${take_profit:,.2f} | Target R:R: 1:{RISK_REWARD_RATIO}")
+                write_learning(
+                    f"New trade #{trade_id}: {action} {sym} at ${current_price} "
+                    f"with SL=${stop_loss:.2f}, TP=${take_profit:.2f}. Reason: {reason}",
+                    category="trade_open", trade_id=trade_id
+                )
+                break
+
+        except Exception as e:
+            logger.error(f"[ERROR] Cycle failed for {sym}: {e}")
+            print(f"[BOT] ERROR in {sym} cycle: {e}")
         write_learning(f"Bot error: {str(e)}", category="error")
 
 
