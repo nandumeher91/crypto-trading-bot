@@ -297,6 +297,7 @@ logger.addHandler(console_handler)
 # ====== CONFIGURATION ======
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 PRIMARY_SYMBOL = "BTCUSDT"
+SYMBOL = PRIMARY_SYMBOL
 CHECK_INTERVAL_SECONDS = 300
 MAX_TRADES_PER_DAY = 10
 COOLDOWN_SECONDS = 180
@@ -548,7 +549,7 @@ def run_bot_once():
         except Exception as e:
             logger.error(f"[ERROR] Cycle failed for {sym}: {e}")
             print(f"[BOT] ERROR in {sym} cycle: {e}")
-        write_learning(f"Bot error: {str(e)}", category="error")
+            write_learning(f"Bot error for {sym}: {str(e)}", category="error")
 
 
 def main():
@@ -558,7 +559,7 @@ def main():
 
     logger.info("=" * 50)
     logger.info("ENHANCED TRADING BOT STARTED")
-    logger.info(f"Symbol: {SYMBOL} | Check: {CHECK_INTERVAL_SECONDS}s | Min Confidence: {MIN_CONFIDENCE}")
+    logger.info(f"Symbols: {', '.join(SYMBOLS)} | Check: {CHECK_INTERVAL_SECONDS}s | Min Confidence: {MIN_CONFIDENCE}")
     logger.info(f"Risk/Trade: {RISK_PER_TRADE_PERCENT}% | SL: {ATR_MULTIPLIER_SL}x ATR | RR: 1:{RISK_REWARD_RATIO}")
     logger.info("=" * 50)
 

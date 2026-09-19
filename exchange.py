@@ -75,11 +75,11 @@ def _sanitize_quantity(quantity):
         if qty < MIN_QTY:
             qty = MIN_QTY
         qty_str = f"{qty:.5f}"
-        print(f"[SANITIZE] Original: {quantity} → Sanitized: {qty_str}")
+        print(f"[SANITIZE] Original: {quantity} -> Sanitized: {qty_str}")
         return qty_str
     except Exception as e:
         print(f"[SANITIZE] WARNING: Invalid quantity '{quantity}': {e}")
-        return "0.00001"
+        return str(quantity)
 
 
 def _direct_price_check(symbol):
