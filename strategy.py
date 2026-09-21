@@ -148,6 +148,109 @@ def detect_liquidity_sweeps(data_15m, data_5m):
     return ssl_sweep, bsl_sweep, ssl_target, bsl_target
 
 
+def calculate_liquidity_targets(data_15m, data_1h, current_price, side="BUY"):
+    """
+    Market moves from Liquidity to Liquidity (SMC Core Principle).
+    - TP1 (Nearest Liquidity): 15m/Asia Swing High/Low.
+    - TP2 (Major Liquidity): 24h High/Low (PDH/PDL) or 1H Swing Expansion.
+    """
+    highs_15m = data_15m["high"]
+    lows_15m = data_15m["low"]
+
+    recent_swing_high = float(np.max(highs_15m[-16:]))
+    asia_high = float(np.max(highs_15m[-32:]))
+    pdh = float(np.max(highs_15m[-96:]))
+
+    recent_swing_low = float(np.min(lows_15m[-16:]))
+    asia_low = float(np.min(lows_15m[-32:]))
+    pdl = float(np.min(lows_15m[-96:]))
+
+    if side == "BUY":
+        candidates_tp1 = [h for h in [recent_swing_high, asia_high] if h > current_price * 1.006]
+        tp1 = min(candidates_tp1) if candidates_tp1 else current_price * 1.015
+
+        candidates_tp2 = [h for h in [pdh, max(highs_15m)] if h > tp1 * 1.005]
+        tp2 = max(candidates_tp2) if candidates_tp2 else tp1 * 1.025
+        return float(round(tp1, 2)), float(round(tp2, 2))
+    else:
+        candidates_tp1 = [l for l in [recent_swing_low, asia_low] if l < current_price * 0.994]
+        tp1 = max(candidates_tp1) if candidates_tp1 else current_price * 0.985
+
+        candidates_tp2 = [l for l in [pdl, min(lows_15m)] if l < tp1 * 0.995]
+        tp2 = min(candidates_tp2) if candidates_tp2 else tp1 * 0.975
+        return float(round(tp1, 2)), float(round(tp2, 2))
+
+
+def calculate_structure_sl(data_5m, current_price, side="BUY"):
+    """
+    Structure-Based Stop Loss:
+    - SL at low of previous 5m candle (BUY) or high of previous 5m candle (SELL).
+    - Capped at min 0.35% (avoid spread noise) and max 1.20% (strict risk cap).
+    """
+    lows = data_5m["low"]
+    highs = data_5m["high"]
+
+    if side == "BUY":
+        candle_low = min(float(lows[-1]), float(lows[-2]))
+        raw_sl = candle_low * 0.999
+
+        min_sl = current_price * (1.0 - 0.0035)
+        max_sl = current_price * (1.0 - 0.0120)
+
+        if raw_sl > min_sl:
+            sl = min_sl
+        elif raw_sl < max_sl:
+            sl = max_sl
+        else:
+            sl = raw_sl
+        return float(round(sl, 2))
+    else:
+        candle_high = max(float(highs[-1]), float(highs[-2]))
+        raw_sl = candle_high * 1.001
+
+        min_sl = current_price * (1.0 + 0.0035)
+        max_sl = current_price * (1.0 + 0.0120)
+
+        if raw_sl < min_sl:
+            sl = min_sl
+        elif raw_sl > max_sl:
+            sl = max_sl
+        else:
+            sl = raw_sl
+        return float(round(sl, 2))
+
+
+def detect_early_reversal(symbol, side):
+    """
+    Detects if market is reversing before reaching entry/SL after TP1 is hit.
+    For BUY: Detects strong bearish candle or Bearish FVG on 5m.
+    For SELL: Detects strong bullish candle or Bullish FVG on 5m.
+    """
+    try:
+        data_5m = get_klines_data(symbol, interval="5m", limit=10)
+        closes = data_5m["close"]
+        opens = data_5m["open"]
+        highs = data_5m["high"]
+        lows = data_5m["low"]
+
+        if len(closes) < 4:
+            return False
+
+        last_body = abs(closes[-1] - opens[-1])
+
+        if side.upper() == "BUY":
+            is_bearish_rejection = closes[-1] < opens[-1] and (highs[-1] - opens[-1]) > last_body * 1.5
+            bearish_fvg = highs[-1] < lows[-3]
+            return bool(is_bearish_rejection or bearish_fvg)
+        else:
+            is_bullish_rejection = closes[-1] > opens[-1] and (opens[-1] - lows[-1]) > last_body * 1.5
+            bullish_fvg = lows[-1] > highs[-3]
+            return bool(is_bullish_rejection or bullish_fvg)
+    except Exception as e:
+        print(f"[REVERSAL] Warning: check failed for {symbol}: {e}")
+        return False
+
+
 def get_enhanced_signal(symbol="BTCUSDT", interval="5m"):
     """
     75-80% Win-Rate Target Execution Strategy:
@@ -234,13 +337,21 @@ def get_enhanced_signal(symbol="BTCUSDT", interval="5m"):
 
     confirmations = 3 if signal != "HOLD" else 1
 
-    print(f"[STRATEGY] Signal: {signal} | Score: {score} | RSI: {rsi} | FVG: {bullish_fvg or bearish_fvg} | 1H Trend: {'BULL' if bullish_1h_trend else 'BEAR' if bearish_1h_trend else 'NEUTRAL'}")
+    target_side = "BUY" if "BUY" in signal else ("SELL" if "SELL" in signal else "BUY")
+    tp1, tp2 = calculate_liquidity_targets(data_15m, data_1h, current_price, side=target_side)
+    structure_sl = calculate_structure_sl(data_5m, current_price, side=target_side)
+
+    print(f"[STRATEGY] Signal: {signal} | Score: {score} | RSI: {rsi} | TP1: ${tp1:,.2f} | TP2: ${tp2:,.2f} | SL: ${structure_sl:,.2f}")
 
     return {
+        "symbol": symbol,
         "signal": signal,
         "score": score,
         "confirmations": confirmations,
         "current_price": current_price,
+        "tp1": tp1,
+        "tp2": tp2,
+        "structure_sl": structure_sl,
         "rsi": rsi,
         "atr": atr,
         "adx": 35.0,

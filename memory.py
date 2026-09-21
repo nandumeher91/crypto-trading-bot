@@ -33,15 +33,26 @@ def write_ledger(trades):
         json.dump(trades, f, indent=2)
 
 
-def sync_ledger_from_binance(symbol="BTCUSDT"):
+def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
     try:
         from exchange import client
-        binance_trades = client.get_my_trades(symbol=symbol)
-        if not binance_trades:
+        all_raw_trades = []
+        for sym in symbols:
+            try:
+                b_trades = client.get_my_trades(symbol=sym)
+                for bt in b_trades:
+                    bt['symbol'] = sym
+                    all_raw_trades.append(bt)
+            except Exception:
+                pass
+
+        if not all_raw_trades:
             return
 
+        all_raw_trades.sort(key=lambda x: x['time'])
+
         ledger = []
-        open_buy = None
+        open_positions = {}
         total_pnl = 0.0
         winning_trades = 0
         losing_trades = 0
@@ -49,40 +60,42 @@ def sync_ledger_from_binance(symbol="BTCUSDT"):
         largest_loss = 0.0
         current_streak = 0
         max_drawdown = 0.0
-
         trade_counter = 1
-        for bt in binance_trades:
+
+        for bt in all_raw_trades:
+            sym = bt.get('symbol', 'BTCUSDT')
             t_time = (datetime.utcfromtimestamp(bt['time'] / 1000.0) + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d %H:%M:%S IST')
             price = float(bt['price'])
             qty = float(bt['qty'])
             is_buyer = bt['isBuyer']
 
             if is_buyer:
-                open_buy = {
+                open_positions[sym] = {
                     "trade_id": trade_counter,
                     "timestamp": t_time,
-                    "symbol": symbol,
+                    "symbol": sym,
                     "side": "BUY",
                     "entry_price": price,
                     "quantity": qty,
                     "reason": "Executed trade",
-                    "stop_loss": price * 0.995,
-                    "take_profit": price * 1.01,
+                    "stop_loss": price * 0.992,
+                    "take_profit": price * 1.025,
                     "status": "open",
                     "pnl": 0.0,
                     "pnl_percent": 0.0
                 }
             else:
-                if open_buy:
-                    entry = open_buy['entry_price']
+                if sym in open_positions and open_positions[sym]:
+                    open_trade = open_positions[sym]
+                    entry = open_trade['entry_price']
                     pnl = (price - entry) * qty
                     pnl_percent = ((price - entry) / entry) * 100.0 if entry > 0 else 0.0
-                    open_buy['close_price'] = price
-                    open_buy['close_time'] = t_time
-                    open_buy['status'] = "closed_tp" if pnl >= 0 else "closed_sl"
-                    open_buy['pnl'] = round(pnl, 4)
-                    open_buy['pnl_percent'] = round(pnl_percent, 2)
-                    ledger.append(open_buy)
+                    open_trade['close_price'] = price
+                    open_trade['close_time'] = t_time
+                    open_trade['status'] = "closed_tp" if pnl >= 0 else "closed_sl"
+                    open_trade['pnl'] = round(pnl, 2)
+                    open_trade['pnl_percent'] = round(pnl_percent, 2)
+                    ledger.append(open_trade)
                     trade_counter += 1
 
                     total_pnl += pnl
@@ -95,10 +108,10 @@ def sync_ledger_from_binance(symbol="BTCUSDT"):
                         largest_loss = min(largest_loss, pnl)
                         current_streak = current_streak - 1 if current_streak <= 0 else -1
 
-                    open_buy = None
+                    del open_positions[sym]
 
-        if open_buy:
-            ledger.append(open_buy)
+        for sym, op in open_positions.items():
+            ledger.append(op)
 
         total_trades = winning_trades + losing_trades
         win_rate = (winning_trades / total_trades * 100.0) if total_trades > 0 else 0.0
@@ -117,7 +130,7 @@ def sync_ledger_from_binance(symbol="BTCUSDT"):
 
         write_ledger(ledger)
         write_stats(stats)
-        print(f"[SYNC] Synced {len(ledger)} trades from Binance API. P&L: ${total_pnl:.2f}, Win Rate: {win_rate:.1f}%")
+        print(f"[SYNC] Synced {len(ledger)} trades across {symbols} from Binance API. P&L: ${total_pnl:.2f}, Win Rate: {win_rate:.1f}%")
     except Exception as e:
         print(f"[SYNC] Warning: Could not sync from Binance API: {e}")
 
@@ -146,7 +159,7 @@ def write_stats(stats):
         json.dump(stats, f, indent=2)
 
 
-def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, take_profit=None):
+def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, take_profit=None, tp1=None, tp2=None):
     trades = read_ledger()
     new_trade = {
         "trade_id": len(trades) + 1,
@@ -155,9 +168,14 @@ def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, t
         "side": side.upper(),
         "entry_price": float(entry_price),
         "quantity": float(quantity),
+        "initial_quantity": float(quantity),
         "reason": reason,
         "stop_loss": float(stop_loss) if stop_loss else None,
-        "take_profit": float(take_profit) if take_profit else None,
+        "take_profit": float(tp2 or take_profit) if (tp2 or take_profit) else None,
+        "tp1": float(tp1) if tp1 else None,
+        "tp2": float(tp2) if tp2 else (float(take_profit) if take_profit else None),
+        "tp1_hit": False,
+        "partial_pnl": 0.0,
         "exit_price": None,
         "exit_timestamp": None,
         "pnl": None,
@@ -167,17 +185,62 @@ def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, t
     }
     trades.append(new_trade)
     write_ledger(trades)
+    return new_trade["trade_id"]
+
+
 def update_trade_stop_loss(trade_id, new_sl):
     trades = read_ledger()
     updated = False
     for trade in trades:
-        if trade["trade_id"] == trade_id and trade["status"] == "open":
+        if trade["trade_id"] == trade_id and trade["status"] in ["open", "partial_tp"]:
             trade["stop_loss"] = float(round(new_sl, 2))
             updated = True
             break
     if updated:
         write_ledger(trades)
     return updated
+
+
+def partial_close_trade(trade_id, exit_price, closed_qty, tp_stage="tp1"):
+    """
+    Handles partial profit booking (60% at TP1):
+    - Deducts closed_qty from open trade quantity
+    - Books partial profit to stats and trade record
+    - Sets trade status to 'partial_tp'
+    - Flags tp1_hit = True
+    """
+    trades = read_ledger()
+    target = None
+    for trade in trades:
+        if trade["trade_id"] == trade_id and trade["status"] in ["open", "partial_tp"]:
+            target = trade
+            break
+
+    if target is None:
+        raise ValueError(f"Trade ID {trade_id} not found or not open")
+
+    side = target["side"].upper()
+    entry = float(target["entry_price"])
+    qty = float(closed_qty)
+    exit_p = float(exit_price)
+
+    if side == "BUY":
+        pnl = (exit_p - entry) * qty
+    else:
+        pnl = (entry - exit_p) * qty
+
+    fee = (entry * qty * 0.001) + (exit_p * qty * 0.001)
+    pnl_after_fee = pnl - fee
+
+    remaining_qty = max(0.0, round(float(target["quantity"]) - qty, 6))
+    target["quantity"] = remaining_qty
+    target["partial_pnl"] = round(float(target.get("partial_pnl", 0.0)) + pnl_after_fee, 4)
+    target["status"] = "partial_tp"
+    target["tp1_hit"] = True
+
+    write_ledger(trades)
+    update_stats(pnl_after_fee, is_partial=True)
+    return target
 
 
 def close_trade(trade_id, exit_price, closed_by="brain"):
@@ -191,7 +254,7 @@ def close_trade(trade_id, exit_price, closed_by="brain"):
     if target is None:
         raise ValueError(f"Trade ID {trade_id} not found")
 
-    if target["status"] != "open":
+    if target["status"] not in ["open", "partial_tp"]:
         raise ValueError(f"Trade #{trade_id} is already closed")
 
     side = target["side"].upper()
@@ -201,44 +264,53 @@ def close_trade(trade_id, exit_price, closed_by="brain"):
 
     if side == "BUY":
         pnl = (exit_p - entry) * qty
-        pnl_percent = ((exit_p - entry) / entry) * 100
     else:
         pnl = (entry - exit_p) * qty
-        pnl_percent = ((entry - exit_p) / entry) * 100
 
     fee = (entry * qty * 0.001) + (exit_p * qty * 0.001)
-    pnl_after_fee = pnl - fee
+    runner_pnl = pnl - fee
+    total_trade_pnl = runner_pnl + float(target.get("partial_pnl", 0.0))
+
+    initial_qty = float(target.get("initial_quantity", qty))
+    pnl_percent = (total_trade_pnl / (entry * initial_qty)) * 100 if (entry * initial_qty) > 0 else 0
 
     target["exit_price"] = exit_p
     target["exit_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    target["pnl"] = round(pnl_after_fee, 8)
-    target["pnl_percent"] = round(pnl_percent, 4)
+    target["pnl"] = round(total_trade_pnl, 4)
+    target["pnl_percent"] = round(pnl_percent, 2)
     target["status"] = "closed"
     target["closed_by"] = closed_by
 
     write_ledger(trades)
-    update_stats(pnl_after_fee)
+    update_stats(runner_pnl, is_partial=False)
 
     return target
 
 
-def update_stats(pnl):
+def update_stats(pnl, is_partial=False):
     stats = read_stats()
-    stats["total_trades"] += 1
+    if not is_partial:
+        stats["total_trades"] += 1
     stats["total_pnl"] = round(stats["total_pnl"] + pnl, 8)
 
     if pnl >= 0:
-        stats["winning_trades"] += 1
-        stats["current_streak"] = stats["current_streak"] + 1 if stats["current_streak"] >= 0 else 1
+        if not is_partial:
+            stats["winning_trades"] += 1
+            stats["current_streak"] = stats["current_streak"] + 1 if stats["current_streak"] >= 0 else 1
         if pnl > stats["largest_win"]:
             stats["largest_win"] = round(pnl, 8)
     else:
-        stats["losing_trades"] += 1
-        stats["current_streak"] = stats["current_streak"] - 1 if stats["current_streak"] <= 0 else -1
-        if abs(pnl) > abs(stats["largest_loss"]):
+        if not is_partial:
+            stats["losing_trades"] += 1
+            stats["current_streak"] = stats["current_streak"] - 1 if stats["current_streak"] <= 0 else -1
+        if pnl < stats["largest_loss"]:
             stats["largest_loss"] = round(pnl, 8)
 
-    peak = max(0, stats["total_pnl"])
+    peak = stats.get("peak_pnl", 0.0)
+    if stats["total_pnl"] > peak:
+        stats["peak_pnl"] = stats["total_pnl"]
+        peak = stats["total_pnl"]
+
     if stats["total_pnl"] < peak:
         drawdown = peak - stats["total_pnl"]
         if drawdown > stats["max_drawdown"]:
@@ -278,7 +350,7 @@ def get_recent_learnings(limit=10):
 
 def get_open_trades():
     trades = read_ledger()
-    return [t for t in trades if t["status"] == "open"]
+    return [t for t in trades if t["status"] in ["open", "partial_tp"]]
 
 
 def get_recent_ledger(limit=10):

@@ -5,16 +5,39 @@ from datetime import datetime, timedelta
 from brain import ask_brain
 from exchange import place_test_order, get_current_price, test_api_connection, MIN_QTY
 from memory import (
-    log_new_trade, close_trade, write_learning, get_open_trades,
+    log_new_trade, close_trade, partial_close_trade, write_learning, get_open_trades,
     get_stats, get_trade_by_id, update_trade_stop_loss
 )
-from strategy import get_enhanced_signal
+from strategy import get_enhanced_signal, detect_early_reversal
 import logging
 import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SKIP_WEEKEND_TRADING = True
+
+def is_weekend():
+    """
+    Checks if current UTC time falls in weekend low-liquidity window:
+    Friday 22:00 UTC to Sunday 22:00 UTC (Saturday & Sunday).
+    During this period, institutional banks and CME futures are closed,
+    volume drops 60-70%, leading to choppy retail stop-hunts.
+    """
+    if not SKIP_WEEKEND_TRADING:
+        return False
+    now_utc = datetime.utcnow()
+    weekday = now_utc.weekday()  # Monday=0, ..., Friday=4, Saturday=5, Sunday=6
+    hour = now_utc.hour
+
+    if weekday == 4 and hour >= 22:  # Friday after 22:00 UTC
+        return True
+    if weekday == 5:                 # Saturday all day
+        return True
+    if weekday == 6 and hour < 22:   # Sunday before 22:00 UTC
+        return True
+    return False
 
 def safe_float(val, default=0.0):
     try:
@@ -53,6 +76,7 @@ def generate_dashboard_html():
         except Exception:
             pass
 
+    sym_label = state.get("symbol", PRIMARY_SYMBOL)
     raw_price = state.get('price', 0)
     price = f"${safe_float(raw_price):,.2f}" if raw_price else "N/A"
     signal = state.get("signal", "HOLD")
@@ -74,24 +98,39 @@ def generate_dashboard_html():
     streak = stats.get("current_streak", 0)
     streak_str = f"{streak} {'🔥' if streak > 0 else '❄️' if streak < 0 else '➖'}"
 
-    open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") == "open"]
-    open_trade_html = ""
+    open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["open", "partial_tp"]]
+    weekend_active = is_weekend()
     if open_trades:
         ot = open_trades[0]
         ot_sym = ot.get('symbol', PRIMARY_SYMBOL)
         ot_entry = safe_float(ot.get('entry_price'))
         ot_sl = safe_float(ot.get('stop_loss'))
-        ot_tp = safe_float(ot.get('take_profit'))
+        ot_tp1 = safe_float(ot.get('tp1', ot.get('take_profit')))
+        ot_tp2 = safe_float(ot.get('tp2', ot.get('take_profit')))
         ot_qty = safe_float(ot.get('quantity', ot.get('qty', 0)))
+        is_runner = ot.get('status') == 'partial_tp'
+        card_border = "#e3b341" if is_runner else "#238636"
+        card_title_color = "#e3b341" if is_runner else "#3fb950"
+        card_title = f"🛡️ 60% BOOKED (TP1 HIT) | 40% RISK-FREE RUNNER: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})" if is_runner else f"🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})"
+        sl_label = "SL (+0.35% Green Lock)" if is_runner else "SL (Structure)"
+        sl_color = "#3fb950" if is_runner else "#f85149"
+
         open_trade_html = f"""
-        <div style="background:#161b22; border:1px solid #238636; border-radius:8px; padding:15px; margin-bottom:20px;">
-            <div style="color:#3fb950; font-weight:bold; font-size:16px;">🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})</div>
+        <div style="background:#161b22; border:1px solid {card_border}; border-radius:8px; padding:15px; margin-bottom:20px;">
+            <div style="color:{card_title_color}; font-weight:bold; font-size:16px;">{card_title}</div>
             <div style="margin-top:8px; display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; color:#c9d1d9;">
                 <div>Entry: <b>${ot_entry:,.2f}</b></div>
-                <div>SL: <b style="color:#f85149;">${ot_sl:,.2f}</b></div>
-                <div>TP: <b style="color:#3fb950;">${ot_tp:,.2f}</b></div>
+                <div>{sl_label}: <b style="color:{sl_color};">${ot_sl:,.2f}</b></div>
+                <div>TP1 (60%): <b style="color:#3fb950;">${ot_tp1:,.2f}</b></div>
+                <div>TP2 (40%): <b style="color:#58a6ff;">${ot_tp2:,.2f}</b></div>
                 <div>Qty: <b>{ot_qty}</b></div>
             </div>
+        </div>
+        """
+    elif weekend_active:
+        open_trade_html = """
+        <div style="background:#1c1917; border:1px solid #d29922; border-radius:8px; padding:12px; margin-bottom:20px; color:#e3b341;">
+            ⏸️ <b>WEEKEND PAUSE:</b> Institutional banks & CME futures are closed (Fri 22:00 UTC - Sun 22:00 UTC). Bot has paused new entries to prevent low-liquidity chop losses. Positions management (SL/TP/Breakeven) remains active. Scanning resumes Sunday 22:00 UTC (Monday 03:30 IST).
         </div>
         """
     else:
@@ -124,6 +163,8 @@ def generate_dashboard_html():
     if not rows_html:
         rows_html = "<tr><td colspan='7' style='padding:15px; text-align:center; color:#8b949e;'>No trades recorded yet. Bot is scanning market.</td></tr>"
 
+    status_badge = '<span class="badge" style="background:#d29922;">⏸️ WEEKEND PAUSED</span>' if weekend_active else '<span class="badge">🟢 LIVE 24/7 CLOUD</span>'
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,17 +173,17 @@ def generate_dashboard_html():
     <meta http-equiv="refresh" content="30">
     <title>SMC Trading Bot Dashboard</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; margin:0; padding:20px; }}
-        .container {{ max-width: 1000px; margin: 0 auto; }}
-        .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap:10px; }}
-        .badge {{ background: #238636; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }}
-        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }}
-        .card {{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; }}
-        .card-title {{ font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }}
-        .card-value {{ font-size: 22px; font-weight: bold; color: #f0f6fc; }}
-        .reason-box {{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 20px; }}
-        table {{ width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; font-size: 14px; }}
-        th {{ background: #21262d; text-align: left; padding: 12px 10px; color: #8b949e; font-size: 12px; text-transform: uppercase; }}
+        body {{{{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; margin:0; padding:20px; }}}}
+        .container {{{{ max-width: 1000px; margin: 0 auto; }}}}
+        .header {{{{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap:10px; }}}}
+        .badge {{{{ background: #238636; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }}}}
+        .grid {{{{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }}}}
+        .card {{{{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; }}}}
+        .card-title {{{{ font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }}}}
+        .card-value {{{{ font-size: 22px; font-weight: bold; color: #f0f6fc; }}}}
+        .reason-box {{{{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 20px; }}}}
+        table {{{{ width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; font-size: 14px; }}}}
+        th {{{{ background: #21262d; text-align: left; padding: 12px 10px; color: #8b949e; font-size: 12px; text-transform: uppercase; }}}}
     </style>
 </head>
 <body>
@@ -153,14 +194,14 @@ def generate_dashboard_html():
                 <div style="font-size:13px; color:#8b949e; margin-top:4px;">1H Fib OTE (0.618-0.705) + 5m Liquidity Sweep</div>
             </div>
             <div>
-                <span class="badge">🟢 LIVE 24/7 CLOUD</span>
+                {status_badge}
                 <div style="font-size:11px; color:#8b949e; margin-top:4px; text-align:right;">Updated: {updated_at}</div>
             </div>
         </div>
 
         <div class="grid">
             <div class="card">
-                <div class="card-title">BTC/USDT Price</div>
+                <div class="card-title">{sym_label} Price</div>
                 <div class="card-value" style="color:#58a6ff;">{price}</div>
             </div>
             <div class="card">
@@ -259,6 +300,7 @@ def write_market_state(signal_data, current_price, brain_decision):
     try:
         state_file = os.path.join(BASE_DIR, "market_state.json")
         data = {
+            "symbol": signal_data.get("symbol", PRIMARY_SYMBOL),
             "price": current_price,
             "signal": signal_data.get("signal", "HOLD"),
             "score": signal_data.get("score", 50),
@@ -300,61 +342,53 @@ PRIMARY_SYMBOL = "BTCUSDT"
 SYMBOL = PRIMARY_SYMBOL
 CHECK_INTERVAL_SECONDS = 300
 MAX_TRADES_PER_DAY = 10
-COOLDOWN_SECONDS = 180
+LOSS_COOLDOWN_SECONDS = 1800    # 30-min cooldown after a loss (bypassed if Grade-A+ setup)
+PROFIT_COOLDOWN_SECONDS = 60    # 60-second safety buffer after a win
 MIN_CONFIDENCE = 6
 MAX_DRAWDOWN_USD = 10.0
 MAX_OPEN_POSITIONS = 2
 
-RISK_PER_TRADE_PERCENT = 2.0
-ATR_MULTIPLIER_SL = 1.2   # Tighter SL -> Asymmetric R:R
-RISK_REWARD_RATIO = 3.2   # Big Profit Target: 1:3.2+ R:R!
+TARGET_NOTIONAL_USD = 15.0      # $15 entry -> 60% is $9.00, 40% is $6.00 (Both > $5 Binance MIN_NOTIONAL)
 
 # State tracking
 trades_today = 0
 last_trade_time = None
+last_trade_was_loss = False
 last_reset_date = None
 
-MIN_NOTIONAL_USD = 10.0  # Binance minimum order value in USDT
-
 def get_position_size(symbol, entry_price, stop_loss, confidence):
-    """Calculate position size based on risk with multi-asset precision"""
-    balance = 100.0
-    risk_amount = balance * (RISK_PER_TRADE_PERCENT / 100) # $2.00
-    price_risk = abs(entry_price - stop_loss)
+    """
+    Sizes position to approximately $15.00 notional:
+    - 60% partial exit at TP1 = ~$9.00 (satisfies Binance $5 minNotional)
+    - 40% runner exit at TP2 = ~$6.00 (satisfies Binance $5 minNotional)
+    """
+    raw_qty = TARGET_NOTIONAL_USD / entry_price
 
-    if price_risk == 0:
-        price_risk = entry_price * 0.01
-
-    position_size = risk_amount / price_risk
-
-    # Enforce Binance MIN_NOTIONAL filter (Must be >= $10.00 USDT)
-    notional_value = position_size * entry_price
-    if notional_value < MIN_NOTIONAL_USD:
-        position_size = MIN_NOTIONAL_USD / entry_price
-
-    # Precision formatting per asset
     if "BTC" in symbol:
-        position_size = round(position_size, 5)
+        position_size = round(raw_qty, 5)
     elif "ETH" in symbol:
-        position_size = round(position_size, 4)
+        position_size = round(raw_qty, 4)
     elif "SOL" in symbol:
-        position_size = round(position_size, 2)
+        position_size = round(raw_qty, 2)
     else:
-        position_size = round(position_size, 4)
+        position_size = round(raw_qty, 4)
 
     if position_size < MIN_QTY:
         position_size = MIN_QTY
 
-    print(f"[POSITION] {symbol} Entry: ${entry_price:.2f}, SL: ${stop_loss:.2f}, Risk: ${price_risk:.2f}, Size: {position_size} (${position_size * entry_price:.2f} USD)")
+    print(f"[POSITION] {symbol} Entry: ${entry_price:.2f}, SL: ${stop_loss:.2f}, Size: {position_size} (~${position_size * entry_price:.2f} USD)")
     return position_size
 
 
-
 def manage_open_positions():
+    global last_trade_time, last_trade_was_loss
     open_trades = get_open_trades()
     for trade in open_trades:
         trade_id = trade["trade_id"]
         t_sym = trade.get("symbol", PRIMARY_SYMBOL)
+        status = trade.get("status", "open")
+        tp1_hit = trade.get("tp1_hit", False)
+
         try:
             current_price = get_current_price(t_sym)
         except Exception:
@@ -362,62 +396,122 @@ def manage_open_positions():
 
         entry = float(trade["entry_price"])
         sl = float(trade["stop_loss"]) if trade.get("stop_loss") else None
-        tp = float(trade["take_profit"]) if trade.get("take_profit") else None
+        tp1 = float(trade.get("tp1")) if trade.get("tp1") else None
+        tp2 = float(trade.get("tp2") or trade.get("take_profit")) if (trade.get("tp2") or trade.get("take_profit")) else None
         side = trade["side"].upper()
+        current_qty = float(trade["quantity"])
 
         if side == "BUY":
-            # 1. Stop Loss Hit
-            if sl and current_price <= sl:
-                logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
-                close_open_position(trade, current_price, "Stop Loss hit", "stop_loss")
-                continue
+            # --- STAGE 1: Full Position Management (Before TP1) ---
+            if not tp1_hit:
+                # 1. Stop Loss Hit (Structure SL)
+                if sl and current_price <= sl:
+                    logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
+                    close_open_position(trade, current_price, "Stop Loss hit", "stop_loss", is_loss=True)
+                    continue
 
-            # 2. Take Profit Hit (1:3.2+ Target)
-            if tp and current_price >= tp:
-                logger.info(f"TAKE PROFIT HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP: ${tp:.2f}")
-                close_open_position(trade, current_price, "Take Profit hit", "take_profit")
-                continue
+                # 2. Take Profit 1 Hit (Nearest Liquidity -> Book 60%)
+                if tp1 and current_price >= tp1:
+                    logger.info(f"🎯 TP1 HIT (Nearest Liquidity) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP1: ${tp1:.2f}")
+                    if "BTC" in t_sym:
+                        close_qty = round(current_qty * 0.60, 5)
+                    elif "ETH" in t_sym:
+                        close_qty = round(current_qty * 0.60, 4)
+                    elif "SOL" in t_sym:
+                        close_qty = round(current_qty * 0.60, 2)
+                    else:
+                        close_qty = round(current_qty * 0.60, 4)
 
-            # 3. Breakeven Lock at 35% of target
-            if tp and sl:
-                tp_distance = tp - entry
-                be_trigger_price = entry + (tp_distance * 0.35)
-                be_sl_price = entry * 1.001  # Entry + 0.1% fee buffer
+                    rem_qty = round(current_qty - close_qty, 6)
+                    if close_qty * current_price >= 5.0 and rem_qty * current_price >= 5.0:
+                        try:
+                            place_test_order(symbol=t_sym, side="SELL", quantity=close_qty)
+                            partial_close_trade(trade_id, current_price, close_qty, tp_stage="tp1")
+                            
+                            # Shift remaining 40% SL to Protected Green Lock (Entry + 0.35%)
+                            green_sl = round(entry * 1.0035, 2)
+                            update_trade_stop_loss(trade_id, green_sl)
+                            logger.info(f"🛡️ PROTECTED GREEN LOCK | Trade #{trade_id} ({t_sym}) | Booked 60% ({close_qty}) | Runner SL set to +0.35% Green (${green_sl:.2f})")
+                            write_learning(f"Trade #{trade_id} ({t_sym}): Booked 60% at TP1 (${current_price:.2f}). Protected Green SL set to ${green_sl:.2f}.", category="partial_tp", trade_id=trade_id)
+                        except Exception as e:
+                            logger.error(f"[ERROR] Failed to execute partial TP1 for {t_sym}: {e}")
+                    else:
+                        close_open_position(trade, current_price, "Take Profit 1 hit", "take_profit", is_loss=False)
+                    continue
 
-                if current_price >= be_trigger_price and sl < be_sl_price:
-                    logger.info(f"PROTECTION | Trade #{trade_id} ({t_sym}) | Moving SL to Breakeven (+0.1%): ${be_sl_price:.2f}")
-                    update_trade_stop_loss(trade_id, be_sl_price)
-                    write_learning(f"Trade #{trade_id} ({t_sym}): Moved SL to Breakeven (${be_sl_price:.2f}).", category="risk_management", trade_id=trade_id)
-                    sl = be_sl_price
+            # --- STAGE 2: Runner Position Management (After TP1 Hit - 40% Runner) ---
+            else:
+                # 1. Take Profit 2 Hit (Major Macro Liquidity Sweep -> Book remaining 40%)
+                if tp2 and current_price >= tp2:
+                    logger.info(f"🏆 TP2 HIT (Major Liquidity Sweep) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP2: ${tp2:.2f}")
+                    close_open_position(trade, current_price, "TP2 Major Liquidity hit", "take_profit", is_loss=False)
+                    continue
 
-        else:  # SELL position
-            # 1. Stop Loss Hit
-            if sl and current_price >= sl:
-                logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
-                close_open_position(trade, current_price, "Stop Loss hit", "stop_loss")
-                continue
+                # 2. Early Structure Reversal Exit (Securing floating profit)
+                if detect_early_reversal(t_sym, "BUY"):
+                    logger.info(f"⚠️ EARLY REVERSAL DETECTED | Trade #{trade_id} ({t_sym}) | Closing 40% runner early at ${current_price:.2f} to secure profit!")
+                    close_open_position(trade, current_price, "Early Structure Reversal exit", "early_reversal", is_loss=False)
+                    continue
 
-            # 2. Take Profit Hit
-            if tp and current_price <= tp:
-                logger.info(f"TAKE PROFIT HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP: ${tp:.2f}")
-                close_open_position(trade, current_price, "Take Profit hit", "take_profit")
-                continue
+                # 3. Protected Green SL Hit (Price pulled back to Entry + 0.35%)
+                if sl and current_price <= sl:
+                    logger.info(f"🛡️ PROTECTED GREEN STOP HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f} (Green Win)")
+                    close_open_position(trade, current_price, "Protected Green SL hit", "protected_green_sl", is_loss=False)
+                    continue
 
-            # 3. Breakeven Lock
-            if tp and sl:
-                tp_distance = entry - tp
-                be_trigger_price = entry - (tp_distance * 0.35)
-                be_sl_price = entry * 0.999
+        else:  # SELL Position
+            if not tp1_hit:
+                if sl and current_price >= sl:
+                    logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
+                    close_open_position(trade, current_price, "Stop Loss hit", "stop_loss", is_loss=True)
+                    continue
 
-                if current_price <= be_trigger_price and sl > be_sl_price:
-                    logger.info(f"PROTECTION | Trade #{trade_id} ({t_sym}) | Moving SL to Breakeven (-0.1%): ${be_sl_price:.2f}")
-                    update_trade_stop_loss(trade_id, be_sl_price)
-                    write_learning(f"Trade #{trade_id} ({t_sym}): Moved SL to Breakeven (${be_sl_price:.2f}).", category="risk_management", trade_id=trade_id)
-                    sl = be_sl_price
+                if tp1 and current_price <= tp1:
+                    logger.info(f"🎯 TP1 HIT (Nearest Liquidity) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP1: ${tp1:.2f}")
+                    if "BTC" in t_sym:
+                        close_qty = round(current_qty * 0.60, 5)
+                    elif "ETH" in t_sym:
+                        close_qty = round(current_qty * 0.60, 4)
+                    elif "SOL" in t_sym:
+                        close_qty = round(current_qty * 0.60, 2)
+                    else:
+                        close_qty = round(current_qty * 0.60, 4)
+
+                    rem_qty = round(current_qty - close_qty, 6)
+                    if close_qty * current_price >= 5.0 and rem_qty * current_price >= 5.0:
+                        try:
+                            place_test_order(symbol=t_sym, side="BUY", quantity=close_qty)
+                            partial_close_trade(trade_id, current_price, close_qty, tp_stage="tp1")
+                            
+                            green_sl = round(entry * 0.9965, 2)
+                            update_trade_stop_loss(trade_id, green_sl)
+                            logger.info(f"🛡️ PROTECTED GREEN LOCK | Trade #{trade_id} ({t_sym}) | Booked 60% ({close_qty}) | Runner SL set to -0.35% Green (${green_sl:.2f})")
+                            write_learning(f"Trade #{trade_id} ({t_sym}): Booked 60% at TP1 (${current_price:.2f}). Protected Green SL set to ${green_sl:.2f}.", category="partial_tp", trade_id=trade_id)
+                        except Exception as e:
+                            logger.error(f"[ERROR] Failed to execute partial TP1 for {t_sym}: {e}")
+                    else:
+                        close_open_position(trade, current_price, "Take Profit 1 hit", "take_profit", is_loss=False)
+                    continue
+
+            else:
+                if tp2 and current_price <= tp2:
+                    logger.info(f"🏆 TP2 HIT (Major Liquidity Sweep) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP2: ${tp2:.2f}")
+                    close_open_position(trade, current_price, "TP2 Major Liquidity hit", "take_profit", is_loss=False)
+                    continue
+
+                if detect_early_reversal(t_sym, "SELL"):
+                    logger.info(f"⚠️ EARLY REVERSAL DETECTED | Trade #{trade_id} ({t_sym}) | Closing 40% runner early at ${current_price:.2f} to secure profit!")
+                    close_open_position(trade, current_price, "Early Structure Reversal exit", "early_reversal", is_loss=False)
+                    continue
+
+                if sl and current_price >= sl:
+                    logger.info(f"🛡️ PROTECTED GREEN STOP HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f} (Green Win)")
+                    close_open_position(trade, current_price, "Protected Green SL hit", "protected_green_sl", is_loss=False)
+                    continue
 
 
-def close_open_position(open_trade, current_price, reason, closed_by="brain"):
-    global last_trade_time
+def close_open_position(open_trade, current_price, reason, closed_by="brain", is_loss=False):
+    global last_trade_time, last_trade_was_loss
     trade_symbol = open_trade.get("symbol", PRIMARY_SYMBOL)
     opposite_side = "SELL" if open_trade["side"].upper() == "BUY" else "BUY"
     try:
@@ -432,6 +526,7 @@ def close_open_position(open_trade, current_price, reason, closed_by="brain"):
                   f"Original: {open_trade['reason']}. Close reason: {reason}")
         write_learning(lesson, category="trade_close", trade_id=open_trade['trade_id'])
         last_trade_time = datetime.now()
+        last_trade_was_loss = bool(is_loss or pnl < 0)
         return True
     except Exception as e:
         logger.error(f"[ERROR] Failed to close position for {trade_symbol}: {e}")
@@ -449,23 +544,30 @@ def reset_daily_limits():
 
 
 def run_bot_once():
-    global trades_today, last_trade_time
+    global trades_today, last_trade_time, last_trade_was_loss
     reset_daily_limits()
 
-    # 1. Manage all open positions first
+    # 1. Manage all open positions first (always active: TP1/TP2/Green Lock)
     manage_open_positions()
 
-    if last_trade_time and (datetime.now() - last_trade_time).total_seconds() < COOLDOWN_SECONDS:
+    # 2. Weekend Filter: Skip new entries if institutional markets closed
+    if is_weekend():
+        logger.info("⏸️ WEEKEND PAUSE: Institutions Closed (Fri 22:00 UTC - Sun 22:00 UTC). Skipping new entries to avoid low-volume chop.")
         return
 
+    # 3. Dynamic Cooldown Status
+    active_cooldown = LOSS_COOLDOWN_SECONDS if last_trade_was_loss else PROFIT_COOLDOWN_SECONDS
+    time_since_last_trade = (datetime.now() - last_trade_time).total_seconds() if last_trade_time else 999999
+    is_in_cooldown = time_since_last_trade < active_cooldown
+
     open_trades = get_open_trades()
-    open_symbols = [t.get("symbol") for t in open_trades if t.get("status") == "open"]
+    open_symbols = [t.get("symbol") for t in open_trades if t.get("status") in ["open", "partial_tp"]]
     stats = get_stats()
 
     if len(open_trades) >= MAX_OPEN_POSITIONS:
         return
 
-    # 2. Multi-Symbol Scanning: BTCUSDT, ETHUSDT, SOLUSDT
+    # 4. Multi-Symbol Scanning: BTCUSDT, ETHUSDT, SOLUSDT
     for sym in SYMBOLS:
         if sym in open_symbols:
             continue
@@ -505,6 +607,17 @@ def run_bot_once():
             if confidence < MIN_CONFIDENCE:
                 logger.info(f"DECISION ({sym}): NO TRADE | Confidence too low ({confidence}/{MIN_CONFIDENCE})")
                 continue
+
+            # Opportunity Cooldown Check:
+            # If in cooldown, allow trade ONLY if it's a Grade-A+ setup (Score >= 80 and Confidence >= 8)
+            if is_in_cooldown:
+                if score >= 80 and confidence >= 8:
+                    logger.info(f"🚀 GRADE-A+ OPPORTUNITY OVERRIDE ({sym}): High conviction setup (Score: {score}, Conf: {confidence}). Bypassing cooldown to seize opportunity!")
+                else:
+                    rem = int(active_cooldown - time_since_last_trade)
+                    logger.info(f"⏳ COOLDOWN ACTIVE ({sym}): {rem}s remaining after loss. Skipping setup.")
+                    continue
+
             if trades_today >= MAX_TRADES_PER_DAY:
                 logger.info(f"DECISION ({sym}): NO TRADE | Daily limit reached ({trades_today}/{MAX_TRADES_PER_DAY})")
                 break
@@ -518,30 +631,27 @@ def run_bot_once():
                     logger.info(f"DECISION ({sym}): NO TRADE | Spot trading: Cannot open SELL short without holding base asset.")
                     continue
 
-                atr = signal_data.get("atr", current_price * 0.01)
-                if action == "BUY":
-                    stop_loss = current_price - (atr * ATR_MULTIPLIER_SL)
-                    take_profit = current_price + (atr * ATR_MULTIPLIER_SL * RISK_REWARD_RATIO)
-                else:
-                    stop_loss = current_price + (atr * ATR_MULTIPLIER_SL)
-                    take_profit = current_price - (atr * ATR_MULTIPLIER_SL * RISK_REWARD_RATIO)
+                stop_loss = signal_data.get("structure_sl")
+                tp1 = signal_data.get("tp1")
+                tp2 = signal_data.get("tp2")
 
                 position_size = get_position_size(sym, current_price, stop_loss, confidence)
 
-                print(f"[BOT] Executing {action} on {sym} | Price: ${current_price:,.2f} | Qty: {position_size}")
+                print(f"[BOT] Executing {action} on {sym} | Price: ${current_price:,.2f} | Qty: {position_size} | TP1: ${tp1:.2f} | TP2: ${tp2:.2f} | SL: ${stop_loss:.2f}")
                 order = place_test_order(symbol=sym, side=action, quantity=position_size)
                 trade_id = log_new_trade(
                     symbol=sym, side=action, entry_price=current_price,
                     quantity=position_size, reason=reason,
-                    stop_loss=stop_loss, take_profit=take_profit
+                    stop_loss=stop_loss, take_profit=tp2,
+                    tp1=tp1, tp2=tp2
                 )
                 trades_today += 1
                 last_trade_time = datetime.now()
                 logger.info(f"TRADE EXECUTED | #{trade_id} ({sym}) | {action} | ${current_price:,.2f} | Qty: {position_size}")
-                logger.info(f"SL: ${stop_loss:,.2f} | TP: ${take_profit:,.2f} | Target R:R: 1:{RISK_REWARD_RATIO}")
+                logger.info(f"SL: ${stop_loss:,.2f} | TP1 (60%): ${tp1:,.2f} | TP2 (40%): ${tp2:,.2f}")
                 write_learning(
                     f"New trade #{trade_id}: {action} {sym} at ${current_price} "
-                    f"with SL=${stop_loss:.2f}, TP=${take_profit:.2f}. Reason: {reason}",
+                    f"with SL=${stop_loss:.2f}, TP1=${tp1:.2f}, TP2=${tp2:.2f}. Reason: {reason}",
                     category="trade_open", trade_id=trade_id
                 )
                 break
