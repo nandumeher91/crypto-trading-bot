@@ -47,6 +47,121 @@ def safe_float(val, default=0.0):
     except Exception:
         return default
 
+DASHBOARD_CSS = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #0b0e14;
+    background-image: radial-gradient(circle at 50% 0%, #171d2b 0%, #0b0e14 75%);
+    color: #c9d1d9;
+    padding: 24px 16px;
+    line-height: 1.5;
+    min-height: 100vh;
+}
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #151b26;
+    border: 1px solid #283347;
+    border-radius: 12px;
+    padding: 18px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.badge-live {
+    background: rgba(35, 134, 54, 0.2);
+    border: 1px solid #238636;
+    color: #3fb950;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+}
+.badge-pause {
+    background: rgba(210, 153, 34, 0.2);
+    border: 1px solid #d29922;
+    color: #e3b341;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.card {
+    background: #151b26;
+    border: 1px solid #283347;
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.card:hover {
+    border-color: #58a6ff;
+    transform: translateY(-2px);
+}
+.card-title {
+    font-size: 12px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+.card-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #f0f6fc;
+}
+.reason-box {
+    background: #151b26;
+    border: 1px solid #283347;
+    border-left: 4px solid #58a6ff;
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #151b26;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #283347;
+    font-size: 13.5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+th {
+    background: #1e2638;
+    text-align: left;
+    padding: 14px 12px;
+    color: #8b949e;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid #283347;
+}
+td {
+    padding: 12px 12px;
+    border-bottom: 1px solid #1f2738;
+}
+tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+"""
+
 def generate_dashboard_html():
     state_file = os.path.join(BASE_DIR, "market_state.json")
     stats_file = os.path.join(BASE_DIR, "stats.json")
@@ -116,27 +231,27 @@ def generate_dashboard_html():
         sl_color = "#3fb950" if is_runner else "#f85149"
 
         open_trade_html = f"""
-        <div style="background:#161b22; border:1px solid {card_border}; border-radius:8px; padding:15px; margin-bottom:20px;">
-            <div style="color:{card_title_color}; font-weight:bold; font-size:16px;">{card_title}</div>
-            <div style="margin-top:8px; display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; color:#c9d1d9;">
-                <div>Entry: <b>${ot_entry:,.2f}</b></div>
-                <div>{sl_label}: <b style="color:{sl_color};">${ot_sl:,.2f}</b></div>
-                <div>TP1 (60%): <b style="color:#3fb950;">${ot_tp1:,.2f}</b></div>
-                <div>TP2 (40%): <b style="color:#58a6ff;">${ot_tp2:,.2f}</b></div>
-                <div>Qty: <b>{ot_qty}</b></div>
+        <div class="card" style="background:#151b26; border:1px solid {card_border}; border-radius:12px; padding:20px; margin-bottom:20px; box-shadow:0 6px 20px rgba(0,0,0,0.3);">
+            <div style="color:{card_title_color}; font-weight:bold; font-size:16px; display:flex; align-items:center; gap:8px;">{card_title}</div>
+            <div style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; background:#0d1117; padding:14px; border-radius:8px; border:1px solid #283347;">
+                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">Entry Price</div><div style="font-size:16px; font-weight:bold; color:#f0f6fc;">${ot_entry:,.2f}</div></div>
+                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">{sl_label}</div><div style="font-size:16px; font-weight:bold; color:{sl_color};">${ot_sl:,.2f}</div></div>
+                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">TP1 (60% Target)</div><div style="font-size:16px; font-weight:bold; color:#3fb950;">${ot_tp1:,.2f}</div></div>
+                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">TP2 (40% Target)</div><div style="font-size:16px; font-weight:bold; color:#58a6ff;">${ot_tp2:,.2f}</div></div>
+                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">Quantity</div><div style="font-size:16px; font-weight:bold; color:#f0f6fc;">{ot_qty}</div></div>
             </div>
         </div>
         """
     elif weekend_active:
         open_trade_html = """
-        <div style="background:#1c1917; border:1px solid #d29922; border-radius:8px; padding:12px; margin-bottom:20px; color:#e3b341;">
+        <div class="card" style="background:#1a1710; border:1px solid #d29922; border-radius:10px; padding:16px; margin-bottom:20px; color:#e3b341;">
             ⏸️ <b>WEEKEND PAUSE:</b> Institutional banks & CME futures are closed (Fri 22:00 UTC - Sun 22:00 UTC). Bot has paused new entries to prevent low-liquidity chop losses. Positions management (SL/TP/Breakeven) remains active. Scanning resumes Sunday 22:00 UTC (Monday 03:30 IST).
         </div>
         """
     else:
         open_trade_html = """
-        <div style="background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px; margin-bottom:20px; color:#8b949e;">
-            ℹ️ No open positions right now. Scanning BTC, ETH, SOL for 1:3.2+ R:R setups...
+        <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:16px; margin-bottom:20px; color:#8b949e;">
+            📡 No open positions right now. Scanning BTC, ETH, SOL for 60/40 Liquidity SMC setups...
         </div>
         """
 
@@ -149,113 +264,122 @@ def generate_dashboard_html():
         t_sym = t.get('symbol', 'BTCUSDT')
         pnl_text = f"${t_pnl:+.2f}" if t_pnl != 0 else "-"
         rows_html += f"""
-        <tr style="border-bottom:1px solid #21262d;">
-            <td style="padding:10px;">#{t.get('trade_id', '-')}</td>
-            <td style="padding:10px;">{t.get('timestamp', '')}</td>
-            <td style="padding:10px; font-weight:bold; color:#58a6ff;">{t_sym}</td>
-            <td style="padding:10px; font-weight:bold; color:{'#3fb950' if t.get('side')=='BUY' else '#f85149'};">{t.get('side', '')}</td>
-            <td style="padding:10px;">${t_price:,.2f}</td>
-            <td style="padding:10px; color:{status_color}; font-weight:bold;">{t.get('status', '').upper()}</td>
-            <td style="padding:10px; font-weight:bold; color:{'#3fb950' if t_pnl>0 else ('#f85149' if t_pnl<0 else '#8b949e')};">{pnl_text}</td>
+        <tr style="border-bottom:1px solid #1f2738;">
+            <td style="padding:12px;">#{t.get('trade_id', '-')}</td>
+            <td style="padding:12px; color:#8b949e;">{t.get('timestamp', '')}</td>
+            <td style="padding:12px; font-weight:bold; color:#58a6ff;">{t_sym}</td>
+            <td style="padding:12px; font-weight:bold; color:{'#3fb950' if t.get('side')=='BUY' else '#f85149'};">{t.get('side', '')}</td>
+            <td style="padding:12px;">${t_price:,.2f}</td>
+            <td style="padding:12px; color:{status_color}; font-weight:bold;">{t.get('status', '').upper()}</td>
+            <td style="padding:12px; font-weight:bold; color:{'#3fb950' if t_pnl>0 else ('#f85149' if t_pnl<0 else '#8b949e')};">{pnl_text}</td>
         </tr>
         """
 
     if not rows_html:
-        rows_html = "<tr><td colspan='7' style='padding:15px; text-align:center; color:#8b949e;'>No trades recorded yet. Bot is scanning market.</td></tr>"
+        rows_html = "<tr><td colspan='7' style='padding:18px; text-align:center; color:#8b949e;'>No trades recorded yet. Bot is scanning market.</td></tr>"
 
-    status_badge = '<span class="badge" style="background:#d29922;">⏸️ WEEKEND PAUSED</span>' if weekend_active else '<span class="badge">🟢 LIVE 24/7 CLOUD</span>'
+    status_badge = '<span class="badge-pause">⏸️ WEEKEND PAUSED</span>' if weekend_active else '<span class="badge-live">🟢 LIVE 24/7 CLOUD</span>'
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="30">
-    <title>SMC Trading Bot Dashboard</title>
+    <meta http-equiv="refresh" content="20">
+    <title>SMC Institutional Trading Bot</title>
     <style>
-        body {{{{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; margin:0; padding:20px; }}}}
-        .container {{{{ max-width: 1000px; margin: 0 auto; }}}}
-        .header {{{{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; flex-wrap: wrap; gap:10px; }}}}
-        .badge {{{{ background: #238636; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }}}}
-        .grid {{{{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }}}}
-        .card {{{{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; }}}}
-        .card-title {{{{ font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }}}}
-        .card-value {{{{ font-size: 22px; font-weight: bold; color: #f0f6fc; }}}}
-        .reason-box {{{{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 20px; }}}}
-        table {{{{ width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; font-size: 14px; }}}}
-        th {{{{ background: #21262d; text-align: left; padding: 12px 10px; color: #8b949e; font-size: 12px; text-transform: uppercase; }}}}
+""" + DASHBOARD_CSS + f"""
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
+<body style="background-color:#0b0e14; color:#c9d1d9; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding:20px; margin:0;">
+    <div class="container" style="max-width:1100px; margin:0 auto;">
+        <div class="header" style="display:flex; justify-content:space-between; align-items:center; background:#151b26; border:1px solid #283347; border-radius:12px; padding:18px 24px; margin-bottom:20px;">
             <div>
-                <h2 style="margin:0; color:#f0f6fc;">🤖 SMC Crypto Trading Bot</h2>
-                <div style="font-size:13px; color:#8b949e; margin-top:4px;">1H Fib OTE (0.618-0.705) + 5m Liquidity Sweep</div>
+                <h2 style="margin:0; color:#f0f6fc; font-size:22px; display:flex; align-items:center; gap:10px;">
+                    🤖 SMC Institutional Trading Bot
+                </h2>
+                <div style="font-size:13px; color:#8b949e; margin-top:5px;">
+                    1H Fib Golden Zone (0.618-0.786) • 5m FVG • 60/40 Liquidity Targeting
+                </div>
             </div>
-            <div>
+            <div style="text-align:right;">
                 {status_badge}
-                <div style="font-size:11px; color:#8b949e; margin-top:4px; text-align:right;">Updated: {updated_at}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:6px;">Updated: {updated_at}</div>
             </div>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <div class="card-title">{sym_label} Price</div>
-                <div class="card-value" style="color:#58a6ff;">{price}</div>
+        <div class="grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:15px; margin-bottom:20px;">
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">{sym_label} Price</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:#58a6ff;">{price}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Binance Spot Market Price</div>
             </div>
-            <div class="card">
-                <div class="card-title">SMC Score</div>
-                <div class="card-value">{score} <span style="font-size:14px; color:#8b949e;">/ 100</span></div>
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">SMC Confluence Score</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:#f0f6fc;">{score} <span style="font-size:14px; color:#8b949e;">/ 100</span></div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Golden Zone + FVG + Volume</div>
             </div>
-            <div class="card">
-                <div class="card-title">Brain AI Action</div>
-                <div class="card-value" style="color:{'#3fb950' if action=='BUY' else ('#f85149' if action=='SELL' else '#e3b341')};">{action} ({confidence}/10)</div>
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">Brain AI Action</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:{'#3fb950' if action=='BUY' else ('#f85149' if action=='SELL' else '#e3b341')};">{action} ({confidence}/10)</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Groq LLM Confirmation</div>
             </div>
-            <div class="card">
-                <div class="card-title">Total P&L</div>
-                <div class="card-value" style="color:{pnl_color};">{pnl_str}</div>
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">Total Realized P&L</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:{pnl_color};">{pnl_str}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Across BTC, ETH & SOL</div>
             </div>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <div class="card-title">Win Rate</div>
-                <div class="card-value">{win_rate}</div>
+        <div class="grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:15px; margin-bottom:20px;">
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px;">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">Win Rate</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:#f0f6fc;">{win_rate}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Target: 75-80% Asymmetric R:R</div>
             </div>
-            <div class="card">
-                <div class="card-title">Total Trades</div>
-                <div class="card-value">{total_trades}</div>
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px;">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">Total Trades</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:#f0f6fc;">{total_trades}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Binance Testnet Synced</div>
             </div>
-            <div class="card">
-                <div class="card-title">Current Streak</div>
-                <div class="card-value">{streak_str}</div>
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px;">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">Current Streak</div>
+                <div class="card-value" style="font-size:24px; font-weight:bold; color:#f0f6fc;">{streak_str}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">Consecutive Wins/Losses</div>
             </div>
-            <div class="card">
-                <div class="card-title">RSI / ATR / ADX</div>
-                <div class="card-value" style="font-size:16px;">RSI:{rsi} | ATR:{atr} | ADX:{adx}</div>
+            <div class="card" style="background:#151b26; border:1px solid #283347; border-radius:10px; padding:18px;">
+                <div class="card-title" style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:6px;">Technical Gauges</div>
+                <div class="card-value" style="font-size:18px; font-weight:bold; color:#f0f6fc; margin-top:4px;">RSI: {rsi} | ATR: {atr}</div>
+                <div style="font-size:11px; color:#8b949e; margin-top:4px;">5m Volatility & Momentum</div>
             </div>
         </div>
 
         {open_trade_html}
 
-        <div class="reason-box">
-            <div style="font-size:12px; color:#8b949e; text-transform:uppercase; margin-bottom:5px;">🧠 Latest AI Brain Analysis</div>
-            <div style="color:#f0f6fc; font-size:14px; line-height:1.5;">{reason}</div>
+        <div class="reason-box" style="background:#151b26; border:1px solid #283347; border-left:4px solid #58a6ff; border-radius:10px; padding:18px 22px; margin-bottom:24px;">
+            <div style="font-size:12px; color:#58a6ff; text-transform:uppercase; font-weight:bold; margin-bottom:6px; letter-spacing:0.5px;">
+                🧠 Latest AI Brain Market Analysis
+            </div>
+            <div style="color:#f0f6fc; font-size:14px; line-height:1.6;">
+                {reason}
+            </div>
         </div>
 
-        <h3 style="color:#f0f6fc; margin-bottom:10px;">📋 Trade & Activity History</h3>
-        <div style="overflow-x:auto;">
-            <table>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3 style="color:#f0f6fc; margin:0; font-size:18px;">📋 Trade & Activity History</h3>
+            <span style="font-size:12px; color:#8b949e;">Live Binance Testnet Ledger</span>
+        </div>
+        <div style="background:#151b26; border:1px solid #283347; border-radius:10px; overflow-x:auto; box-shadow:0 4px 12px rgba(0,0,0,0.2);">
+            <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
                 <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Time</th>
-                        <th>Pair</th>
-                        <th>Side</th>
-                        <th>Price</th>
-                        <th>Status</th>
-                        <th>P&L</th>
+                    <tr style="background:#1e2638; border-bottom:1px solid #283347;">
+                        <th style="padding:12px 14px; color:#8b949e;">ID</th>
+                        <th style="padding:12px 14px; color:#8b949e;">Timestamp</th>
+                        <th style="padding:12px 14px; color:#8b949e;">Pair</th>
+                        <th style="padding:12px 14px; color:#8b949e;">Side</th>
+                        <th style="padding:12px 14px; color:#8b949e;">Price</th>
+                        <th style="padding:12px 14px; color:#8b949e;">Status</th>
+                        <th style="padding:12px 14px; color:#8b949e;">P&L</th>
                     </tr>
                 </thead>
                 <tbody>
