@@ -670,7 +670,7 @@ def main():
     logger.info("=" * 50)
     logger.info("ENHANCED TRADING BOT STARTED")
     logger.info(f"Symbols: {', '.join(SYMBOLS)} | Check: {CHECK_INTERVAL_SECONDS}s | Min Confidence: {MIN_CONFIDENCE}")
-    logger.info(f"Risk/Trade: {RISK_PER_TRADE_PERCENT}% | SL: {ATR_MULTIPLIER_SL}x ATR | RR: 1:{RISK_REWARD_RATIO}")
+    logger.info(f"Target Notional: ${TARGET_NOTIONAL_USD} | TP1: 60% Book | TP2: 40% Runner | SL: Structure")
     logger.info("=" * 50)
 
     print("[MAIN] Testing Binance API connection...")
