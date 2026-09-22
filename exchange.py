@@ -24,7 +24,7 @@ print(f"[INIT] API Key found: {API_KEY[:5]}...{API_KEY[-4:]}")
 print(f"[INIT] API Secret found: {API_SECRET[:5]}...{API_SECRET[-4:]}")
 
 # Create client with longer timeout and larger recvWindow
-client = Client(API_KEY, API_SECRET, testnet=True)
+client = Client(API_KEY, API_SECRET, testnet=True, requests_params={'timeout': 30})
 client.REQUEST_TIMEOUT = 30
 
 # Sync time immediately and store offset

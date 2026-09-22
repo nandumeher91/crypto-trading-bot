@@ -216,32 +216,33 @@ def generate_dashboard_html():
     open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["open", "partial_tp"]]
     weekend_active = is_weekend()
     if open_trades:
-        ot = open_trades[0]
-        ot_sym = ot.get('symbol', PRIMARY_SYMBOL)
-        ot_entry = safe_float(ot.get('entry_price'))
-        ot_sl = safe_float(ot.get('stop_loss'))
-        ot_tp1 = safe_float(ot.get('tp1', ot.get('take_profit')))
-        ot_tp2 = safe_float(ot.get('tp2', ot.get('take_profit')))
-        ot_qty = safe_float(ot.get('quantity', ot.get('qty', 0)))
-        is_runner = ot.get('status') == 'partial_tp'
-        card_border = "#e3b341" if is_runner else "#238636"
-        card_title_color = "#e3b341" if is_runner else "#3fb950"
-        card_title = f"🛡️ 60% BOOKED (TP1 HIT) | 40% RISK-FREE RUNNER: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})" if is_runner else f"🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})"
-        sl_label = "SL (+0.35% Green Lock)" if is_runner else "SL (Structure)"
-        sl_color = "#3fb950" if is_runner else "#f85149"
+        open_trade_html = ""
+        for ot in open_trades:
+            ot_sym = ot.get('symbol', PRIMARY_SYMBOL)
+            ot_entry = safe_float(ot.get('entry_price'))
+            ot_sl = safe_float(ot.get('stop_loss'))
+            ot_tp1 = safe_float(ot.get('tp1', ot.get('take_profit')))
+            ot_tp2 = safe_float(ot.get('tp2', ot.get('take_profit')))
+            ot_qty = safe_float(ot.get('quantity', ot.get('qty', 0)))
+            is_runner = ot.get('status') == 'partial_tp'
+            card_border = "#e3b341" if is_runner else "#238636"
+            card_title_color = "#e3b341" if is_runner else "#3fb950"
+            card_title = f"🛡️ 60% BOOKED (TP1 HIT) | 40% RISK-FREE RUNNER: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})" if is_runner else f"🟢 ACTIVE POSITION: {ot.get('side', '').upper()} #{ot.get('trade_id')} ({ot_sym})"
+            sl_label = "SL (+0.35% Green Lock)" if is_runner else "SL (Structure)"
+            sl_color = "#3fb950" if is_runner else "#f85149"
 
-        open_trade_html = f"""
-        <div class="card" style="background:#151b26; border:1px solid {card_border}; border-radius:12px; padding:20px; margin-bottom:20px; box-shadow:0 6px 20px rgba(0,0,0,0.3);">
-            <div style="color:{card_title_color}; font-weight:bold; font-size:16px; display:flex; align-items:center; gap:8px;">{card_title}</div>
-            <div style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; background:#0d1117; padding:14px; border-radius:8px; border:1px solid #283347;">
-                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">Entry Price</div><div style="font-size:16px; font-weight:bold; color:#f0f6fc;">${ot_entry:,.2f}</div></div>
-                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">{sl_label}</div><div style="font-size:16px; font-weight:bold; color:{sl_color};">${ot_sl:,.2f}</div></div>
-                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">TP1 (60% Target)</div><div style="font-size:16px; font-weight:bold; color:#3fb950;">${ot_tp1:,.2f}</div></div>
-                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">TP2 (40% Target)</div><div style="font-size:16px; font-weight:bold; color:#58a6ff;">${ot_tp2:,.2f}</div></div>
-                <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">Quantity</div><div style="font-size:16px; font-weight:bold; color:#f0f6fc;">{ot_qty}</div></div>
+            open_trade_html += f"""
+            <div class="card" style="background:#151b26; border:1px solid {card_border}; border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 6px 20px rgba(0,0,0,0.3);">
+                <div style="color:{card_title_color}; font-weight:bold; font-size:16px; display:flex; align-items:center; gap:8px;">{card_title}</div>
+                <div style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; background:#0d1117; padding:14px; border-radius:8px; border:1px solid #283347;">
+                    <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">Entry Price</div><div style="font-size:16px; font-weight:bold; color:#f0f6fc;">${ot_entry:,.2f}</div></div>
+                    <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">{sl_label}</div><div style="font-size:16px; font-weight:bold; color:{sl_color};">${ot_sl:,.2f}</div></div>
+                    <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">TP1 (60% Target)</div><div style="font-size:16px; font-weight:bold; color:#3fb950;">${ot_tp1:,.2f}</div></div>
+                    <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">TP2 (40% Target)</div><div style="font-size:16px; font-weight:bold; color:#58a6ff;">${ot_tp2:,.2f}</div></div>
+                    <div><div style="font-size:11px; color:#8b949e; text-transform:uppercase;">Quantity</div><div style="font-size:16px; font-weight:bold; color:#f0f6fc;">{ot_qty}</div></div>
+                </div>
             </div>
-        </div>
-        """
+            """
     elif weekend_active:
         open_trade_html = """
         <div class="card" style="background:#1a1710; border:1px solid #d29922; border-radius:10px; padding:16px; margin-bottom:20px; color:#e3b341;">
@@ -444,14 +445,21 @@ def write_market_state(signal_data, current_price, brain_decision):
         print(f"[BOT] Warning: Failed to write market_state.json: {e}")
 
 # ====== LOGGING SETUP (File + Console both) ======
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 log_path = os.path.join(BASE_DIR, "bot.log")
 
-file_handler = logging.FileHandler(log_path, mode='w')
+file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
 file_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', datefmt='%H:%M:%S')
 file_handler.setFormatter(formatter)
 
-console_handler = logging.StreamHandler()
+console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(formatter)
 
@@ -470,7 +478,7 @@ LOSS_COOLDOWN_SECONDS = 1800    # 30-min cooldown after a loss (bypassed if Grad
 PROFIT_COOLDOWN_SECONDS = 60    # 60-second safety buffer after a win
 MIN_CONFIDENCE = 6
 MAX_DRAWDOWN_USD = 10.0
-MAX_OPEN_POSITIONS = 2
+MAX_OPEN_POSITIONS = 3
 
 TARGET_NOTIONAL_USD = 15.0      # $15 entry -> 60% is $9.00, 40% is $6.00 (Both > $5 Binance MIN_NOTIONAL)
 
@@ -520,111 +528,85 @@ def manage_open_positions():
 
         entry = float(trade["entry_price"])
         sl = float(trade["stop_loss"]) if trade.get("stop_loss") else None
-        tp1 = float(trade.get("tp1")) if trade.get("tp1") else None
-        tp2 = float(trade.get("tp2") or trade.get("take_profit")) if (trade.get("tp2") or trade.get("take_profit")) else None
         side = trade["side"].upper()
+        # Ensure robust TP1 and TP2 targets even if missing in old records
+        tp1 = float(trade.get("tp1")) if trade.get("tp1") else (round(entry * 1.015, 2) if side == "BUY" else round(entry * 0.985, 2))
+        tp2 = float(trade.get("tp2") or trade.get("take_profit")) if (trade.get("tp2") or trade.get("take_profit")) else (round(entry * 1.025, 2) if side == "BUY" else round(entry * 0.975, 2))
         current_qty = float(trade["quantity"])
 
         if side == "BUY":
-            # --- STAGE 1: Full Position Management (Before TP1) ---
-            if not tp1_hit:
-                # 1. Stop Loss Hit (Structure SL)
-                if sl and current_price <= sl:
-                    logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
-                    close_open_position(trade, current_price, "Stop Loss hit", "stop_loss", is_loss=True)
-                    continue
+            # 1. Direct Stop Loss Hit
+            if sl and current_price <= sl:
+                logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
+                close_open_position(trade, current_price, "Stop Loss hit", "stop_loss", is_loss=True)
+                continue
 
-                # 2. Take Profit 1 Hit (Nearest Liquidity -> Book 60%)
-                if tp1 and current_price >= tp1:
-                    logger.info(f"🎯 TP1 HIT (Nearest Liquidity) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP1: ${tp1:.2f}")
-                    if "BTC" in t_sym:
-                        close_qty = round(current_qty * 0.60, 5)
-                    elif "ETH" in t_sym:
-                        close_qty = round(current_qty * 0.60, 4)
-                    elif "SOL" in t_sym:
-                        close_qty = round(current_qty * 0.60, 2)
-                    else:
-                        close_qty = round(current_qty * 0.60, 4)
+            # 2. Direct TP2 Hit -> Price exceeded full major liquidity target, bank 100% full profit!
+            if tp2 and current_price >= tp2:
+                logger.info(f"🏆 FULL TP2 HIT (Major Liquidity Sweep) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} >= TP2: ${tp2:.2f}")
+                close_open_position(trade, current_price, "TP2 Major Liquidity hit", "take_profit", is_loss=False)
+                continue
 
-                    rem_qty = round(current_qty - close_qty, 6)
-                    if close_qty * current_price >= 5.0 and rem_qty * current_price >= 5.0:
-                        try:
-                            place_test_order(symbol=t_sym, side="SELL", quantity=close_qty)
-                            partial_close_trade(trade_id, current_price, close_qty, tp_stage="tp1")
-                            
-                            # Shift remaining 40% SL to Protected Green Lock (Entry + 0.35%)
-                            green_sl = round(entry * 1.0035, 2)
-                            update_trade_stop_loss(trade_id, green_sl)
-                            logger.info(f"🛡️ PROTECTED GREEN LOCK | Trade #{trade_id} ({t_sym}) | Booked 60% ({close_qty}) | Runner SL set to +0.35% Green (${green_sl:.2f})")
-                            write_learning(f"Trade #{trade_id} ({t_sym}): Booked 60% at TP1 (${current_price:.2f}). Protected Green SL set to ${green_sl:.2f}.", category="partial_tp", trade_id=trade_id)
-                        except Exception as e:
-                            logger.error(f"[ERROR] Failed to execute partial TP1 for {t_sym}: {e}")
-                    else:
-                        close_open_position(trade, current_price, "Take Profit 1 hit", "take_profit", is_loss=False)
-                    continue
-
-            # --- STAGE 2: Runner Position Management (After TP1 Hit - 40% Runner) ---
-            else:
-                # 1. Take Profit 2 Hit (Major Macro Liquidity Sweep -> Book remaining 40%)
-                if tp2 and current_price >= tp2:
-                    logger.info(f"🏆 TP2 HIT (Major Liquidity Sweep) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP2: ${tp2:.2f}")
-                    close_open_position(trade, current_price, "TP2 Major Liquidity hit", "take_profit", is_loss=False)
-                    continue
-
-                # 2. Early Structure Reversal Exit (Securing floating profit)
+            # 3. Runner Management (if TP1 was already taken)
+            if tp1_hit:
+                # Early Structure Reversal Exit (Securing floating profit)
                 if detect_early_reversal(t_sym, "BUY"):
-                    logger.info(f"⚠️ EARLY REVERSAL DETECTED | Trade #{trade_id} ({t_sym}) | Closing 40% runner early at ${current_price:.2f} to secure profit!")
+                    logger.info(f"⚠️ EARLY REVERSAL DETECTED | Trade #{trade_id} ({t_sym}) | Closing runner early at ${current_price:.2f} to secure profit!")
                     close_open_position(trade, current_price, "Early Structure Reversal exit", "early_reversal", is_loss=False)
                     continue
 
-                # 3. Protected Green SL Hit (Price pulled back to Entry + 0.35%)
+                # Protected Green SL Hit (Price pulled back to Entry + 0.35%)
                 if sl and current_price <= sl:
                     logger.info(f"🛡️ PROTECTED GREEN STOP HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f} (Green Win)")
                     close_open_position(trade, current_price, "Protected Green SL hit", "protected_green_sl", is_loss=False)
                     continue
+
+            # 4. Take Profit 1 Hit (Nearest Liquidity -> Book 60%)
+            elif tp1 and current_price >= tp1:
+                logger.info(f"🎯 TP1 HIT (Nearest Liquidity) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP1: ${tp1:.2f}")
+                if "BTC" in t_sym:
+                    close_qty = round(current_qty * 0.60, 5)
+                elif "ETH" in t_sym:
+                    close_qty = round(current_qty * 0.60, 4)
+                elif "SOL" in t_sym:
+                    close_qty = round(current_qty * 0.60, 2)
+                else:
+                    close_qty = round(current_qty * 0.60, 4)
+
+                rem_qty = round(current_qty - close_qty, 6)
+                if close_qty * current_price >= 5.0 and rem_qty * current_price >= 5.0:
+                    try:
+                        place_test_order(symbol=t_sym, side="SELL", quantity=close_qty)
+                        partial_close_trade(trade_id, current_price, close_qty, tp_stage="tp1", symbol=t_sym)
+                        
+                        # Shift remaining 40% SL to Protected Green Lock (Entry + 0.35%)
+                        green_sl = round(entry * 1.0035, 2)
+                        update_trade_stop_loss(trade_id, green_sl)
+                        logger.info(f"🛡️ PROTECTED GREEN LOCK | Trade #{trade_id} ({t_sym}) | Booked 60% ({close_qty}) | Runner SL set to +0.35% Green (${green_sl:.2f})")
+                        write_learning(f"Trade #{trade_id} ({t_sym}): Booked 60% at TP1 (${current_price:.2f}). Protected Green SL set to ${green_sl:.2f}.", category="partial_tp", trade_id=trade_id)
+                    except Exception as e:
+                        logger.error(f"[ERROR] Failed to execute partial TP1 for {t_sym}: {e}")
+                else:
+                    close_open_position(trade, current_price, "Take Profit 1 hit", "take_profit", is_loss=False)
+                continue
 
         else:  # SELL Position
-            if not tp1_hit:
-                if sl and current_price >= sl:
-                    logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
-                    close_open_position(trade, current_price, "Stop Loss hit", "stop_loss", is_loss=True)
-                    continue
+            # 1. Direct Stop Loss Hit
+            if sl and current_price >= sl:
+                logger.info(f"STOP LOSS HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f}")
+                close_open_position(trade, current_price, "Stop Loss hit", "stop_loss", is_loss=True)
+                continue
 
-                if tp1 and current_price <= tp1:
-                    logger.info(f"🎯 TP1 HIT (Nearest Liquidity) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP1: ${tp1:.2f}")
-                    if "BTC" in t_sym:
-                        close_qty = round(current_qty * 0.60, 5)
-                    elif "ETH" in t_sym:
-                        close_qty = round(current_qty * 0.60, 4)
-                    elif "SOL" in t_sym:
-                        close_qty = round(current_qty * 0.60, 2)
-                    else:
-                        close_qty = round(current_qty * 0.60, 4)
+            # 2. Direct TP2 Hit -> Bank 100% full profit!
+            if tp2 and current_price <= tp2:
+                logger.info(f"🏆 FULL TP2 HIT (Major Liquidity Sweep) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} <= TP2: ${tp2:.2f}")
+                close_open_position(trade, current_price, "TP2 Major Liquidity hit", "take_profit", is_loss=False)
+                continue
 
-                    rem_qty = round(current_qty - close_qty, 6)
-                    if close_qty * current_price >= 5.0 and rem_qty * current_price >= 5.0:
-                        try:
-                            place_test_order(symbol=t_sym, side="BUY", quantity=close_qty)
-                            partial_close_trade(trade_id, current_price, close_qty, tp_stage="tp1")
-                            
-                            green_sl = round(entry * 0.9965, 2)
-                            update_trade_stop_loss(trade_id, green_sl)
-                            logger.info(f"🛡️ PROTECTED GREEN LOCK | Trade #{trade_id} ({t_sym}) | Booked 60% ({close_qty}) | Runner SL set to -0.35% Green (${green_sl:.2f})")
-                            write_learning(f"Trade #{trade_id} ({t_sym}): Booked 60% at TP1 (${current_price:.2f}). Protected Green SL set to ${green_sl:.2f}.", category="partial_tp", trade_id=trade_id)
-                        except Exception as e:
-                            logger.error(f"[ERROR] Failed to execute partial TP1 for {t_sym}: {e}")
-                    else:
-                        close_open_position(trade, current_price, "Take Profit 1 hit", "take_profit", is_loss=False)
-                    continue
-
-            else:
-                if tp2 and current_price <= tp2:
-                    logger.info(f"🏆 TP2 HIT (Major Liquidity Sweep) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP2: ${tp2:.2f}")
-                    close_open_position(trade, current_price, "TP2 Major Liquidity hit", "take_profit", is_loss=False)
-                    continue
-
+            # 3. Runner Management
+            if tp1_hit:
                 if detect_early_reversal(t_sym, "SELL"):
-                    logger.info(f"⚠️ EARLY REVERSAL DETECTED | Trade #{trade_id} ({t_sym}) | Closing 40% runner early at ${current_price:.2f} to secure profit!")
+                    logger.info(f"⚠️ EARLY REVERSAL DETECTED | Trade #{trade_id} ({t_sym}) | Closing runner early at ${current_price:.2f} to secure profit!")
                     close_open_position(trade, current_price, "Early Structure Reversal exit", "early_reversal", is_loss=False)
                     continue
 
@@ -632,6 +614,34 @@ def manage_open_positions():
                     logger.info(f"🛡️ PROTECTED GREEN STOP HIT | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | SL: ${sl:.2f} (Green Win)")
                     close_open_position(trade, current_price, "Protected Green SL hit", "protected_green_sl", is_loss=False)
                     continue
+
+            # 4. Take Profit 1 Hit
+            elif tp1 and current_price <= tp1:
+                logger.info(f"🎯 TP1 HIT (Nearest Liquidity) | Trade #{trade_id} ({t_sym}) | Price: ${current_price:.2f} | TP1: ${tp1:.2f}")
+                if "BTC" in t_sym:
+                    close_qty = round(current_qty * 0.60, 5)
+                elif "ETH" in t_sym:
+                    close_qty = round(current_qty * 0.60, 4)
+                elif "SOL" in t_sym:
+                    close_qty = round(current_qty * 0.60, 2)
+                else:
+                    close_qty = round(current_qty * 0.60, 4)
+
+                rem_qty = round(current_qty - close_qty, 6)
+                if close_qty * current_price >= 5.0 and rem_qty * current_price >= 5.0:
+                    try:
+                        place_test_order(symbol=t_sym, side="BUY", quantity=close_qty)
+                        partial_close_trade(trade_id, current_price, close_qty, tp_stage="tp1", symbol=t_sym)
+                        
+                        green_sl = round(entry * 0.9965, 2)
+                        update_trade_stop_loss(trade_id, green_sl)
+                        logger.info(f"🛡️ PROTECTED GREEN LOCK | Trade #{trade_id} ({t_sym}) | Booked 60% ({close_qty}) | Runner SL set to -0.35% Green (${green_sl:.2f})")
+                        write_learning(f"Trade #{trade_id} ({t_sym}): Booked 60% at TP1 (${current_price:.2f}). Protected Green SL set to ${green_sl:.2f}.", category="partial_tp", trade_id=trade_id)
+                    except Exception as e:
+                        logger.error(f"[ERROR] Failed to execute partial TP1 for {t_sym}: {e}")
+                else:
+                    close_open_position(trade, current_price, "Take Profit 1 hit", "take_profit", is_loss=False)
+                continue
 
 
 def close_open_position(open_trade, current_price, reason, closed_by="brain", is_loss=False):
@@ -640,7 +650,7 @@ def close_open_position(open_trade, current_price, reason, closed_by="brain", is
     opposite_side = "SELL" if open_trade["side"].upper() == "BUY" else "BUY"
     try:
         order = place_test_order(symbol=trade_symbol, side=opposite_side, quantity=open_trade["quantity"])
-        closed = close_trade(open_trade["trade_id"], current_price, closed_by)
+        closed = close_trade(open_trade["trade_id"], current_price, closed_by, symbol=trade_symbol)
         pnl = closed["pnl"]
         pnl_pct = closed.get("pnl_percent", 0)
         outcome = "[PROFIT]" if pnl >= 0 else "[LOSS]"
@@ -688,7 +698,18 @@ def run_bot_once():
     open_symbols = [t.get("symbol") for t in open_trades if t.get("status") in ["open", "partial_tp"]]
     stats = get_stats()
 
+    # Always write current market state for PRIMARY_SYMBOL so dashboard never freezes
+    try:
+        btc_price = get_current_price(PRIMARY_SYMBOL)
+        sig = get_enhanced_signal(PRIMARY_SYMBOL)
+        fallback_action = "ACTIVE" if open_trades else "SCAN"
+        fallback_reason = f"{len(open_trades)} positions active: {', '.join(open_symbols)}" if open_trades else "Active 5m SMC scanning..."
+        write_market_state(sig, btc_price, {"action": fallback_action, "confidence": 5, "reason": fallback_reason})
+    except Exception as e:
+        logger.warning(f"Could not update dashboard market state: {e}")
+
     if len(open_trades) >= MAX_OPEN_POSITIONS:
+        logger.info(f"Max open positions reached ({len(open_trades)}/{MAX_OPEN_POSITIONS}): {open_symbols}. Managing active positions.")
         return
 
     # 4. Multi-Symbol Scanning: BTCUSDT, ETHUSDT, SOLUSDT

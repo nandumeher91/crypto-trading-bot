@@ -77,9 +77,14 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
                     "side": "BUY",
                     "entry_price": price,
                     "quantity": qty,
+                    "initial_quantity": qty,
                     "reason": "Executed trade",
-                    "stop_loss": price * 0.992,
-                    "take_profit": price * 1.025,
+                    "stop_loss": round(price * 0.992, 2),
+                    "take_profit": round(price * 1.025, 2),
+                    "tp1": round(price * 1.015, 2),
+                    "tp2": round(price * 1.025, 2),
+                    "tp1_hit": False,
+                    "partial_pnl": 0.0,
                     "status": "open",
                     "pnl": 0.0,
                     "pnl_percent": 0.0
@@ -201,7 +206,7 @@ def update_trade_stop_loss(trade_id, new_sl):
     return updated
 
 
-def partial_close_trade(trade_id, exit_price, closed_qty, tp_stage="tp1"):
+def partial_close_trade(trade_id, exit_price, closed_qty, tp_stage="tp1", symbol=None):
     """
     Handles partial profit booking (60% at TP1):
     - Deducts closed_qty from open trade quantity
@@ -213,6 +218,8 @@ def partial_close_trade(trade_id, exit_price, closed_qty, tp_stage="tp1"):
     target = None
     for trade in trades:
         if trade["trade_id"] == trade_id and trade["status"] in ["open", "partial_tp"]:
+            if symbol and trade.get("symbol") != symbol:
+                continue
             target = trade
             break
 
@@ -243,19 +250,25 @@ def partial_close_trade(trade_id, exit_price, closed_qty, tp_stage="tp1"):
     return target
 
 
-def close_trade(trade_id, exit_price, closed_by="brain"):
+def close_trade(trade_id, exit_price, closed_by="brain", symbol=None):
     trades = read_ledger()
     target = None
     for trade in trades:
-        if trade["trade_id"] == trade_id:
+        if trade["trade_id"] == trade_id and trade.get("status") in ["open", "partial_tp"]:
+            if symbol and trade.get("symbol") != symbol:
+                continue
             target = trade
             break
 
     if target is None:
-        raise ValueError(f"Trade ID {trade_id} not found")
-
-    if target["status"] not in ["open", "partial_tp"]:
-        raise ValueError(f"Trade #{trade_id} is already closed")
+        # Fallback: find any open trade with that symbol
+        if symbol:
+            for trade in trades:
+                if trade.get("symbol") == symbol and trade.get("status") in ["open", "partial_tp"]:
+                    target = trade
+                    break
+        if target is None:
+            raise ValueError(f"Trade ID {trade_id} ({symbol}) not found or already closed")
 
     side = target["side"].upper()
     entry = float(target["entry_price"])
