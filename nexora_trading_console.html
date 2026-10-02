@@ -1,0 +1,2420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="25">
+  <title>Nexora Algo Trading Console</title>
+  <style>
+
+:root {
+  --bg-pitch: #030206;
+  --bg-surface: #030206;
+  --bg-card: #030206;
+  --border-subtle: rgba(168, 85, 247, 0.22);
+  --border-glow: rgba(217, 70, 239, 0.48);
+  --purple-accent: #a855f7;
+  --magenta-accent: #d946ef;
+  --purple-gradient: linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: var(--bg-pitch);
+  color: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+.nexora-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Cursor Spotlight Border - ONLY illuminates the border area within cursor proximity */
+.nexora-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: radial-gradient(
+    250px circle at var(--mouse-x, -999px) var(--mouse-y, -999px),
+    rgba(217, 70, 239, 0.95) 0%,
+    rgba(168, 85, 247, 0.52) 35%,
+    rgba(147, 51, 234, 0.12) 65%,
+    transparent 80%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 0.25s ease;
+  z-index: 2;
+}
+
+/* Subtle ambient spotlight sheen inside card near cursor */
+.nexora-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    220px circle at var(--mouse-x, -999px) var(--mouse-y, -999px),
+    rgba(168, 85, 247, 0.05) 0%,
+    transparent 75%
+  );
+  pointer-events: none;
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 0.25s ease;
+  z-index: 1;
+}
+
+/* ========================================================
+   PREMIUM LIQUID GLASS INTERACTION (Pure Optics, No Card Pop)
+   ======================================================== */
+
+/* Water Droplet Impact Glint at touch origin */
+.water-drop-glint {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.2);
+  background: radial-gradient(circle, #ffffff 10%, rgba(232, 121, 249, 0.85) 45%, rgba(56, 189, 248, 0.4) 75%, transparent 100%);
+  filter: blur(2px);
+  mix-blend-mode: screen;
+  animation: waterGlintBloom 0.38s cubic-bezier(0.12, 0.9, 0.25, 1) forwards;
+  z-index: 12;
+}
+
+@keyframes waterGlintBloom {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 1;
+  }
+  40% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* Real Liquid Caustic Wave (Chromatic water refraction on dark glass) */
+.water-caustic-wave {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  pointer-events: none;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.1);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(232, 121, 249, 0.22) 28%,
+    rgba(168, 85, 247, 0.12) 50%,
+    rgba(56, 189, 248, 0.08) 68%,
+    transparent 82%
+  );
+  filter: blur(12px);
+  mix-blend-mode: screen;
+  animation: waterCausticSpread 0.72s cubic-bezier(0.12, 0.88, 0.22, 1) forwards;
+  z-index: 10;
+}
+
+@keyframes waterCausticSpread {
+  0% {
+    transform: translate(-50%, -50%) scale(0.1);
+    opacity: 0.95;
+  }
+  35% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Soft Liquid Meniscus Surface Tension (NO hard rings, purely blurred liquid rim) */
+.water-surface-meniscus {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  pointer-events: none;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.12);
+  box-shadow: inset 0 0 16px rgba(232, 121, 249, 0.3), 0 0 20px rgba(56, 189, 248, 0.18);
+  filter: blur(6px);
+  animation: waterMeniscusSpread 0.68s cubic-bezier(0.14, 0.85, 0.25, 1) forwards;
+  z-index: 11;
+}
+
+@keyframes waterMeniscusSpread {
+  0% {
+    transform: translate(-50%, -50%) scale(0.12);
+    opacity: 0.9;
+  }
+  30% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.35);
+    opacity: 0;
+  }
+}
+
+.btn-glow-purple {
+  background: var(--purple-gradient);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(168, 85, 247, 0.35);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  user-select: none;
+}
+.btn-glow-purple:hover {
+  box-shadow: 0 6px 26px rgba(217, 70, 239, 0.55);
+  transform: translateY(-1px);
+}
+.btn-glow-purple:active {
+  /* no click animation */
+}
+
+/* ========================================================
+   FROSTED GLASS ICONS & GLASS BUTTON CONTROLS
+   ======================================================== */
+.glass-icon-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 4px 14px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+.glass-icon-tile:hover {
+  border-color: rgba(217, 70, 239, 0.5);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22), 0 0 16px rgba(168, 85, 247, 0.35);
+  transform: translateY(-1px);
+}
+.glass-icon-tile svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Glass Status Badge */
+.glass-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  font-size: 11px;
+  font-family: monospace;
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Glass Ruby Button (Kill Switch) */
+.glass-btn-ruby {
+  padding: 7px 15px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 9px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15), 0 2px 10px rgba(239, 68, 68, 0.2);
+  transition: all 0.2s ease;
+}
+.glass-btn-ruby:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #ffffff;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 0 18px rgba(239, 68, 68, 0.45);
+  transform: translateY(-1px);
+}
+
+/* Glass Purple Button (Strategy Engine) */
+.glass-btn-purple {
+  padding: 7px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(217, 70, 239, 0.22) 0%, rgba(147, 51, 234, 0.28) 100%);
+  border: 1px solid rgba(217, 70, 239, 0.45);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 2px 14px rgba(168, 85, 247, 0.3);
+  transition: all 0.2s ease;
+}
+.glass-btn-purple:hover {
+  background: linear-gradient(135deg, rgba(217, 70, 239, 0.38) 0%, rgba(147, 51, 234, 0.48) 100%);
+  border-color: rgba(232, 121, 249, 0.7);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 0 22px rgba(217, 70, 239, 0.5);
+  transform: translateY(-1px);
+}
+
+/* ========================================================
+   PREMIUM MODE SWITCH CAPSULE (Smooth Gliding Slider)
+   ======================================================== */
+.glass-mode-switch-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(14, 10, 28, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.15);
+  backdrop-filter: blur(14px);
+  user-select: none;
+}
+
+.mode-slider-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 8px;
+  transition: all 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.mode-slider-thumb.mode-test-pos {
+  left: 4px;
+  width: calc(50% - 4px);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, rgba(217, 119, 6, 0.35) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 0 16px rgba(251, 191, 36, 0.35);
+  backdrop-filter: blur(8px);
+}
+
+.mode-slider-thumb.mode-main-pos {
+  left: 50%;
+  width: calc(50% - 4px);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(5, 150, 105, 0.35) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.6);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 0 16px rgba(16, 185, 129, 0.35);
+  backdrop-filter: blur(8px);
+}
+
+.mode-switch-btn {
+  position: relative;
+  z-index: 2;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.25s ease;
+  white-space: nowrap;
+}
+
+.mode-switch-btn.active-test {
+  color: #fbbf24;
+}
+
+.mode-switch-btn.active-main {
+  color: #34d399;
+}
+
+.mode-switch-btn.inactive {
+  color: #64748b;
+}
+
+.mode-switch-btn.inactive:hover {
+  color: #cbd5e1;
+}
+
+.mode-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: all 0.25s ease;
+}
+
+.mode-dot.dot-test {
+  background: #fbbf24;
+  box-shadow: 0 0 8px #fbbf24;
+}
+
+.mode-dot.dot-main {
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+}
+
+.mode-switch-btn.inactive .mode-dot {
+  background: #475569;
+  box-shadow: none;
+}
+
+.mode-subtext {
+  font-size: 10px;
+  font-weight: normal;
+  opacity: 0.8;
+}
+
+/* Floating Glass Toast Notification */
+.glass-toast {
+  position: fixed;
+  top: 72px;
+  right: 24px;
+  z-index: 99999;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: rgba(14, 10, 28, 0.92);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(16, 185, 129, 0.25);
+  backdrop-filter: blur(16px);
+  color: #f1f5f9;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateY(-20px);
+  opacity: 0;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.glass-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Crossfade transitions for dashboard mode switch */
+#view-dashboard, #env-banner {
+  transition: opacity 0.22s ease, filter 0.22s ease;
+}
+.mode-fade-out {
+  opacity: 0.25 !important;
+  filter: blur(4px) !important;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 38px;
+  height: 20px;
+  background: #1f1b36;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  display: inline-block;
+}
+.toggle-switch.active {
+  background: linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%);
+  border-color: #d946ef;
+  box-shadow: 0 0 10px rgba(217, 70, 239, 0.4);
+}
+.toggle-handle {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  border-radius: 9999px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toggle-switch.active .toggle-handle {
+  transform: translateX(18px);
+}
+
+.ambient-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #030206;
+}
+::-webkit-scrollbar-thumb {
+  background: #231c3d;
+  border-radius: 4px;
+}
+
+  </style>
+</head>
+<body style="position:relative; background-color:#030206; color:#f1f5f9; min-height:100vh;">
+
+  <!-- Ambient Purple Neon Glow Spotlights -->
+  <div class="ambient-glow" style="width:380px; height:380px; background:rgba(168,85,247,0.12); top:40px; left:25%;"></div>
+  <div class="ambient-glow" style="width:380px; height:380px; background:rgba(217,70,239,0.09); top:360px; right:40px;"></div>
+
+  <!-- Top Sticky Navigation (Nexora Style) -->
+  <header style="height:64px; border-bottom:1px solid rgba(168,85,247,0.15); background:rgba(3,2,6,0.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); padding:0 32px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
+    <div style="display:flex; align-items:center; gap:32px;">
+      <!-- Nexora Sleek Glowing Brand Mark Logo -->
+      <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="switchNavTab('dashboard')">
+        <div class="glass-icon-tile" style="width:38px; height:38px; border-radius:11px; background:rgba(255,255,255,0.03); border:1px solid rgba(217,70,239,0.38); box-shadow:inset 0 1px 1px rgba(255,255,255,0.2), 0 0 20px rgba(168,85,247,0.25);">
+          <!-- Sleek Glowing 'N' Monogram -->
+          <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 4V20L11 10V20M20 20V4L13 14V4" stroke="url(#nexoraGradient)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="nexoraGradient" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#ffffff"/>
+                <stop offset="0.4" stop-color="#d946ef"/>
+                <stop offset="1" stop-color="#8b5cf6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span style="font-size:18px; font-weight:900; letter-spacing:0.05em; color:#ffffff;">NEXORA <span style="font-size:12px; font-weight:600; color:#c084fc; font-family:monospace;">ALGO</span></span>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav style="display:flex; align-items:center; gap:24px; font-size:12px; font-weight:600;">
+        <a id="nav-link-dashboard" href="javascript:void(0)" onclick="switchNavTab('dashboard')" style="color:#ffffff; text-decoration:none; border-bottom:2px solid #d946ef; padding-bottom:4px; transition:all 0.2s; cursor:pointer;">Dashboard</a>
+        <a id="nav-link-strategies" href="javascript:void(0)" onclick="switchNavTab('strategies')" style="color:#94a3b8; text-decoration:none; transition:all 0.2s; cursor:pointer;">Strategies</a>
+        <a id="nav-link-portfolio" href="javascript:void(0)" onclick="switchNavTab('portfolio')" style="color:#94a3b8; text-decoration:none; transition:all 0.2s; cursor:pointer;">Portfolio</a>
+        <a id="nav-link-settings" href="javascript:void(0)" onclick="switchNavTab('settings')" style="color:#94a3b8; text-decoration:none; transition:all 0.2s; cursor:pointer;">Settings</a>
+      </nav>
+    </div>
+
+    <!-- CENTER SWITCHER: Glass Capsule with Gliding Slider -->
+    <div style="display:flex; align-items:center;">
+      <div class="glass-mode-switch-wrapper">
+        <div id="mode-slider-thumb" class="mode-slider-thumb mode-test-pos"></div>
+        <button id="mode-test-btn" onclick="switchConsoleMode('test')" class="mode-switch-btn active-test">
+          <span class="mode-dot dot-test"></span>
+          <span>TEST</span>
+          <span class="mode-subtext">(Paper Testnet)</span>
+        </button>
+        <button id="mode-main-btn" onclick="switchConsoleMode('main')" class="mode-switch-btn inactive">
+          <span class="mode-dot dot-main"></span>
+          <span>MAIN</span>
+          <span class="mode-subtext">(Real Live)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Header Right Controls -->
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div class="glass-status-pill">
+        <span id="engine-status-dot" class="mode-dot" style="width:8px; height:8px; background:#fbbf24; box-shadow:0 0 8px #fbbf24;"></span>
+        <span style="color:#94a3b8;">Engine:</span>
+        <span style="color:#fbbf24; font-weight:bold;" id="engine-status-text">TESTNET SPOT</span>
+      </div>
+
+      <button onclick="triggerKillSwitch()" class="glass-btn-ruby"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg> <span>KILL SWITCH</span></button>
+
+      <button onclick="handleDeployAction()" class="glass-btn-purple">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span id="action-btn-text">Strategy Engine</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ENVIRONMENT BANNER (Distinct Visual Look for TEST vs MAIN) -->
+  <div id="env-banner" style="background:rgba(251,191,36,0.1); border-bottom:1px solid rgba(251,191,36,0.25); padding:8px 32px; font-size:11px; font-weight:bold; color:#fbbf24; display:flex; justify-content:space-between; align-items:center; letter-spacing:0.02em;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:13px;">🟡</span>
+      <span><strong>BINANCE SPOT TESTNET (PAPER TRADING ACTIVE)</strong> — Virtual Sandbox • Zero Real Financial Risk</span>
+    </div>
+    <div style="font-family:monospace; font-size:11px; color:#cbd5e1;">
+      Active Strategy: Institutional SMC 60/40 Engine • BTC / ETH / SOL
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main style="max-width:1240px; margin:0 auto; padding:32px 24px; position:relative; z-index:10;">
+
+    <!-- ============================================== -->
+    <!-- VIEW-DASHBOARD: LIVE COMMAND CENTER            -->
+    <!-- ============================================== -->
+    <div id="view-dashboard">
+
+    <!-- Kill Switch Alert Banner (if halted) -->
+    
+
+    <!-- Greeting Section -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h1 style="font-size:24px; font-weight:900; color:#ffffff; letter-spacing:-0.02em;">Hey Nandu, Welcome Back 👋</h1>
+        <p id="console-subtitle" style="font-size:12px; color:#94a3b8; margin-top:4px;">Institutional quantitative algorithms running 24/7 on Live Binance with isolated capital limits.</p>
+      </div>
+
+      <!-- Live Heartbeat -->
+      <div style="text-align:right; font-size:12px; color:#64748b; font-family:monospace;">
+        Updated: 2026-09-28 10:15:39 IST • Groq Brain: Active
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- TOP 4 METRICS CARDS (Nexora Pop on Hover)      -->
+    <!-- ============================================== -->
+    <section style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:18px; margin-bottom:24px;">
+      
+      <!-- Card 1: Total Realized P&L -->
+      <div class="nexora-card" style="padding:20px; cursor:pointer;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+          <span id="card-pnl-label">Total Realized P&L</span>
+          <div class="glass-icon-tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+              <polyline points="17 6 23 6 23 12"></polyline>
+            </svg>
+          </div>
+        </div>
+        <div id="card-pnl-val" style="font-size:26px; font-weight:900; color:#f87171; margin-top:8px; font-family:monospace;">
+          -$0.65
+        </div>
+        <div id="card-pnl-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px;">
+          <span style="color:#34d399; font-weight:bold;">▲ +18.4% ROI</span>
+          <span style="color:#64748b;">Cumulative</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Allocated Capital Limit -->
+      <div class="nexora-card" style="padding:20px; cursor:pointer;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+          <span id="card-cap-label">Allocated Capital (Subscribed)</span>
+          <div class="glass-icon-tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+        </div>
+        <div id="card-cap-val" style="font-size:26px; font-weight:900; color:#ffffff; margin-top:8px; font-family:monospace;">
+          ₹50,000 <span style="font-size:12px; font-weight:normal; color:#94a3b8;">($598.80)</span>
+        </div>
+        <div id="card-cap-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px;">
+          <span style="color:#fbbf24; font-weight:600;">Margin Used: $15.03 (2.5%)</span>
+          <span style="color:#34d399; font-weight:bold;">Free: ₹48,744</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Win Rate with Purple Radial Ring -->
+      <div class="nexora-card" style="padding:20px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+        <div>
+          <div id="card-wr-label" style="font-size:12px; color:#94a3b8;">Win Rate</div>
+          <div id="card-wr-val" style="font-size:26px; font-weight:900; color:#ffffff; margin-top:8px;">53.3%</div>
+          <div id="card-wr-sub" style="font-size:11px; color:#34d399; font-weight:bold; margin-top:4px;">3 🔥 Streak • 15 Trades</div>
+        </div>
+        <div style="position:relative; width:56px; height:56px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg style="width:56px; height:56px; transform:rotate(-90deg);" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="#1d1633" stroke-width="3.5" />
+            <circle id="card-wr-svg-circle" cx="18" cy="18" r="14" fill="none" stroke="#d946ef" stroke-width="3.5" stroke-dasharray="46.9, 88" stroke-linecap="round" />
+          </svg>
+          <span id="card-wr-pct-badge" style="position:absolute; font-size:10px; font-weight:bold; color:#ffffff; font-family:monospace;">53%</span>
+        </div>
+      </div>
+
+      <!-- Card 4: Total Binance Account Balance -->
+      <div class="nexora-card" style="padding:20px; cursor:pointer;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+          <span id="card-balance-label">Binance Testnet Balance</span>
+          <div class="glass-icon-tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="3"></rect>
+              <path d="M2 10h20"></path>
+              <circle cx="16" cy="14" r="2"></circle>
+            </svg>
+          </div>
+        </div>
+        <div id="card-balance-val" style="font-size:26px; font-weight:900; color:#ffffff; margin-top:8px; font-family:monospace;">
+          $9,992.78 <span style="font-size:13px; font-weight:normal; color:#c084fc;">USDT</span>
+        </div>
+        <div id="card-balance-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px;">
+          <span style="color:#94a3b8;">BTC: 1.00 • ETH: 1.00</span>
+          <span id="card-balance-badge" style="color:#fbbf24; font-weight:bold;">Testnet Live</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Open Positions Section (if any) -->
+    
+            <div class="nexora-card" style="border-color:rgba(168, 85, 247, 0.35); padding:24px; margin-bottom:24px; position:relative; overflow:hidden;">
+                <!-- Glowing corner backlight -->
+                <div style="position:absolute; top:-20px; right:-20px; width:130px; height:130px; background:rgba(217,70,239,0.15); border-radius:50%; filter:blur(40px); pointer-events:none;"></div>
+
+                <!-- Position Header: Symbol + Side Badge + Runner status + Manual Exit Button -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid rgba(168,85,247,0.14); padding-bottom:16px;">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span style="font-size:20px; font-weight:900; color:#ffffff; font-family:monospace; letter-spacing:0.04em;">BTCUSDT</span>
+                        <span style="padding:4px 12px; border-radius:6px; font-size:11px; font-weight:900; background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3);">BUY #16</span>
+                        <span style="font-size:12px; font-weight:bold; color:#a855f7; background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.25); padding:4px 10px; border-radius:6px;">🟢 ACTIVE INSTITUTIONAL POSITION</span>
+                    </div>
+
+                    <!-- Manual Close Action Button -->
+                    <button onclick="manualClosePosition(16, 'BTCUSDT')" style="padding:8px 18px; border-radius:8px; background:linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color:#ffffff; font-weight:bold; font-size:11px; border:none; cursor:pointer; box-shadow:0 4px 14px rgba(239,68,68,0.35); transition:all 0.2s;" onmouseover="this.style.boxShadow='0 6px 20px rgba(239,68,68,0.55)'; this.style.transform='translateY(-1px)';" onmouseout="this.style.boxShadow='0 4px 14px rgba(239,68,68,0.35)'; this.style.transform='none';">
+                        ⚡ Close Position Now (Market)
+                    </button>
+                </div>
+
+                <!-- 6-Metric Data Grid -->
+                <div style="margin-top:16px; display:grid; grid-template-columns:repeat(auto-fit, minmax(135px, 1fr)); gap:12px; background:#06040a; padding:16px; border-radius:10px; border:1px solid rgba(168,85,247,0.15);">
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Entry Price</div>
+                        <div style="font-size:16px; font-weight:bold; color:#ffffff; font-family:monospace; margin-top:2px;">$83,500.02</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Current Price</div>
+                        <div style="font-size:16px; font-weight:bold; color:#f0f6fc; font-family:monospace; margin-top:2px;">$83,490.00</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Live Floating P&L</div>
+                        <div style="font-size:16px; font-weight:bold; color:#f87171; font-family:monospace; margin-top:2px;">-$0.00 <span style="font-size:11px;">(-0.01%)</span></div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">SL (Structure Low)</div>
+                        <div style="font-size:16px; font-weight:bold; color:#f87171; font-family:monospace; margin-top:2px;">$83,207.77</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">TP1 (60% Book)</div>
+                        <div style="font-size:16px; font-weight:bold; color:#34d399; font-family:monospace; margin-top:2px;">$84,794.01</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">TP2 (40% Runner)</div>
+                        <div style="font-size:16px; font-weight:bold; color:#c084fc; font-family:monospace; margin-top:2px;">$86,040.32</div>
+                    </div>
+                </div>
+
+                <!-- 60/40 Liquidity Target Progress Bar -->
+                <div style="margin-top:16px;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
+                        <span style="color:#cbd5e1; font-weight:600;">60/40 Liquidity Progress</span>
+                        <span style="color:#c084fc; font-family:monospace; font-weight:bold;">0.0% to Full TP2 Target</span>
+                    </div>
+                    <div style="height:8px; width:100%; background:#19122c; border-radius:9999px; position:relative; overflow:hidden;">
+                        <div style="height:100%; width:0.0%; background:linear-gradient(90deg, #a855f7 0%, #d946ef 60%, #34d399 100%); border-radius:9999px; transition:width 0.4s ease;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; font-family:monospace; margin-top:4px;">
+                        <span>Entry ($83,500.02)</span>
+                        <span style="color:#34d399;">60% TP1 ($84,794.01)</span>
+                        <span style="color:#c084fc;">40% Runner ($86,040.32)</span>
+                    </div>
+                </div>
+            </div>
+            
+
+    <!-- ============================================== -->
+    <!-- MID SECTION: P&L Chart + Bot AI Analysis       -->
+    <!-- ============================================== -->
+    <section style="display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-bottom:24px;">
+      
+      <!-- Left: Large Cumulative P&L Curve -->
+      <div class="nexora-card" style="padding:24px; display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:14px;">
+            <div>
+              <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:#94a3b8; font-weight:bold;">Performance Analytics</div>
+              <h2 id="pnl-display-val" style="font-size:20px; font-weight:900; color:#ffffff; margin-top:2px;">
+                -$0.65 <span style="font-size:12px; color:#94a3b8; font-weight:normal;">Realized Profit (ALL)</span>
+              </h2>
+            </div>
+
+            <!-- Timeframe Filter Buttons -->
+            <div style="display:flex; align-items:center; gap:6px; background:#07050e; padding:4px; border-radius:10px; border:1px solid rgba(168,85,247,0.15); font-size:11px;">
+              <button onclick="changePnlTimeframe('Today', '+$0.00', this)" style="padding:4px 10px; border-radius:6px; border:none; background:transparent; color:#94a3b8; cursor:pointer;">Today</button>
+              <button onclick="changePnlTimeframe('7D', '+$0.94', this)" style="padding:4px 10px; border-radius:6px; border:none; background:transparent; color:#94a3b8; cursor:pointer;">7D</button>
+              <button onclick="changePnlTimeframe('30D', '-$0.67', this)" style="padding:4px 10px; border-radius:6px; border:none; background:transparent; color:#94a3b8; cursor:pointer;">30D</button>
+              <button onclick="changePnlTimeframe('Months', '-$0.65', this)" style="padding:4px 10px; border-radius:6px; border:none; background:transparent; color:#94a3b8; cursor:pointer;">Months</button>
+              <button onclick="changePnlTimeframe('All', '-$0.65', this)" style="padding:4px 10px; border-radius:6px; border:none; background:linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%); color:#ffffff; font-weight:bold; box-shadow:0 0 12px rgba(217,70,239,0.5); cursor:pointer;">All</button>
+            </div>
+          </div>
+
+          <!-- Clean Smooth Cumulative Curve -->
+          <div style="position:relative; width:100%; height:200px; margin-top:18px;">
+            <svg style="width:100%; height:100%; overflow:visible;" viewBox="0 0 500 180" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="curveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#d946ef" stop-opacity="0.3" />
+                  <stop offset="100%" stop-color="#a855f7" stop-opacity="0.0" />
+                </linearGradient>
+                <linearGradient id="strokeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#a855f7" />
+                  <stop offset="50%" stop-color="#d946ef" />
+                  <stop offset="100%" stop-color="#f43f5e" />
+                </linearGradient>
+              </defs>
+
+              <!-- Subtle Background Gridlines -->
+              <line x1="0" y1="45" x2="500" y2="45" stroke="#1d1633" stroke-dasharray="3,3" stroke-width="1" />
+              <line x1="0" y1="90" x2="500" y2="90" stroke="#1d1633" stroke-dasharray="3,3" stroke-width="1" />
+              <line x1="0" y1="135" x2="500" y2="135" stroke="#1d1633" stroke-dasharray="3,3" stroke-width="1" />
+
+              <!-- Smooth Area Gradient Fill -->
+              <path d="M 0.0,148.8 L 38.5,140.9 L 76.9,131.0 L 115.4,160.0 L 153.8,62.4 L 192.3,91.6 L 230.8,91.6 L 269.2,138.8 L 307.7,20.0 L 346.2,54.9 L 384.6,84.7 L 423.1,137.0 L 461.5,133.8 L 500.0,125.4 L 500,180 L 0,180 Z" fill="url(#curveGradient)" />
+              
+              <!-- Neon Curve Line with Violet Glow Filter -->
+              <path d="M 0.0,148.8 L 38.5,140.9 L 76.9,131.0 L 115.4,160.0 L 153.8,62.4 L 192.3,91.6 L 230.8,91.6 L 269.2,138.8 L 307.7,20.0 L 346.2,54.9 L 384.6,84.7 L 423.1,137.0 L 461.5,133.8 L 500.0,125.4" fill="none" stroke="url(#strokeGradient)" stroke-width="3.5" stroke-linecap="round" style="filter:drop-shadow(0 0 10px rgba(217,70,239,0.7));" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Chart Timeline Labels -->
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; font-family:monospace; margin-top:8px;">
+          <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Current</span>
+        </div>
+      </div>
+
+      <!-- Right: Bot AI Market Analysis Card -->
+      <div class="nexora-card" style="padding:24px; display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:12px;">
+            <div style="font-size:15px; font-weight:bold; color:#ffffff; display:flex; align-items:center; gap:10px;">
+              <div class="glass-icon-tile" style="width:30px; height:30px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#d946ef" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                  <rect x="9" y="9" width="6" height="6"></rect>
+                  <line x1="9" y1="1" x2="9" y2="4"></line>
+                  <line x1="15" y1="1" x2="15" y2="4"></line>
+                  <line x1="9" y1="20" x2="9" y2="23"></line>
+                  <line x1="15" y1="20" x2="15" y2="23"></line>
+                  <line x1="20" y1="9" x2="23" y2="9"></line>
+                  <line x1="20" y1="14" x2="23" y2="14"></line>
+                  <line x1="1" y1="9" x2="4" y2="9"></line>
+                  <line x1="1" y1="14" x2="4" y2="14"></line>
+                </svg>
+              </div>
+              <span>Bot AI Market Analysis</span>
+            </div>
+            <span style="font-size:10px; font-weight:bold; color:#34d399; background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.3); padding:3px 8px; border-radius:9999px;">ACTIVE</span>
+          </div>
+
+          <!-- SMC Confluence Score Bar -->
+          <div style="margin-top:16px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
+              <span style="color:#94a3b8;">SMC Confluence Score</span>
+              <span style="color:#34d399; font-weight:bold; font-family:monospace;">85/100</span>
+            </div>
+            <div style="height:6px; width:100%; background:#19122c; border-radius:9999px; overflow:hidden;">
+              <div style="height:100%; width:85%; background:linear-gradient(90deg, #a855f7, #34d399); border-radius:9999px;"></div>
+            </div>
+          </div>
+
+          <!-- AI Confidence Bar -->
+          <div style="margin-top:14px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
+              <span style="color:#94a3b8;">Groq LLM Confidence</span>
+              <span style="color:#c084fc; font-weight:bold; font-family:monospace;">5/10</span>
+            </div>
+            <div style="height:6px; width:100%; background:#19122c; border-radius:9999px; overflow:hidden;">
+              <div style="height:100%; width:50%; background:linear-gradient(90deg, #d946ef, #a855f7); border-radius:9999px;"></div>
+            </div>
+          </div>
+
+          <!-- Technical Gauges Summary -->
+          <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px; font-family:monospace;">
+            <div style="background:#07050e; padding:8px 10px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+              <span style="color:#64748b;">RSI (5m):</span> <span style="color:#ffffff; font-weight:bold;">48.9</span>
+            </div>
+            <div style="background:#07050e; padding:8px 10px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+              <span style="color:#64748b;">Vol Ratio:</span> <span style="color:#34d399; font-weight:bold;">1.5x</span>
+            </div>
+          </div>
+
+          <!-- Groq Brain Reasoning Box -->
+          <div style="margin-top:14px; background:#07050e; border:1px solid rgba(168,85,247,0.15); border-left:3px solid #d946ef; border-radius:10px; padding:12px;">
+            <div style="font-size:10px; color:#c084fc; font-weight:bold; text-transform:uppercase; letter-spacing:0.04em;">Groq Brain Reasoning</div>
+            <p style="font-size:11px; color:#cbd5e1; line-height:1.5; margin-top:4px;">1 positions active: BTCUSDT</p>
+          </div>
+        </div>
+
+        <div style="margin-top:14px; font-size:10px; color:#64748b; font-family:monospace; display:flex; justify-content:space-between;">
+          <span>Target: 1H 0.618 Zone</span>
+          <span>Risk: Safe Low</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- MID-LOWER: Subscribed Strategies & Allocation  -->
+    <!-- ============================================== -->
+    <section style="display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-bottom:24px;">
+      
+      <!-- Subscribed Strategies Table with Capital Limit Tags -->
+      <div class="nexora-card" style="padding:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:14px;">
+          <div>
+            <h3 style="font-size:15px; font-weight:bold; color:#ffffff;">Subscribed Strategies (Capital Isolated)</h3>
+            <p style="font-size:11px; color:#94a3b8; margin-top:2px;">Each strategy operates strictly within its isolated margin allocation ceiling.</p>
+          </div>
+          <span style="font-size:10px; font-family:monospace; color:#c084fc; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); padding:4px 8px; border-radius:6px;">Max Cap: ₹10,000 / strategy</span>
+        </div>
+
+        <div style="overflow-x:auto; margin-top:12px;">
+          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid rgba(168,85,247,0.15); font-size:10px; text-transform:uppercase; color:#64748b;">
+                <th style="padding:10px 8px;">Strategy Name</th>
+                <th style="padding:10px 8px;">Allocated Cap</th>
+                <th style="padding:10px 8px;">Margin In Use</th>
+                <th style="padding:10px 8px;">Available Free</th>
+                <th style="padding:10px 8px;">Profit Generated</th>
+                <th style="padding:10px 8px; text-align:right;">Active Toggle</th>
+              </tr>
+            </thead>
+            <tbody style="color:#cbd5e1;">
+              
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08);">
+          <td style="padding:14px 8px; font-weight:bold; color:#ffffff;">
+            Institutional SMC 60/40 Engine <span style="font-size:10px; color:#c084fc; background:rgba(168,85,247,0.12); padding:2px 6px; border-radius:4px; margin-left:6px; font-family:monospace;">BTC / ETH / SOL • 1H (MACRO) + 5M (ENTRY)</span>
+            <div style="font-size:10px; color:#94a3b8; font-weight:normal; margin-top:2px;">Smart Money Concepts: 1H Golden Zone (0.618-0.786) retracement + 5m Fair Value Gap sweep with 60/40 institutional profit lock (TP1 60% profit book + SL to green lock, TP2 40% trend runner).</div>
+          </td>
+          <td style="padding:14px 8px; font-family:monospace;">
+            <span style="color:#d8b4fe; font-weight:bold;">₹50,000</span> <div style="font-size:10px; color:#64748b;">($600.00)</div>
+          </td>
+          <td style="padding:14px 8px; font-family:monospace;">
+            <span style="color:#fbbf24; font-weight:bold;">$15.03</span> <div style="font-size:10px; color:#d8b4fe;">₹1,255 (2.5% in trade)</div>
+          </td>
+          <td style="padding:14px 8px; font-family:monospace;">
+            <span style="color:#38bdf8; font-weight:bold;">₹48,744</span> <div style="font-size:10px; color:#64748b;">($584.97)</div>
+          </td>
+          <td style="padding:14px 8px; font-family:monospace; font-weight:bold; color:#f87171;">
+            -$0.65 <div style="font-size:10px; color:#94a3b8; font-weight:normal;">(53% win)</div>
+          </td>
+          <td style="padding:14px 8px; text-align:right;">
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">
+              <button onclick="demoteToTest('strat_smc_institutional', 'Institutional SMC 60/40 Engine')" style="padding:4px 8px; font-size:10px; border-radius:6px; background:#161026; color:#94a3b8; border:1px solid rgba(168,85,247,0.2); cursor:pointer;" title="Return to Testing Lab">🧪 Lab</button>
+              <div class="toggle-switch active" onclick="toggleSwitch(this)">
+                <div class="toggle-handle"></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right: Sleek Borderless Donut Chart with Margin Utilization -->
+      <div class="nexora-card" style="padding:24px; display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+          <div style="font-size:15px; font-weight:bold; color:#ffffff; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:12px;">
+            Capital Allocation
+          </div>
+
+          <div style="position:relative; width:140px; height:140px; margin:20px auto 14px auto; display:flex; align-items:center; justify-content:center;">
+            <svg style="width:140px; height:140px; transform:rotate(-90deg);" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#1d1633" stroke-width="5" />
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#d946ef" stroke-width="5" stroke-dasharray="100.0 0.0" stroke-dashoffset="-0.0" />
+            </svg>
+            <div style="position:absolute; text-align:center;">
+              <span style="font-size:15px; font-weight:900; color:#ffffff; font-family:monospace;">₹50,000</span>
+              <div style="font-size:9px; color:#94a3b8;">Total Isolated</div>
+            </div>
+          </div>
+
+          <!-- Strategy Legend -->
+          <div style="display:flex; flex-direction:column; gap:8px; font-size:11px; margin-top:8px;">
+            
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="display:flex; align-items:center; gap:6px; color:#cbd5e1;">
+                <span style="width:8px; height:8px; border-radius:50%; background:#d946ef; display:inline-block;"></span>
+                Institutional SMC 60/40 Engine (₹50,000)
+              </span>
+              <span style="font-family:monospace; color:#ffffff; font-weight:bold;">100.0%</span>
+            </div>
+            
+          </div>
+
+          <!-- Margin Utilization Breakdown -->
+          <div style="margin-top:16px; background:#07050e; border:1px solid rgba(168,85,247,0.15); border-radius:10px; padding:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+              <span style="color:#94a3b8;">Active Margin Used</span>
+              <span style="color:#fbbf24; font-weight:bold; font-family:monospace;">$15.03 (₹1,255)</span>
+            </div>
+            <div style="margin-top:6px; height:6px; width:100%; background:#19122c; border-radius:9999px; overflow:hidden;">
+              <div style="height:100%; width:2.5%; background:linear-gradient(90deg, #a855f7, #fbbf24); border-radius:9999px;"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#64748b; margin-top:6px; font-family:monospace;">
+              <span>2.5% In Use</span>
+              <span style="color:#34d399;">₹48,744 ($583.77) Free</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px; font-size:10px; color:#64748b; font-family:monospace; text-align:center;">
+          Max Drawdown Cap: 2% ($20.00)
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- ============================================== -->
+    <!-- BOTTOM: Trade Execution History Table          -->
+    <!-- ============================================== -->
+    <section class="nexora-card" style="padding:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:14px; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="glass-icon-tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 style="font-size:15px; font-weight:bold; color:#ffffff; margin:0;">Trade Execution History</h3>
+            <div id="history-subtitle" style="font-size:11px; color:#94a3b8; margin-top:2px;">Audited against Binance Testnet Spot Orders (16 Closed Trades)</div>
+          </div>
+        </div>
+        <div id="history-pills" style="display:flex; align-items:center; gap:10px; font-size:11px; font-family:monospace; flex-wrap:wrap;">
+          <span style="padding:4px 10px; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); border-radius:6px; color:#c084fc;">Win Rate: 53.3% (8W / 7L)</span>
+          <span style="padding:4px 10px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:6px; color:#f87171; font-weight:bold;">Total Realized: -$0.65</span>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto; margin-top:14px; max-height:480px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(168,85,247,0.3) rgba(15,10,25,0.6);">
+        <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
+          <thead style="position:sticky; top:0; background:#0a0714; z-index:2; box-shadow:0 2px 8px rgba(0,0,0,0.5);">
+            <tr style="border-bottom:1px solid rgba(168,85,247,0.2); font-size:10px; text-transform:uppercase; color:#94a3b8; letter-spacing:0.05em;">
+              <th style="padding:12px 14px;">Trade ID</th>
+              <th style="padding:12px 14px;">Entry Time (IST)</th>
+              <th style="padding:12px 14px;">Strategy</th>
+              <th style="padding:12px 14px;">Symbol</th>
+              <th style="padding:12px 14px;">Side</th>
+              <th style="padding:12px 14px;">Margin Used</th>
+              <th style="padding:12px 14px;">Entry Price</th>
+              <th style="padding:12px 14px;">Exit Price</th>
+              <th style="padding:12px 14px;">Result / Reason</th>
+              <th style="padding:12px 14px; text-align:right;">Realized Profit</th>
+            </tr>
+          </thead>
+          <tbody id="trade-history-tbody" style="color:#cbd5e1;">
+            
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Trade exited at breakeven stop protecting capital.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#16</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: None">2026-09-28 09:55:05</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">Institutional SMC 60/40 Engine</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $15.03
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹1,255 <span style="color:#d8b4fe;">(0.00018 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$83,500.02</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$0.00</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(148,163,184,0.15); color:#94a3b8; border:1px solid rgba(148,163,184,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Trade exited at breakeven stop protecting capital.">⚖️ Breakeven</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.00 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.00%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Strong BUY signal (score 85) aligns with a bullish 1H macro trend and the 5m OTE sweet-spot at $111.33. Exited via manual emergency kill switch.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#15</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-25 11:44:54 IST">2026-09-22 11:00:23 IST</td>
+            <td style="padding:12px 14px; color:#38bdf8; font-weight:bold;">SOL Momentum Scalper</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">SOLUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $15.06
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹1,257 <span style="color:#d8b4fe;">(0.13 SOL)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$115.86</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$116.24</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Strong BUY signal (score 85) aligns with a bullish 1H macro trend and the 5m OTE sweet-spot at $111.33. Exited via manual emergency kill switch.">⚡ Kill Switch Exit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.02 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.13%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on BTCUSDT with +$0.59 (+3.99%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#14</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-22 10:58:04 IST">2026-09-21 13:37:09 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $14.74
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹1,230 <span style="color:#d8b4fe;">(0.00018 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,908.01</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$85,176.80</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on BTCUSDT with +$0.59 (+3.99%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.59 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+3.99%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on ETHUSDT with +$0.22 (+2.40%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#13</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-22 10:58:03 IST">2026-09-21 13:25:29 IST</td>
+            <td style="padding:12px 14px; color:#f59e0b; font-weight:bold;">ETH Breakout Engine</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">ETHUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $14.87
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹1,241 <span style="color:#d8b4fe;">(0.0056 ETH)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$2,655.47</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$2,719.11</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on ETHUSDT with +$0.22 (+2.40%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.22 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+2.40%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on ETHUSDT limiting risk to -$3.67 (-0.48%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#12</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-21 13:03:42 IST">2026-09-21 12:28:38 IST</td>
+            <td style="padding:12px 14px; color:#f59e0b; font-weight:bold;">ETH Breakout Engine</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">ETHUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $771.12
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹64,388 <span style="color:#d8b4fe;">(0.2895 ETH)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$2,663.64</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$2,650.96</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on ETHUSDT limiting risk to -$3.67 (-0.48%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$3.67 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-0.48%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.10 (-0.19%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#11</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-21 13:13:45 IST">2026-09-21 12:23:35 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,115.03
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹93,105 <span style="color:#d8b4fe;">(0.01366 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,627.21</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,473.34</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.10 (-0.19%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$2.10 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-0.19%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.45 (-0.19%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#10</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-21 10:42:26 IST">2026-09-21 10:22:24 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,298.63
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹108,435 <span style="color:#d8b4fe;">(0.01594 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,470.01</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,316.00</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.45 (-0.19%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$2.45 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-0.19%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on SOLUSDT with +$8.35 (+0.83%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#9</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-21 11:53:09 IST">2026-09-21 10:12:16 IST</td>
+            <td style="padding:12px 14px; color:#38bdf8; font-weight:bold;">SOL Momentum Scalper</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">SOLUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,012.06
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹84,507 <span style="color:#d8b4fe;">(9.08 SOL)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$111.46</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$112.38</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on SOLUSDT with +$8.35 (+0.83%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$8.35 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.83%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$3.32 (-0.20%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#8</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-19 21:26:37 IST">2026-09-19 21:11:36 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,649.18
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹137,706 <span style="color:#d8b4fe;">(0.02016 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,804.64</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,640.00</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$3.32 (-0.20%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$3.32 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-0.20%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on SOLUSDT with +$0.00 (+0.00%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#7</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-19 21:01:29 IST">2026-09-19 19:06:17 IST</td>
+            <td style="padding:12px 14px; color:#38bdf8; font-weight:bold;">SOL Momentum Scalper</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">SOLUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,107.79
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹92,500 <span style="color:#d8b4fe;">(9.93 SOL)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$111.56</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$111.56</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on SOLUSDT with +$0.00 (+0.00%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.00 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.00%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.05 (-0.15%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#6</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-19 19:01:13 IST">2026-09-19 14:10:44 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,344.29
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹112,248 <span style="color:#d8b4fe;">(0.01653 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,324.04</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,200.00</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.05 (-0.15%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$2.05 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-0.15%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on SOLUSDT with +$6.86 (+0.58%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#5</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-19 14:05:41 IST">2026-09-19 13:10:35 IST</td>
+            <td style="padding:12px 14px; color:#38bdf8; font-weight:bold;">SOL Momentum Scalper</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">SOLUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,179.24
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹98,466 <span style="color:#d8b4fe;">(10.56 SOL)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$111.67</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$112.32</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on SOLUSDT with +$6.86 (+0.58%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$6.86 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.58%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on ETHUSDT limiting risk to -$2.04 (-1.35%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#4</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-20 08:22:34 IST">2026-09-19 13:00:29 IST</td>
+            <td style="padding:12px 14px; color:#f59e0b; font-weight:bold;">ETH Breakout Engine</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">ETHUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $150.72
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹12,585 <span style="color:#d8b4fe;">(0.0573 ETH)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$2,630.28</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$2,594.64</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on ETHUSDT limiting risk to -$2.04 (-1.35%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$2.04 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-1.35%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on BTCUSDT with +$0.70 (+0.05%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#3</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-19 12:55:25 IST">2026-09-19 12:35:22 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,533.25
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹128,026 <span style="color:#d8b4fe;">(0.01891 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,081.58</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$81,118.60</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on BTCUSDT with +$0.70 (+0.05%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.70 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.05%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="High probability take-profit target reached on SOLUSDT with +$0.55 (+0.07%) gain.">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#2</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-19 13:05:30 IST">2026-09-19 12:20:11 IST</td>
+            <td style="padding:12px 14px; color:#38bdf8; font-weight:bold;">SOL Momentum Scalper</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">SOLUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $764.30
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹63,819 <span style="color:#d8b4fe;">(6.84 SOL)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$111.74</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$111.82</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="High probability take-profit target reached on SOLUSDT with +$0.55 (+0.07%) gain.">🎯 TP Hit</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#34d399; font-family:monospace; white-space:nowrap;">+$0.55 <span style='font-size:10px; color:#34d399; opacity:0.8;'>(+0.07%)</span></td>
+        </tr>
+        
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08); transition:background 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.04)'" onmouseout="this.style.background='transparent'" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.31 (-0.23%).">
+            <td style="padding:12px 14px; font-weight:bold; color:#ffffff; font-family:monospace;">#1</td>
+            <td style="padding:12px 14px; color:#94a3b8; font-family:monospace; font-size:11px;" title="Closed: 2026-09-18 10:36:43 IST">2026-09-18 10:31:42 IST</td>
+            <td style="padding:12px 14px; color:#c084fc; font-weight:bold;">SMC 60/40 Institutional</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#fbbf24; font-family:monospace;">BTCUSDT</td>
+            <td style="padding:12px 14px; font-weight:bold; color:#34d399;">BUY</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#ffffff; font-weight:bold;">
+                $1,010.80
+                <div style="font-size:10px; color:#94a3b8; font-weight:normal;">₹84,401 <span style="color:#d8b4fe;">(0.01302 BTC)</span></div>
+            </td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$77,634.36</td>
+            <td style="padding:12px 14px; font-family:monospace; color:#cbd5e1;">$77,456.90</td>
+            <td style="padding:12px 14px;"><span style="padding:4px 10px; border-radius:9999px; background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.35); font-size:11px; font-weight:bold; white-space:nowrap; cursor:help;" title="Controlled stop-loss triggered on BTCUSDT limiting risk to -$2.31 (-0.23%).">🛑 Stop Loss</span></td>
+            <td style="padding:12px 14px; text-align:right; font-weight:bold; color:#f87171; font-family:monospace; white-space:nowrap;">-$2.31 <span style='font-size:10px; color:#f87171; opacity:0.8;'>(-0.23%)</span></td>
+        </tr>
+        
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    </div> <!-- END VIEW-DASHBOARD -->
+
+    <!-- ================================================================ -->
+    <!-- VIEW-STRATEGIES: SUBSCRIBED STRATEGY & STRATEGY LAB              -->
+    <!-- ================================================================ -->
+    <div id="view-strategies" style="display:none;">
+      
+      <!-- Section Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+        <div>
+          <h1 style="font-size:24px; font-weight:900; color:#ffffff; letter-spacing:-0.02em;">Strategy Engine & Configuration</h1>
+          <p style="font-size:12px; color:#c084fc; margin-top:4px;">Manage subscribed institutional strategies with custom capital allocation or tune parameters in the Strategy Lab.</p>
+        </div>
+
+        <!-- Strategy Sub-Navigation Pills -->
+        <div style="display:flex; align-items:center; gap:8px; background:#090714; padding:4px; border-radius:12px; border:1px solid rgba(168,85,247,0.25);">
+          <button id="tab-btn-subscribed" onclick="switchStrategySubTab('subscribed')" style="padding:7px 18px; border-radius:8px; font-size:12px; font-weight:bold; background:linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%); color:#ffffff; border:none; cursor:pointer; display:flex; align-items:center; gap:6px; transition:all 0.2s;">
+            <span>📌</span> Subscribed Strategy
+          </button>
+          <button id="tab-btn-lab" onclick="switchStrategySubTab('lab')" style="padding:7px 18px; border-radius:8px; font-size:12px; font-weight:bold; background:transparent; color:#94a3b8; border:none; cursor:pointer; display:flex; align-items:center; gap:6px; transition:all 0.2s;">
+            <span>🧪</span> Strategy Lab
+          </button>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- SUB-SECTION 1: SUBSCRIBED STRATEGY             -->
+      <!-- ============================================== -->
+      <div id="strat-sub-section-subscribed" style="display:block;">
+        
+        <!-- Active Strategy Card (Single Authentic Engine) -->
+        <div class="nexora-card" style="padding:28px; margin-bottom:24px; border-color:rgba(168,85,247,0.35); position:relative; overflow:hidden;">
+          <div style="position:absolute; top:-20px; right:-20px; width:140px; height:140px; background:rgba(217,70,239,0.12); border-radius:50%; filter:blur(40px); pointer-events:none;"></div>
+
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; border-bottom:1px solid rgba(168,85,247,0.15); padding-bottom:18px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <h3 style="font-size:20px; font-weight:900; color:#ffffff;">Institutional SMC 60/40 Engine</h3>
+                <span style="padding:3px 10px; border-radius:6px; background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); font-size:11px; font-weight:bold; font-family:monospace;">🟢 Active & Subscribed</span>
+                <span style="padding:3px 10px; border-radius:6px; background:rgba(168,85,247,0.15); color:#d8b4fe; border:1px solid rgba(168,85,247,0.3); font-size:11px; font-weight:bold; font-family:monospace;">BTC / ETH / SOL</span>
+                <span style="padding:3px 10px; border-radius:6px; background:#120d24; color:#94a3b8; border:1px solid rgba(168,85,247,0.2); font-size:11px; font-family:monospace;">1h (Macro) + 5m (Entry)</span>
+              </div>
+              <p style="font-size:12px; color:#cbd5e1; margin-top:8px; line-height:1.5; max-width:850px;">
+                Smart Money Concepts: 1H Golden Zone (0.618-0.786) retracement + 5m Fair Value Gap sweep with 60/40 institutional profit lock (TP1 60% profit book + SL to green lock, TP2 40% trend runner).
+              </p>
+            </div>
+
+            <!-- Capital Limit & Customize Button -->
+            <div style="background:#090714; border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:14px 20px; text-align:right; min-width:210px;">
+              <div style="font-size:10px; text-transform:uppercase; color:#94a3b8; font-weight:bold; letter-spacing:0.04em;">Allocated Capital Cap</div>
+              <div style="font-size:22px; font-weight:900; color:#ffffff; font-family:monospace; margin-top:2px;">
+                ₹50,000 <span style="font-size:11px; font-weight:normal; color:#c084fc;">($600.00)</span>
+              </div>
+              <button onclick="promptCustomizeCapital('strat_smc_institutional', 50000.0)" style="margin-top:8px; width:100%; padding:6px 12px; font-size:11px; font-weight:bold; border-radius:6px; background:#18112d; border:1px solid rgba(168,85,247,0.4); color:#e879f9; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(217,70,239,0.2)';" onmouseout="this.style.background='#18112d';">
+                ✏️ Customize Capital
+              </button>
+            </div>
+          </div>
+
+          <!-- Strategy Key Parameters & Targets Grid -->
+          <div style="margin-top:20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; background:#07050e; padding:16px; border-radius:10px; border:1px solid rgba(168,85,247,0.12); text-align:center;">
+            <div>
+              <div style="font-size:10px; color:#64748b; text-transform:uppercase;">TP1 (60% Profit Lock)</div>
+              <div style="font-size:16px; font-weight:bold; color:#34d399; font-family:monospace; margin-top:2px;">+1.5%</div>
+              <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Nearest Liquidity</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:#64748b; text-transform:uppercase;">TP2 (40% Runner)</div>
+              <div style="font-size:16px; font-weight:bold; color:#c084fc; font-family:monospace; margin-top:2px;">+3.2%</div>
+              <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Major Swing Sweep</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:#64748b; text-transform:uppercase;">Stop Loss</div>
+              <div style="font-size:16px; font-weight:bold; color:#f87171; font-family:monospace; margin-top:2px;">-0.8%</div>
+              <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Invalidation Level</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:#64748b; text-transform:uppercase;">Fib Golden Zone</div>
+              <div style="font-size:16px; font-weight:bold; color:#fbbf24; font-family:monospace; margin-top:2px;">0.618 - 0.786</div>
+              <div style="font-size:10px; color:#94a3b8; margin-top:2px;">1H Retracement</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:#64748b; text-transform:uppercase;">Confluence Threshold</div>
+              <div style="font-size:16px; font-weight:bold; color:#38bdf8; font-family:monospace; margin-top:2px;">75/100</div>
+              <div style="font-size:10px; color:#94a3b8; margin-top:2px;">High-Probability Entry</div>
+            </div>
+          </div>
+
+          <!-- Strategy Performance Metrics Bar -->
+          <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px 16px; background:#0b0816; border-radius:8px; border:1px solid rgba(168,85,247,0.1); font-size:11px; font-family:monospace;">
+            <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+              <span style="color:#94a3b8;">Win Rate: <strong style="color:#ffffff;">53.3%</strong></span>
+              <span style="color:#94a3b8;">Trades Executed: <strong style="color:#ffffff;">15</strong> (8W / 7L)</span>
+              <span style="color:#94a3b8;">Simulated P&L: <strong style="color:#f87171;">-$0.65</strong></span>
+              <span style="color:#94a3b8;">Profit Factor: <strong style="color:#c084fc;">1.15x</strong></span>
+            </div>
+            <button onclick="switchStrategySubTab('lab')" style="padding:6px 14px; border-radius:6px; background:#1b1430; border:1px solid rgba(168,85,247,0.3); color:#cbd5e1; cursor:pointer; font-size:11px;">
+              ⚙️ Tune Parameters in Lab →
+            </button>
+          </div>
+        </div>
+
+        <!-- Strategy Expansion Pipeline Placeholder Card -->
+        <div class="nexora-card" style="padding:22px; border-style:dashed; border-color:rgba(168,85,247,0.25); background:rgba(7,5,14,0.6); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="width:42px; height:42px; border-radius:10px; background:#110d22; border:1px dashed rgba(168,85,247,0.4); display:flex; align-items:center; justify-content:center; font-size:20px;">
+              🚀
+            </div>
+            <div>
+              <div style="font-size:14px; font-weight:bold; color:#ffffff;">Algorithmic Strategy Pipeline</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:2px;">Currently running 1 institutional strategy (SMC 60/40 Engine). Additional custom quantitative strategies coded in Antigravity will appear here for 1-click subscription.</div>
+            </div>
+          </div>
+          <button onclick="switchStrategySubTab('lab')" style="padding:8px 16px; font-size:11px; font-weight:bold; border-radius:8px; background:#161026; color:#d8b4fe; border:1px solid rgba(168,85,247,0.3); cursor:pointer;">
+            🧪 Open Strategy Lab
+          </button>
+        </div>
+
+      </div> <!-- END SUB-SECTION 1: SUBSCRIBED STRATEGY -->
+
+      <!-- ============================================== -->
+      <!-- SUB-SECTION 2: STRATEGY LAB (PARAMETERS TUNING) -->
+      <!-- ============================================== -->
+      <div id="strat-sub-section-lab" style="display:none;">
+
+        <!-- Strategy Lab Parameter Tuning Card -->
+        <div class="nexora-card" style="padding:28px; margin-bottom:24px; border-color:rgba(217,70,239,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.14); padding-bottom:14px;">
+            <div>
+              <h3 style="font-size:18px; font-weight:900; color:#ffffff; display:flex; align-items:center; gap:8px;">
+                <span>🧪</span> Strategy Parameter Calibration Lab
+              </h3>
+              <p style="font-size:11px; color:#94a3b8; margin-top:3px;">
+                Fine-tune targets, risk parameters, and execution rules for the active institutional strategy coded in Antigravity.
+              </p>
+            </div>
+            <span style="font-size:10px; font-weight:bold; color:#d946ef; background:rgba(217,70,239,0.15); border:1px solid rgba(217,70,239,0.3); padding:4px 10px; border-radius:6px;">LIVE PARAMETER TUNER</span>
+          </div>
+
+          <!-- Strategy Selection Bar -->
+          <div style="margin-top:18px; background:#07050e; padding:12px 16px; border-radius:8px; border:1px solid rgba(168,85,247,0.15); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:11px; color:#94a3b8; font-weight:bold; text-transform:uppercase;">Configuring Strategy:</span>
+              <span style="font-size:13px; font-weight:bold; color:#ffffff;">Institutional SMC 60/40 Engine</span>
+              <span style="font-size:10px; font-family:monospace; padding:2px 8px; border-radius:4px; background:rgba(168,85,247,0.15); color:#d8b4fe;">BTC / ETH / SOL</span>
+            </div>
+            <div style="font-size:11px; color:#34d399; font-family:monospace;">
+              Single Authentic Model • ID: strat_smc_institutional
+            </div>
+          </div>
+
+          <!-- Parameter Fields Form Grid -->
+          <div style="margin-top:18px; display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">Capital Limit (₹ INR)</label>
+              <input id="lab-strat-cap" type="number" value="50000" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">Max margin available for this strategy.</span>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">Execution Timeframe</label>
+              <select id="lab-strat-tf" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;">
+                <option value="1h (Macro) + 5m (Entry)" selected>1h (Macro) + 5m (Entry) [Default]</option>
+                <option value="4h (Macro) + 15m (Entry)">4h (Macro) + 15m (Entry)</option>
+                <option value="15m (Macro) + 1m (Entry)">15m (Macro) + 1m (Entry - Scalping)</option>
+              </select>
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">Macro trend filter + micro entry sweep.</span>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">TP1 Target (% Gain)</label>
+              <input id="lab-strat-tp1" type="number" step="0.1" value="1.5" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">60% position booked at nearest liquidity.</span>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">TP2 Target (% Gain)</label>
+              <input id="lab-strat-tp2" type="number" step="0.1" value="3.2" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">40% runner to major swing target.</span>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">Stop Loss (% Loss)</label>
+              <input id="lab-strat-sl" type="number" step="0.1" value="0.8" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">Invalidation level below liquidity sweep.</span>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">Confluence Threshold (0-100)</label>
+              <input id="lab-strat-conf" type="number" min="50" max="100" value="75" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">Minimum score required to trigger entry.</span>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:10px; font-weight:bold; color:#cbd5e1; text-transform:uppercase; margin-bottom:5px;">Fib Golden Zone Range</label>
+              <input id="lab-strat-fib" type="text" value="0.618 - 0.786" style="width:100%; padding:10px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b; margin-top:2px; display:block;">Institutional retracement sweep zone.</span>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="margin-top:24px; display:flex; gap:12px; flex-wrap:wrap;">
+            <button onclick="saveStrategyParameters('strat_smc_institutional')" class="btn-glow-purple" style="flex:1.5; padding:12px 20px; font-size:12px; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px;">
+              <span>💾</span> Save Strategy Parameters to Engine
+            </button>
+            <button onclick="runSimulation('strat_smc_institutional', this)" style="flex:1; padding:12px 20px; border-radius:8px; background:#150f29; border:1px solid rgba(168,85,247,0.35); color:#e2e8f0; font-size:12px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.2)';" onmouseout="this.style.background='#150f29';">
+              <span>▶️</span> Run Paper Simulation Test
+            </button>
+          </div>
+        </div>
+
+      </div> <!-- END SUB-SECTION 2: STRATEGY LAB -->
+
+    </div> <!-- END VIEW-STRATEGIES -->
+
+    <!-- ============================================== -->
+    <!-- VIEW-PORTFOLIO: BINANCE WALLET & ASSET ALLOCATION -->
+    <!-- ============================================== -->
+    <div id="view-portfolio" style="display:none;">
+      <!-- Greeting / Summary Bar -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h1 style="font-size:24px; font-weight:900; color:#ffffff; letter-spacing:-0.02em;">Binance Wallet & Portfolio 💼</h1>
+          <p style="font-size:12px; color:#94a3b8; margin-top:4px;">Real-time asset holdings, isolated strategy allocations, and margin utilization.</p>
+        </div>
+        <div style="text-align:right; font-size:12px; color:#64748b; font-family:monospace;">
+          Live Spot Account • Auto-synced
+        </div>
+      </div>
+
+      <!-- Portfolio Top 4 Asset Cards -->
+      <section style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:18px; margin-bottom:24px;">
+        <!-- Asset 1: USDT Free Reserve -->
+        <div class="nexora-card" style="padding:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+            <span>Free USDT Margin</span>
+            <span style="color:#34d399; font-weight:bold;">Available</span>
+          </div>
+          <div id="port-usdt-val" style="font-size:26px; font-weight:900; color:#ffffff; margin-top:8px; font-family:monospace;">
+            $9,992.78
+          </div>
+          <div id="port-usdt-sub" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px; color:#94a3b8;">
+            Ready for strategy orders
+          </div>
+        </div>
+
+        <!-- Asset 2: BTC Holdings -->
+        <div class="nexora-card" style="padding:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+            <span>Bitcoin (BTC)</span>
+            <span style="color:#fbbf24; font-weight:bold;">Spot Asset</span>
+          </div>
+          <div id="port-btc-val" style="font-size:26px; font-weight:900; color:#fbbf24; margin-top:8px; font-family:monospace;">
+            1.0000 BTC
+          </div>
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px; color:#94a3b8;">
+            Primary SMC Trading Pair
+          </div>
+        </div>
+
+        <!-- Asset 3: ETH Holdings -->
+        <div class="nexora-card" style="padding:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+            <span>Ethereum (ETH)</span>
+            <span style="color:#c084fc; font-weight:bold;">Spot Asset</span>
+          </div>
+          <div id="port-eth-val" style="font-size:26px; font-weight:900; color:#c084fc; margin-top:8px; font-family:monospace;">
+            1.0000 ETH
+          </div>
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px; color:#94a3b8;">
+            Secondary Multi-Symbol Pair
+          </div>
+        </div>
+
+        <!-- Asset 4: Strategy Allocation Status -->
+        <div class="nexora-card" style="padding:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+            <span>Total Isolated Margin</span>
+            <span style="color:#d946ef;">🛡️ Protected</span>
+          </div>
+          <div id="port-margin-val" style="font-size:26px; font-weight:900; color:#e879f9; margin-top:8px; font-family:monospace;">
+            ₹50,000
+          </div>
+          <div id="port-margin-sub" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(168,85,247,0.12); font-size:11px; color:#94a3b8;">
+            Across 1 Subscribed Strategies
+          </div>
+        </div>
+      </section>
+
+      <!-- Capital Isolation Table & Account Safety Details -->
+      <section style="display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-bottom:24px;">
+        <div class="nexora-card" style="padding:24px;">
+          <div style="font-size:16px; font-weight:bold; color:#ffffff; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:12px;">
+            Strategy Budget & Margin Isolation Table
+          </div>
+          <div style="overflow-x:auto; margin-top:14px;">
+            <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
+              <thead>
+                <tr style="border-bottom:1px solid rgba(168,85,247,0.15); font-size:10px; text-transform:uppercase; color:#64748b;">
+                  <th style="padding:10px 8px;">Strategy</th>
+                  <th style="padding:10px 8px;">Max Budget Cap</th>
+                  <th style="padding:10px 8px;">Active Margin Used</th>
+                  <th style="padding:10px 8px;">Available Margin</th>
+                  <th style="padding:10px 8px; text-align:right;">Status</th>
+                </tr>
+              </thead>
+              <tbody style="color:#cbd5e1;">
+                
+        <tr style="border-bottom:1px solid rgba(168,85,247,0.08);">
+          <td style="padding:12px 8px; font-weight:bold; color:#ffffff;">
+            Institutional SMC 60/40 Engine <span style="font-size:10px; color:#c084fc; font-family:monospace;">(BTC / ETH / SOL)</span>
+          </td>
+          <td style="padding:12px 8px; font-family:monospace; color:#d8b4fe;">
+            ₹50,000 <span style="font-size:10px; color:#64748b;">($600.00)</span>
+          </td>
+          <td style="padding:12px 8px; font-family:monospace; color:#34d399;">
+            $15.03
+          </td>
+          <td style="padding:12px 8px; font-family:monospace; color:#38bdf8;">
+            $584.97
+          </td>
+          <td style="padding:12px 8px; text-align:right;">
+            <span style="padding:3px 8px; border-radius:9999px; background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); font-size:10px; font-weight:bold;">Isolated</span>
+          </td>
+        </tr>
+        
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Account Health & Safety Gauges -->
+        <div class="nexora-card" style="padding:24px; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="font-size:16px; font-weight:bold; color:#ffffff; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:12px;">
+              Account Risk Controls
+            </div>
+            <div style="margin-top:16px; display:flex; flex-direction:column; gap:12px; font-size:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#07050e; padding:10px 12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+                <span style="color:#94a3b8;">Trading Leverage:</span>
+                <span style="color:#34d399; font-weight:bold; font-family:monospace;">1x Spot (Zero Liquidation)</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#07050e; padding:10px 12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+                <span style="color:#94a3b8;">Circuit Breaker Limit:</span>
+                <span style="color:#f87171; font-weight:bold; font-family:monospace;">-$20.00 Max Daily Loss</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#07050e; padding:10px 12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+                <span style="color:#94a3b8;">Active Open Margin:</span>
+                <span style="color:#d8b4fe; font-weight:bold; font-family:monospace;">$15.03 USD</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#07050e; padding:10px 12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+                <span style="color:#94a3b8;">Binance Testnet Status:</span>
+                <span style="color:#34d399; font-weight:bold; font-family:monospace;">Connected & Synced</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:16px; font-size:11px; color:#64748b; text-align:center;">
+            Capital isolation prevents any single strategy from consuming full account balance.
+          </div>
+        </div>
+      </section>
+    </div> <!-- END VIEW-PORTFOLIO -->
+
+    <!-- ============================================== -->
+    <!-- VIEW-SETTINGS: SYSTEM ENGINE & RISK SETTINGS   -->
+    <!-- ============================================== -->
+    <div id="view-settings" style="display:none;">
+      <!-- Greeting -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h1 style="font-size:24px; font-weight:900; color:#ffffff; letter-spacing:-0.02em;">System Engine Settings ⚙️</h1>
+          <p style="font-size:12px; color:#94a3b8; margin-top:4px;">Customize risk parameters, AI brain filters, execution intervals, and safety thresholds.</p>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px; margin-bottom:24px;">
+        <!-- Risk Engine Card -->
+        <div class="nexora-card" style="padding:24px;">
+          <div style="font-size:16px; font-weight:bold; color:#ffffff; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <span>🛡️</span> Risk & Circuit Breaker Engine
+          </div>
+          <div style="margin-top:16px; display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color:#cbd5e1; margin-bottom:6px;">
+                <span>Daily Max Loss Circuit Breaker ($ USD)</span>
+                <span id="display-max-loss" style="color:#f87171; font-family:monospace;">$20.00</span>
+              </label>
+              <input id="setting-max-loss" type="number" step="5" value="20" style="width:100%; padding:9px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b;">If cumulative losses hit this threshold today, bot halts trading instantly.</span>
+            </div>
+
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color:#cbd5e1; margin-bottom:6px;">
+                <span>Min AI Brain Confidence (1 - 10)</span>
+                <span style="color:#c084fc; font-family:monospace;">5/10</span>
+              </label>
+              <input id="setting-min-conf" type="number" min="1" max="10" value="5" style="width:100%; padding:9px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b;">Trades below this AI conviction score are skipped.</span>
+            </div>
+
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color:#cbd5e1; margin-bottom:6px;">
+                <span>Max Concurrent Open Positions</span>
+                <span style="color:#34d399; font-family:monospace;">3</span>
+              </label>
+              <input id="setting-max-pos" type="number" min="1" max="10" value="3" style="width:100%; padding:9px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b;">Maximum simultaneous trades allowed across BTC, ETH, and SOL.</span>
+            </div>
+
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color:#cbd5e1; margin-bottom:6px;">
+                <span>Target Trade Notional ($ USD)</span>
+                <span id="display-target-notional" style="color:#38bdf8; font-family:monospace;">$100.00</span>
+              </label>
+              <input id="setting-target-notional" type="number" step="10" min="15" max="2000" value="100" style="width:100%; padding:9px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b;">Position size in USD per trade (e.g. $100 yields ~$1.50 - $4.00 profit per trade).</span>
+            </div>
+
+            <div>
+              <label style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color:#cbd5e1; margin-bottom:6px;">
+                <span>Cooldown Duration After Loss (Seconds)</span>
+                <span style="color:#d8b4fe; font-family:monospace;">180s (3m)</span>
+              </label>
+              <input id="setting-cooldown" type="number" step="60" value="180" style="width:100%; padding:9px 12px; background:#07050e; border:1px solid rgba(168,85,247,0.25); border-radius:8px; color:#ffffff; font-size:12px; outline:none;" />
+              <span style="font-size:10px; color:#64748b;">Protects against emotional revenge trading and volatile chop.</span>
+            </div>
+
+            <button onclick="saveEngineSettings()" class="btn-glow-purple" style="padding:10px; font-size:12px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+              <span>💾</span> Save Risk Parameters
+            </button>
+          </div>
+        </div>
+
+        <!-- Engine Connectivity & API Status Card -->
+        <div class="nexora-card" style="padding:24px;">
+          <div style="font-size:16px; font-weight:bold; color:#ffffff; border-bottom:1px solid rgba(168,85,247,0.12); padding-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <span>⚡</span> API & Infrastructure Connectivity
+          </div>
+
+          <div style="margin-top:16px; display:flex; flex-direction:column; gap:14px; font-size:12px;">
+            <div style="background:#07050e; padding:12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+              <div style="font-weight:bold; color:#ffffff;">Binance API Testnet</div>
+              <div style="font-size:11px; color:#34d399; margin-top:2px;">🟢 Connected & Synced</div>
+              <div style="font-size:10px; color:#64748b; font-family:monospace; margin-top:4px;">Endpoint: testnet.binance.vision</div>
+            </div>
+
+            <div style="background:#07050e; padding:12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+              <div style="font-weight:bold; color:#ffffff;">Groq Cloud LLM Brain</div>
+              <div style="font-size:11px; color:#c084fc; margin-top:2px;">🧠 Active (Llama 3.3 70B Versatile)</div>
+              <div style="font-size:10px; color:#64748b; font-family:monospace; margin-top:4px;">Role: Market Structure & SMC Liquidity Evaluator</div>
+            </div>
+
+            <div style="background:#07050e; padding:12px; border-radius:8px; border:1px solid rgba(168,85,247,0.12);">
+              <div style="font-weight:bold; color:#ffffff;">HTTP Web Dashboard Server</div>
+              <div style="font-size:11px; color:#34d399; margin-top:2px;">🟢 Running on Port 10000</div>
+              <div style="font-size:10px; color:#64748b; font-family:monospace; margin-top:4px;">Auto-refresh interval: 25 seconds</div>
+            </div>
+
+            <div style="margin-top:6px; display:flex; gap:10px;">
+              <button onclick="syncLedgerFromBinance()" style="flex:1; padding:9px 12px; font-size:11px; font-weight:bold; border-radius:8px; background:#161026; color:#e2e8f0; border:1px solid rgba(168,85,247,0.3); cursor:pointer;">
+                🔄 Sync Binance Ledger
+              </button>
+              <button onclick="triggerKillSwitch()" style="flex:1; padding:9px 12px; font-size:11px; font-weight:bold; border-radius:8px; background:linear-gradient(135deg, #ef4444, #b91c1c); color:#ffffff; border:none; cursor:pointer;">
+                🛑 Emergency Kill Switch
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div> <!-- END VIEW-SETTINGS -->
+
+  </main>
+
+  <script>
+
+let currentMode = 'main';
+
+function toggleSwitch(el) {
+  el.classList.toggle('active');
+}
+
+function changePnlTimeframe(tf, val, btn) {
+  const pnlDisp = document.getElementById('pnl-display-val');
+  if (pnlDisp) {
+    pnlDisp.innerHTML = val + ' <span style="font-size:12px; color:#94a3b8; font-weight:normal;">Realized Profit (' + tf.toUpperCase() + ')</span>';
+  }
+  const buttons = btn.parentElement.querySelectorAll('button');
+  buttons.forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = '#94a3b8';
+    b.style.fontWeight = 'normal';
+    b.style.boxShadow = 'none';
+  });
+  btn.style.background = 'linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%)';
+  btn.style.color = '#ffffff';
+  btn.style.fontWeight = 'bold';
+  btn.style.boxShadow = '0 0 12px rgba(217, 70, 239, 0.5)';
+}
+
+let currentNavTab = 'dashboard';
+
+function switchNavTab(tabName) {
+  currentNavTab = tabName;
+  const tabs = ['dashboard', 'strategies', 'portfolio', 'settings'];
+  tabs.forEach(t => {
+    const el = document.getElementById('view-' + t);
+    const link = document.getElementById('nav-link-' + t);
+    if (el) el.style.display = (t === tabName) ? 'block' : 'none';
+    if (link) {
+      if (t === tabName) {
+        link.style.color = '#ffffff';
+        link.style.borderBottom = '2px solid #d946ef';
+        link.style.paddingBottom = '4px';
+      } else {
+        link.style.color = '#94a3b8';
+        link.style.borderBottom = 'none';
+        link.style.paddingBottom = '0px';
+      }
+    }
+  });
+  window.location.hash = tabName;
+}
+
+let _testnetCache = null;
+function cacheTestnetData() {
+  if (_testnetCache) return;
+  const tbody = document.getElementById('trade-history-tbody');
+  const pnlVal = document.getElementById('card-pnl-val');
+  const pnlFooter = document.getElementById('card-pnl-footer');
+  const capVal = document.getElementById('card-cap-val');
+  const capFooter = document.getElementById('card-cap-footer');
+  const wrVal = document.getElementById('card-wr-val');
+  const wrSub = document.getElementById('card-wr-sub');
+  const wrSvg = document.getElementById('card-wr-svg-circle');
+  const wrBadge = document.getElementById('card-wr-pct-badge');
+  const balVal = document.getElementById('card-balance-val');
+  const balFooter = document.getElementById('card-balance-footer');
+  const pnlDisplayVal = document.getElementById('pnl-display-val');
+  const historySubtitle = document.getElementById('history-subtitle');
+  const historyPills = document.getElementById('history-pills');
+  const consoleSubtitle = document.getElementById('console-subtitle');
+  const portUsdtVal = document.getElementById('port-usdt-val');
+  const portUsdtSub = document.getElementById('port-usdt-sub');
+  const portBtcVal = document.getElementById('port-btc-val');
+  const portEthVal = document.getElementById('port-eth-val');
+  const portMarginVal = document.getElementById('port-margin-val');
+  const portMarginSub = document.getElementById('port-margin-sub');
+
+  _testnetCache = {
+    tbody: tbody ? tbody.innerHTML : '',
+    pnlVal: pnlVal ? pnlVal.innerHTML : '',
+    pnlFooter: pnlFooter ? pnlFooter.innerHTML : '',
+    capVal: capVal ? capVal.innerHTML : '',
+    capFooter: capFooter ? capFooter.innerHTML : '',
+    wrVal: wrVal ? wrVal.innerHTML : '',
+    wrSub: wrSub ? wrSub.innerHTML : '',
+    wrDash: wrSvg ? wrSvg.getAttribute('stroke-dasharray') : '47, 88',
+    wrBadge: wrBadge ? wrBadge.innerHTML : '',
+    balVal: balVal ? balVal.innerHTML : '',
+    balFooter: balFooter ? balFooter.innerHTML : '',
+    pnlDisplayVal: pnlDisplayVal ? pnlDisplayVal.innerHTML : '',
+    historySubtitle: historySubtitle ? historySubtitle.innerHTML : '',
+    historyPills: historyPills ? historyPills.innerHTML : '',
+    consoleSubtitle: consoleSubtitle ? consoleSubtitle.innerHTML : '',
+    portUsdtVal: portUsdtVal ? portUsdtVal.innerHTML : '',
+    portUsdtSub: portUsdtSub ? portUsdtSub.innerHTML : '',
+    portBtcVal: portBtcVal ? portBtcVal.innerHTML : '',
+    portEthVal: portEthVal ? portEthVal.innerHTML : '',
+    portMarginVal: portMarginVal ? portMarginVal.innerHTML : '',
+    portMarginSub: portMarginSub ? portMarginSub.innerHTML : ''
+  };
+}
+
+function applyConsoleModeTheme(mode) {
+  currentMode = mode;
+  try { localStorage.setItem('nexora_mode', mode); } catch(e){}
+  cacheTestnetData();
+  
+  const mainBtn = document.getElementById('mode-main-btn');
+  const testBtn = document.getElementById('mode-test-btn');
+  const envBanner = document.getElementById('env-banner');
+  const engineText = document.getElementById('engine-status-text');
+  const engineDot = document.getElementById('engine-status-dot');
+  const balLabel = document.getElementById('card-balance-label');
+  const balVal = document.getElementById('card-balance-val');
+  const balFooter = document.getElementById('card-balance-footer');
+  const pnlLabel = document.getElementById('card-pnl-label');
+  const pnlVal = document.getElementById('card-pnl-val');
+  const pnlFooter = document.getElementById('card-pnl-footer');
+  const capLabel = document.getElementById('card-cap-label');
+  const capVal = document.getElementById('card-cap-val');
+  const capFooter = document.getElementById('card-cap-footer');
+  const wrVal = document.getElementById('card-wr-val');
+  const wrSub = document.getElementById('card-wr-sub');
+  const wrSvg = document.getElementById('card-wr-svg-circle');
+  const wrBadge = document.getElementById('card-wr-pct-badge');
+  const pnlDisplayVal = document.getElementById('pnl-display-val');
+  const historySubtitle = document.getElementById('history-subtitle');
+  const historyPills = document.getElementById('history-pills');
+  const tbody = document.getElementById('trade-history-tbody');
+  const consoleSubtitle = document.getElementById('console-subtitle');
+  const portUsdtVal = document.getElementById('port-usdt-val');
+  const portUsdtSub = document.getElementById('port-usdt-sub');
+  const portBtcVal = document.getElementById('port-btc-val');
+  const portEthVal = document.getElementById('port-eth-val');
+  const portMarginVal = document.getElementById('port-margin-val');
+  const portMarginSub = document.getElementById('port-margin-sub');
+
+  const sliderThumb = document.getElementById('mode-slider-thumb');
+  if (sliderThumb) {
+    sliderThumb.className = mode === 'main' ? 'mode-slider-thumb mode-main-pos' : 'mode-slider-thumb mode-test-pos';
+  }
+  if (mainBtn && testBtn) {
+    if (mode === 'main') {
+      mainBtn.className = 'mode-switch-btn active-main';
+      testBtn.className = 'mode-switch-btn inactive';
+    } else {
+      testBtn.className = 'mode-switch-btn active-test';
+      mainBtn.className = 'mode-switch-btn inactive';
+    }
+  }
+
+  if (mode === 'main') {
+    // MAIN Mode: Vibrant Emerald Green Branding
+    if (envBanner) {
+      envBanner.style.background = 'rgba(16, 185, 129, 0.1)';
+      envBanner.style.borderBottom = '1px solid rgba(16, 185, 129, 0.3)';
+      envBanner.style.color = '#34d399';
+      envBanner.innerHTML = '<div style="display:flex; align-items:center; gap:8px;"><span style="font-size:14px;">🟢</span><span><strong>BINANCE MAINNET (REAL ACCOUNT CONSOLE)</strong> — Live Binance Real Trading Environment</span></div><div style="display:flex; align-items:center; gap:12px;"><span style="color:#fbbf24; font-weight:bold;">⚠️ Real Binance API Keys Not Connected • Standby Mode</span></div>';
+    }
+    if (engineText) {
+      engineText.innerText = 'MAINNET SPOT (Standby)';
+      engineText.style.color = '#34d399';
+    }
+    if (engineDot) {
+      engineDot.style.background = '#34d399';
+      engineDot.style.boxShadow = '0 0 8px #34d399';
+    }
+    if (consoleSubtitle) {
+      consoleSubtitle.innerText = 'Binance Mainnet Real Account Mode (Standby). Live orders will execute on real Binance once live API keys are configured in .env.';
+    }
+
+    // MAIN MODE DATA (Show zero/standby because Real API keys are not connected yet)
+    if (pnlLabel) pnlLabel.innerText = 'Real Binance P&L';
+    if (pnlVal) { pnlVal.innerText = '$0.00'; pnlVal.style.color = '#94a3b8'; }
+    if (pnlFooter) pnlFooter.innerHTML = '<span style="color:#64748b; font-weight:bold;">0 Real Trades</span><span style="color:#64748b;">Standby Mode</span>';
+
+    if (capLabel) capLabel.innerText = 'Real Allocated Capital';
+    if (capVal) capVal.innerHTML = '₹0 <span style="font-size:12px; font-weight:normal; color:#94a3b8;">($0.00)</span>';
+    if (capFooter) capFooter.innerHTML = '<span style="color:#64748b; font-weight:600;">Margin Used: $0.00 (0%)</span><span style="color:#fbbf24; font-weight:bold;">Real Keys Pending</span>';
+
+    if (wrVal) wrVal.innerText = '0.0%';
+    if (wrSub) wrSub.innerHTML = '<span style="color:#64748b;">0 Streak • 0 Real Trades</span>';
+    if (wrSvg) wrSvg.setAttribute('stroke-dasharray', '0, 88');
+    if (wrBadge) wrBadge.innerText = '0%';
+
+    if (balLabel) balLabel.innerText = 'Binance Mainnet Balance';
+    if (balVal) balVal.innerHTML = '$0.00 <span style="font-size:13px; font-weight:normal; color:#34d399;">USDT</span>';
+    if (balFooter) balFooter.innerHTML = '<span style="color:#94a3b8;">Real API Keys Pending • 0.00 BTC • 0.00 ETH</span><span style="color:#34d399; font-weight:bold;">🟢 Mainnet Standby</span>';
+
+    if (pnlDisplayVal) pnlDisplayVal.innerHTML = '$0.00 <span style="font-size:12px; color:#94a3b8; font-weight:normal;">Realized Profit (0 Real Trades)</span>';
+
+    if (historySubtitle) historySubtitle.innerText = 'Audited against Binance Mainnet Spot Orders (0 Real Trades Executed)';
+    if (historyPills) historyPills.innerHTML = '<span style="padding:4px 10px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.25); border-radius:6px; color:#34d399;">Win Rate: 0.0% (0 Real Trades)</span><span style="padding:4px 10px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.25); border-radius:6px; color:#34d399; font-weight:bold;">Real Realized: $0.00</span>';
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:36px 20px; color:#94a3b8; background:rgba(16,185,129,0.03);"><div style="font-size:26px; margin-bottom:8px;">🟢</div><div style="font-size:15px; font-weight:bold; color:#ffffff;">No Real Binance Mainnet Trades Yet</div><div style="font-size:12px; color:#94a3b8; margin-top:6px; max-width:620px; margin-left:auto; margin-right:auto; line-height:1.5;">Real Binance API keys are currently not connected in .env. All existing 15 trades belong to <strong style="color:#fbbf24;">Binance Spot Testnet (Paper Sandbox)</strong>.<br>Switch back to <strong style="color:#fbbf24;">TEST</strong> mode above to view Testnet execution history and live paper analytics.</div></td></tr>';
+    }
+
+    if (portUsdtVal) portUsdtVal.innerText = '$0.00';
+    if (portUsdtSub) portUsdtSub.innerText = 'Real API Keys Pending • Standby';
+    if (portBtcVal) portBtcVal.innerText = '0.0000 BTC';
+    if (portEthVal) portEthVal.innerText = '0.0000 ETH';
+    if (portMarginVal) portMarginVal.innerText = '₹0';
+    if (portMarginSub) portMarginSub.innerText = 'Real Account Standby';
+
+  } else {
+    // TEST Mode: Binance Spot Testnet (Paper Sandbox) - Amber/Gold Branding
+    if (envBanner) {
+      envBanner.style.background = 'rgba(251, 191, 36, 0.1)';
+      envBanner.style.borderBottom = '1px solid rgba(251, 191, 36, 0.25)';
+      envBanner.style.color = '#fbbf24';
+      envBanner.innerHTML = '<div style="display:flex; align-items:center; gap:8px;"><span style="font-size:14px;">🟡</span><span><strong>BINANCE SPOT TESTNET (PAPER TRADING ACTIVE)</strong> — Virtual Zero-Risk Sandbox • Orders execute on Binance Spot Testnet</span></div><div style="display:flex; align-items:center; gap:12px;"><span style="color:#d8b4fe;">Simulated Live Feed</span><span style="color:#34d399; font-weight:bold;">$9,992.78 USDT Testnet Balance</span></div>';
+    }
+    if (engineText) {
+      engineText.innerText = 'TESTNET SPOT';
+      engineText.style.color = '#fbbf24';
+    }
+    if (engineDot) {
+      engineDot.style.background = '#fbbf24';
+      engineDot.style.boxShadow = '0 0 8px #fbbf24';
+    }
+
+    // RESTORE TESTNET DATA FROM CACHE
+    if (_testnetCache) {
+      if (consoleSubtitle) consoleSubtitle.innerHTML = _testnetCache.consoleSubtitle;
+      if (pnlLabel) pnlLabel.innerText = 'Total Realized P&L';
+      if (pnlVal) pnlVal.innerHTML = _testnetCache.pnlVal;
+      if (pnlFooter) pnlFooter.innerHTML = _testnetCache.pnlFooter;
+      if (capLabel) capLabel.innerText = 'Allocated Capital (Subscribed)';
+      if (capVal) capVal.innerHTML = _testnetCache.capVal;
+      if (capFooter) capFooter.innerHTML = _testnetCache.capFooter;
+      if (wrVal) wrVal.innerHTML = _testnetCache.wrVal;
+      if (wrSub) wrSub.innerHTML = _testnetCache.wrSub;
+      if (wrSvg) wrSvg.setAttribute('stroke-dasharray', _testnetCache.wrDash);
+      if (wrBadge) wrBadge.innerHTML = _testnetCache.wrBadge;
+      if (balLabel) balLabel.innerText = 'Binance Testnet Balance';
+      if (balVal) balVal.innerHTML = _testnetCache.balVal;
+      if (balFooter) balFooter.innerHTML = _testnetCache.balFooter;
+      if (pnlDisplayVal) pnlDisplayVal.innerHTML = _testnetCache.pnlDisplayVal;
+      if (historySubtitle) historySubtitle.innerHTML = _testnetCache.historySubtitle;
+      if (historyPills) historyPills.innerHTML = _testnetCache.historyPills;
+      if (tbody) tbody.innerHTML = _testnetCache.tbody;
+      if (portUsdtVal && _testnetCache.portUsdtVal) portUsdtVal.innerHTML = _testnetCache.portUsdtVal;
+      if (portUsdtSub && _testnetCache.portUsdtSub) portUsdtSub.innerHTML = _testnetCache.portUsdtSub;
+      if (portBtcVal && _testnetCache.portBtcVal) portBtcVal.innerHTML = _testnetCache.portBtcVal;
+      if (portEthVal && _testnetCache.portEthVal) portEthVal.innerHTML = _testnetCache.portEthVal;
+      if (portMarginVal && _testnetCache.portMarginVal) portMarginVal.innerHTML = _testnetCache.portMarginVal;
+      if (portMarginSub && _testnetCache.portMarginSub) portMarginSub.innerHTML = _testnetCache.portMarginSub;
+    }
+  }
+}
+
+function showGlassToast(msg, icon) {
+  let toast = document.getElementById('nexora-glass-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'nexora-glass-toast';
+    toast.className = 'glass-toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = '<span style="font-size:16px;">' + (icon || '🟢') + '</span> <span>' + msg + '</span>';
+  toast.classList.add('show');
+  clearTimeout(window._toastTimeout);
+  window._toastTimeout = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3500);
+}
+
+function switchConsoleMode(mode) {
+  const currentMode = localStorage.getItem('nexora_mode') || 'test';
+  if (currentMode === mode) return;
+
+  const dashboardView = document.getElementById('view-dashboard');
+  const envBanner = document.getElementById('env-banner');
+
+  // Trigger smooth crossfade out
+  if (dashboardView) dashboardView.classList.add('mode-fade-out');
+  if (envBanner) envBanner.classList.add('mode-fade-out');
+
+  // Slide slider thumb immediately with spring physics
+  const sliderThumb = document.getElementById('mode-slider-thumb');
+  const testBtn = document.getElementById('mode-test-btn');
+  const mainBtn = document.getElementById('mode-main-btn');
+
+  if (sliderThumb) {
+    sliderThumb.className = mode === 'main' ? 'mode-slider-thumb mode-main-pos' : 'mode-slider-thumb mode-test-pos';
+  }
+  if (mode === 'main') {
+    if (testBtn) testBtn.className = 'mode-switch-btn inactive';
+    if (mainBtn) mainBtn.className = 'mode-switch-btn active-main';
+    showGlassToast('Switched to Binance Mainnet Console (Standby Mode • Live API Keys Pending)', '🟢');
+  } else {
+    if (testBtn) testBtn.className = 'mode-switch-btn active-test';
+    if (mainBtn) mainBtn.className = 'mode-switch-btn inactive';
+    showGlassToast('Switched to Binance Spot Testnet (Paper Trading Active)', '🟡');
+  }
+
+  // Crossfade content smoothly after 180ms
+  setTimeout(() => {
+    applyConsoleModeTheme(mode);
+    if (dashboardView) dashboardView.classList.remove('mode-fade-out');
+    if (envBanner) envBanner.classList.remove('mode-fade-out');
+  }, 180);
+}
+
+function switchStrategySubTab(subTab) {
+  const subSectionSubscribed = document.getElementById('strat-sub-section-subscribed');
+  const subSectionLab = document.getElementById('strat-sub-section-lab');
+  const tabBtnSubscribed = document.getElementById('tab-btn-subscribed');
+  const tabBtnLab = document.getElementById('tab-btn-lab');
+
+  if (subTab === 'lab') {
+    if (subSectionSubscribed) subSectionSubscribed.style.display = 'none';
+    if (subSectionLab) subSectionLab.style.display = 'block';
+    if (tabBtnLab) {
+      tabBtnLab.style.background = 'linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%)';
+      tabBtnLab.style.color = '#ffffff';
+    }
+    if (tabBtnSubscribed) {
+      tabBtnSubscribed.style.background = 'transparent';
+      tabBtnSubscribed.style.color = '#94a3b8';
+    }
+  } else {
+    if (subSectionSubscribed) subSectionSubscribed.style.display = 'block';
+    if (subSectionLab) subSectionLab.style.display = 'none';
+    if (tabBtnSubscribed) {
+      tabBtnSubscribed.style.background = 'linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%)';
+      tabBtnSubscribed.style.color = '#ffffff';
+    }
+    if (tabBtnLab) {
+      tabBtnLab.style.background = 'transparent';
+      tabBtnLab.style.color = '#94a3b8';
+    }
+  }
+}
+
+function promptCustomizeCapital(stratId, currentCap) {
+  const newCap = prompt("✏️ Enter custom capital limit (₹ INR) for this strategy:", currentCap);
+  if (!newCap || isNaN(newCap) || parseFloat(newCap) <= 0) return;
+  
+  fetch('/api/strategies/update_params?id=' + encodeURIComponent(stratId) + '&cap=' + encodeURIComponent(newCap))
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ Strategy capital updated to ₹' + parseInt(newCap).toLocaleString('en-IN') + ' ($' + (parseFloat(newCap)/83.5).toFixed(2) + ' USD)!');
+        window.location.reload();
+      } else {
+        alert('❌ Error updating capital: ' + data.message);
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function saveStrategyParameters(stratId) {
+  const cap = document.getElementById('lab-strat-cap') ? document.getElementById('lab-strat-cap').value : 10000;
+  const tp1 = document.getElementById('lab-strat-tp1') ? document.getElementById('lab-strat-tp1').value : 1.5;
+  const tp2 = document.getElementById('lab-strat-tp2') ? document.getElementById('lab-strat-tp2').value : 3.2;
+  const sl = document.getElementById('lab-strat-sl') ? document.getElementById('lab-strat-sl').value : 0.8;
+  const tf = document.getElementById('lab-strat-tf') ? document.getElementById('lab-strat-tf').value : '1h + 5m';
+  const conf = document.getElementById('lab-strat-conf') ? document.getElementById('lab-strat-conf').value : 75;
+  const fib = document.getElementById('lab-strat-fib') ? document.getElementById('lab-strat-fib').value : '0.618 - 0.786';
+
+  const url = '/api/strategies/update_params?id=' + encodeURIComponent(stratId) +
+    '&cap=' + encodeURIComponent(cap) +
+    '&tp1=' + encodeURIComponent(tp1) +
+    '&tp2=' + encodeURIComponent(tp2) +
+    '&sl=' + encodeURIComponent(sl) +
+    '&timeframe=' + encodeURIComponent(tf) +
+    '&confluence=' + encodeURIComponent(conf) +
+    '&fib=' + encodeURIComponent(fib);
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ Institutional SMC Strategy parameters saved successfully! Live bot will execute with these updated targets.');
+        window.location.reload();
+      } else {
+        alert('❌ Error saving parameters: ' + data.message);
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function handleDeployAction() {
+  switchNavTab('strategies');
+  switchStrategySubTab('subscribed');
+}
+
+function saveEngineSettings() {
+  const maxLoss = document.getElementById('setting-max-loss').value;
+  const minConf = document.getElementById('setting-min-conf').value;
+  const maxPos = document.getElementById('setting-max-pos').value;
+  const cooldown = document.getElementById('setting-cooldown').value;
+  const targetNotional = document.getElementById('setting-target-notional') ? document.getElementById('setting-target-notional').value : '100';
+
+  const url = '/api/settings/update?max_loss=' + encodeURIComponent(maxLoss) +
+    '&min_conf=' + encodeURIComponent(minConf) +
+    '&max_pos=' + encodeURIComponent(maxPos) +
+    '&cooldown=' + encodeURIComponent(cooldown) +
+    '&target_notional=' + encodeURIComponent(targetNotional);
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ ' + data.message);
+        window.location.reload();
+      } else {
+        alert('❌ Error: ' + (data.message || data.error));
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function syncLedgerFromBinance() {
+  fetch('/api/sync_ledger')
+    .then(r => r.json())
+    .then(data => {
+      alert(data.message || 'Ledger Synced!');
+      window.location.reload();
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function promoteToLive(stratId, stratName) {
+  if (!confirm('🚀 DEPLOY STRATEGY TO MAIN LIVE ENGINE?\n\nStrategy: ' + stratName + '\nAllocated Capital Cap: ₹10,000 ($120.00)\n\nIs strategy ko real account me activate karein?')) {
+    return;
+  }
+  fetch('/api/strategies/promote?id=' + encodeURIComponent(stratId) + '&cap=10000')
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('🎉 SUCCESS: ' + data.message);
+        window.location.reload();
+      } else {
+        alert('❌ FAILED: ' + data.message);
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function demoteToTest(stratId, stratName) {
+  if (!confirm('Return "' + stratName + '" back to Testing Lab sandbox?')) return;
+  fetch('/api/strategies/demote?id=' + encodeURIComponent(stratId))
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ ' + data.message);
+        window.location.reload();
+      } else {
+        alert('❌ Error: ' + data.message);
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function runSimulation(stratId, btn) {
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '⏳ Simulating...';
+  btn.disabled = true;
+  fetch('/api/strategies/simulate?id=' + encodeURIComponent(stratId))
+    .then(r => r.json())
+    .then(data => {
+      btn.innerHTML = oldText;
+      btn.disabled = false;
+      if (data.success) {
+        const res = data.result;
+        alert('📊 SIMULATION COMPLETED!\n\nSimulated Trades: ' + res.trades_simulated + '\nWins: ' + res.wins + ' | Losses: ' + res.losses + '\nSimulated P&L: +$' + res.sim_pnl + '\nNew Win Rate: ' + res.new_win_rate + '%');
+        window.location.reload();
+      } else {
+        alert('❌ Simulation error: ' + (data.message || 'Unknown error'));
+      }
+    })
+    .catch(err => {
+      btn.innerHTML = oldText;
+      btn.disabled = false;
+      alert('Network error during simulation: ' + err);
+    });
+}
+
+function deleteStrategy(stratId, stratName) {
+  if (!confirm('Delete experimental strategy "' + stratName + '"?')) return;
+  fetch('/api/strategies/delete?id=' + encodeURIComponent(stratId))
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('🗑️ ' + data.message);
+        window.location.reload();
+      } else {
+        alert('❌ Error: ' + data.message);
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function submitNewStrategy() {
+  const name = document.getElementById('new-strat-name').value.trim();
+  const symbol = document.getElementById('new-strat-symbol').value;
+  const tf = document.getElementById('new-strat-tf').value;
+  const cap = document.getElementById('new-strat-cap').value || 10000;
+  const tp1 = document.getElementById('new-strat-tp1').value || 1.5;
+  const tp2 = document.getElementById('new-strat-tp2').value || 3.0;
+  const sl = document.getElementById('new-strat-sl').value || 1.0;
+  const desc = document.getElementById('new-strat-desc').value.trim();
+
+  if (!name) {
+    alert('Please enter a Strategy Name.');
+    return;
+  }
+
+  const url = '/api/strategies/create?name=' + encodeURIComponent(name) +
+    '&symbol=' + encodeURIComponent(symbol) +
+    '&timeframe=' + encodeURIComponent(tf) +
+    '&capital_cap=' + encodeURIComponent(cap) +
+    '&tp1=' + encodeURIComponent(tp1) +
+    '&tp2=' + encodeURIComponent(tp2) +
+    '&sl=' + encodeURIComponent(sl) +
+    '&desc=' + encodeURIComponent(desc);
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ Strategy "' + name + '" created successfully in Testing Lab!');
+        window.location.reload();
+      } else {
+        alert('❌ Failed: ' + data.message);
+      }
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+function manualClosePosition(tradeId, symbol) {
+  if (!confirm('⚠️ CONFIRM MANUAL MARKET EXIT:\n\nAre you sure you want to close Trade #' + tradeId + ' (' + symbol + ') at current market price?')) {
+    return;
+  }
+  
+  fetch('/api/close_position?id=' + tradeId, { method: 'GET' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ SUCCESS: ' + data.message);
+        window.location.reload();
+      } else {
+        alert('❌ FAILED: ' + (data.message || data.error));
+      }
+    })
+    .catch(err => {
+      alert('Network error closing position: ' + err);
+    });
+}
+
+function triggerKillSwitch() {
+  if (!confirm('🛑 EMERGENCY KILL SWITCH:\n\nThis will:\n1. Immediately market-close ALL active positions on Binance.\n2. Halt the bot engine from taking any new trades.\n\nAre you sure you want to proceed?')) {
+    return;
+  }
+  fetch('/api/kill_switch', { method: 'GET' })
+    .then(r => r.json())
+    .then(data => {
+      alert(data.message || 'Kill Switch Triggered!');
+      window.location.reload();
+    })
+    .catch(err => alert('Network error triggering Kill Switch: ' + err));
+}
+
+function triggerResumeBot() {
+  if (!confirm('▶️ RESUME BOT TRADING:\n\nRe-enable automated market scanning and strategy execution on Binance?')) {
+    return;
+  }
+  fetch('/api/resume_bot', { method: 'GET' })
+    .then(r => r.json())
+    .then(data => {
+      alert(data.message || 'Bot Resumed!');
+      window.location.reload();
+    })
+    .catch(err => alert('Network error resuming bot: ' + err));
+}
+
+// Premium Liquid Glass Interaction (Stable Card + Real Water Optics)
+document.addEventListener('pointerdown', function(e) {
+  // STRICTLY only nexora-card where clicked
+  const card = e.target.closest('.nexora-card');
+  if (!card) return;
+
+  const rect = card.getBoundingClientRect();
+  const relX = e.clientX - rect.left;
+  const relY = e.clientY - rect.top;
+
+  // Spawn liquid water optics at exact click coordinate
+  const glint = document.createElement('span');
+  glint.className = 'water-drop-glint';
+  glint.style.left = relX + 'px';
+  glint.style.top = relY + 'px';
+
+  const caustic = document.createElement('span');
+  caustic.className = 'water-caustic-wave';
+  caustic.style.left = relX + 'px';
+  caustic.style.top = relY + 'px';
+
+  const meniscus = document.createElement('span');
+  meniscus.className = 'water-surface-meniscus';
+  meniscus.style.left = relX + 'px';
+  meniscus.style.top = relY + 'px';
+
+  card.appendChild(caustic);
+  card.appendChild(meniscus);
+  card.appendChild(glint);
+
+  setTimeout(function() {
+    glint.remove();
+    caustic.remove();
+    meniscus.remove();
+  }, 760);
+});
+
+// Cursor Spotlight Border Tracker (Linear / Vercel style localized border illumination)
+let spotlightRaf = null;
+document.addEventListener('mousemove', function(e) {
+  if (spotlightRaf) return;
+  spotlightRaf = requestAnimationFrame(function() {
+    spotlightRaf = null;
+    const cards = document.querySelectorAll('.nexora-card');
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const rect = card.getBoundingClientRect();
+      if (
+        clientX >= rect.left - 260 &&
+        clientX <= rect.right + 260 &&
+        clientY >= rect.top - 260 &&
+        clientY <= rect.bottom + 260
+      ) {
+        card.style.setProperty('--mouse-x', (clientX - rect.left) + 'px');
+        card.style.setProperty('--mouse-y', (clientY - rect.top) + 'px');
+        card.style.setProperty('--spotlight-opacity', '1');
+      } else {
+        card.style.setProperty('--spotlight-opacity', '0');
+      }
+    }
+  });
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  const savedMode = localStorage.getItem('nexora_mode') || 'test';
+  applyConsoleModeTheme(savedMode);
+  const hash = window.location.hash.replace('#', '') || 'dashboard';
+  if (['dashboard', 'strategies', 'portfolio', 'settings'].includes(hash)) {
+    switchNavTab(hash);
+  } else {
+    switchNavTab('dashboard');
+  }
+});
+
+  </script>
+</body>
+</html>

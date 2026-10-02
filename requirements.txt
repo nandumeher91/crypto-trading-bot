@@ -1,0 +1,7 @@
+python-binance
+groq
+requests
+numpy
+pandas
+python-dotenv
+delta-rest-client==1.0.14

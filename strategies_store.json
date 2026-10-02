@@ -1,0 +1,33 @@
+[
+  {
+    "id": "strat_smc_institutional",
+    "name": "Institutional SMC 60/40 Engine",
+    "symbol": "BTC / ETH / SOL",
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "timeframe": "1h (Macro) + 5m (Entry)",
+    "capital_cap_inr": 50000.0,
+    "capital_cap_usd": 600.0,
+    "tp1_pct": 1.5,
+    "tp2_pct": 3.2,
+    "sl_pct": 0.8,
+    "confluence_threshold": 75,
+    "fib_golden_zone": "0.618 - 0.786",
+    "mode": "live",
+    "status": "active",
+    "description": "Smart Money Concepts: 1H Golden Zone (0.618-0.786) retracement + 5m Fair Value Gap sweep with 60/40 institutional profit lock (TP1 60% profit book + SL to green lock, TP2 40% trend runner).",
+    "created_at": "2026-09-18 10:00:00",
+    "last_tested": "2026-09-25 12:00:00",
+    "paper_metrics": {
+      "trades_count": 15,
+      "wins": 8,
+      "losses": 7,
+      "win_rate": 53.3,
+      "simulated_pnl": -0.65,
+      "profit_factor": 1.15
+    }
+  }
+]

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: nexora-algo-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHONUTF8
+        value: "1"

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+
+# Logs
+*.log
+bot.log
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Sensitive files - DO NOT commit to GitHub
+.env
+
+# JSON data files (local state - optional)
+dhurandhar_state.json
+market_state.json
+ledger.json
+ledger_backup.json
+stats.json
+learnings.txt
+learnings_backup.txt
+
+# PyInstaller
+pyinstaller/
+
+# Windows
+Thumbs.db
