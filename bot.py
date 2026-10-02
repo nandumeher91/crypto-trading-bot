@@ -3049,6 +3049,25 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
 
+        # API: Server Public IP (for Delta Exchange whitelist)
+        if parsed.path == "/ip":
+            try:
+                import requests as _r
+                public_ip = _r.get('https://api.ipify.org', timeout=5).text.strip()
+            except Exception:
+                public_ip = "Could not detect"
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            html = f"""<!DOCTYPE html><html><body style="font-family:monospace;background:#0f172a;color:#f1f5f9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column">
+<h2 style="color:#94a3b8">&#x1F310; Server Public IP</h2>
+<div style="background:#1e293b;border:2px solid #3b82f6;border-radius:12px;padding:32px 48px;font-size:2rem;color:#38bdf8;letter-spacing:2px">{public_ip}</div>
+<p style="color:#64748b;margin-top:16px">Add this IP to Delta Exchange API Key whitelist</p>
+<p style="color:#475569;font-size:0.8rem">Delta Exchange &rarr; API Keys &rarr; NexoraBot &rarr; Edit (&#9998;) &rarr; Add this IP</p>
+</body></html>"""
+            self.wfile.write(html.encode('utf-8'))
+            return
+
         # API: Emergency Kill Switch
         if parsed.path == "/api/kill_switch":
             res = emergency_kill_switch("Triggered from Web Dashboard")
