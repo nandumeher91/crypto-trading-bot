@@ -3773,11 +3773,21 @@ def run_bot_once():
 
 def main():
     print("\n" + "=" * 60)
-    print("  ENHANCED TRADING BOT STARTING...")
+    print("  NEXORA ALGO BOT v2.0 STARTING...")
     print("=" * 60)
 
+    # ── Detect & log public IP (important for Delta Exchange API whitelist) ──
+    try:
+        import requests as _req
+        public_ip = _req.get('https://api.ipify.org', timeout=5).text.strip()
+        print(f"[MAIN] ✅ Server Public IP: {public_ip}")
+        print(f"[MAIN] ⚠️  Add this IP to Delta Exchange API Key whitelist!")
+        logger.info(f"Server Public IP: {public_ip} — Whitelist this in Delta Exchange")
+    except Exception as _e:
+        print(f"[MAIN] Could not detect public IP: {_e}")
+
     logger.info("=" * 50)
-    logger.info("ENHANCED TRADING BOT STARTED")
+    logger.info("NEXORA ALGO BOT v2.0 STARTED")
     logger.info(f"Symbols: {', '.join(SYMBOLS)} | Check: {CHECK_INTERVAL_SECONDS}s | Min Confidence: {MIN_CONFIDENCE}")
     logger.info(f"Target Notional: ${TARGET_NOTIONAL_USD} | TP1: 60% Book | TP2: 40% Runner | SL: Structure")
     logger.info("=" * 50)
@@ -3789,17 +3799,9 @@ def main():
         return
 
     print(f"[MAIN] API OK. Starting main loop (every {CHECK_INTERVAL_SECONDS}s)...")
-    print("[MAIN] Press Ctrl+C to stop\n")
 
-    # Automatically launch Nexora Console in default web browser
-    try:
-        import webbrowser
-        dash_port = int(os.environ.get("PORT", 10000))
-        dash_url = f"http://localhost:{dash_port}"
-        print(f"[MAIN] 🚀 Opening Nexora Trading Console at {dash_url}...")
-        webbrowser.open(dash_url)
-    except Exception as e:
-        print(f"[MAIN] Notice: Open {dash_url} manually in your browser.")
+    dash_port = int(os.environ.get("PORT", 10000))
+    print(f"[MAIN] 🚀 Nexora Console running at http://0.0.0.0:{dash_port}")
 
     while True:
         try:
