@@ -1410,6 +1410,7 @@ def generate_dashboard_html():
 
     pnl = safe_float(stats.get("total_pnl", 0.0))
     pnl_str = f"+${pnl:,.2f}" if pnl >= 0 else f"-${abs(pnl):,.2f}"
+    pnl_color = "#34d399" if pnl >= 0 else "#f87171"
     win_rate = safe_float(stats.get('win_rate', 0.0))
     total_trades = stats.get("total_trades", len(ledger))
     winning_trades = stats.get("winning_trades", sum(1 for t in ledger if isinstance(t, dict) and safe_float(t.get('pnl', 0)) >= 0))
