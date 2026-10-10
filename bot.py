@@ -49,26 +49,28 @@ def safe_float(val, default=0.0):
 
 DASHBOARD_CSS = """
 :root {
-  --bg-pitch: #08090d;
-  --bg-surface: #0e1118;
-  --bg-card: #10131c;
-  --bg-card-hover: #141824;
-  --bg-inset: #090b10;
-  --border-subtle: #1a1e2a;
-  --border-hover: #262c3e;
-  --border-active: #a3e635;
-  --accent-lime: #a3e635;
-  --accent-lime-hover: #bef264;
-  --accent-lime-glow: rgba(163, 230, 53, 0.25);
+  --bg-pitch: #06050c;
+  --bg-surface: #0a0815;
+  --bg-card: #0d0a1c;
+  --bg-card-hover: #130f28;
+  --bg-inset: #070512;
+  --border-subtle: rgba(168, 85, 247, 0.20);
+  --border-hover: rgba(217, 70, 239, 0.50);
+  --border-active: #a855f7;
+  --accent-purple: #a855f7;
+  --accent-magenta: #d946ef;
+  --accent-violet: #8b5cf6;
+  --accent-purple-glow: rgba(168, 85, 247, 0.35);
+  --purple-gradient: linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%);
   --accent-emerald: #10b981;
-  --accent-green-badge-bg: #064e3b;
+  --accent-green-badge-bg: rgba(16, 185, 129, 0.14);
   --accent-green-badge-text: #34d399;
-  --accent-green-badge-border: #059669;
+  --accent-green-badge-border: rgba(16, 185, 129, 0.3);
   --accent-red: #f87171;
   --accent-red-bg: rgba(239, 68, 68, 0.12);
   --text-primary: #ffffff;
-  --text-secondary: #8e95a5;
-  --text-muted: #525a6c;
+  --text-secondary: #9490b0;
+  --text-muted: #5e597c;
   --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 }
@@ -90,11 +92,13 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: all 0.25s ease;
   position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
 }
 .clean-card:hover {
   border-color: var(--border-hover);
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.20), inset 0 0 15px rgba(217, 70, 239, 0.05);
 }
 
 .stat-card {
@@ -102,20 +106,23 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   padding: 20px 22px;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
   position: relative;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
 }
 .stat-card:hover {
   border-color: var(--border-hover);
   background: var(--bg-card-hover);
+  box-shadow: 0 0 26px rgba(168, 85, 247, 0.25), inset 0 0 12px rgba(217, 70, 239, 0.04);
+  transform: translateY(-1px);
 }
 
 .stat-icon-box {
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  background: #151822;
-  border: 1px solid #1f2535;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -126,7 +133,7 @@ body {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #11141c;
+  background: rgba(168, 85, 247, 0.08);
   border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -136,22 +143,23 @@ body {
   transition: all 0.2s ease;
 }
 .btn-ghost-circle:hover {
-  background: #161b26;
+  background: rgba(168, 85, 247, 0.18);
   border-color: var(--border-hover);
   color: var(--text-primary);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
 }
 
 .user-avatar-ring {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #11141c;
-  border: 2px solid var(--accent-lime);
+  background: #110d22;
+  border: 2px solid var(--accent-purple);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 0 10px rgba(163, 230, 53, 0.2);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
 }
 
 .nav-tab {
@@ -167,10 +175,10 @@ body {
   gap: 6px;
 }
 .nav-tab:hover {
-  color: var(--text-primary);
+  color: #ffffff;
 }
 .nav-tab.active {
-  color: var(--text-primary);
+  color: #ffffff;
   font-weight: 600;
 }
 .nav-tab .active-indicator {
@@ -179,18 +187,18 @@ body {
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--accent-lime);
+  background: var(--purple-gradient);
   border-radius: 2px;
-  box-shadow: 0 0 8px rgba(163, 230, 53, 0.6);
+  box-shadow: 0 0 10px rgba(217, 70, 239, 0.8);
 }
 
-.badge-new {
+.badge-purple {
   font-size: 10px;
   font-weight: 700;
-  background: rgba(163, 230, 53, 0.15);
-  color: var(--accent-lime);
-  border: 1px solid rgba(163, 230, 53, 0.3);
-  padding: 1px 6px;
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  padding: 1px 7px;
   border-radius: 9999px;
   text-transform: uppercase;
 }
@@ -199,7 +207,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #11141c;
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 7px 14px;
@@ -212,13 +220,14 @@ body {
 .btn-select-dates:hover {
   border-color: var(--border-hover);
   color: var(--text-primary);
-  background: #151924;
+  background: var(--bg-card-hover);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
 }
 
 .timeframe-segmented-capsule {
   display: inline-flex;
   align-items: center;
-  background: #11141c;
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 3px;
@@ -238,15 +247,16 @@ body {
   color: var(--text-primary);
 }
 .timeframe-segmented-capsule button.active {
-  background: #1a202d;
-  color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  background: rgba(168, 85, 247, 0.22);
+  color: #ffffff;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
 }
 
 .perf-toggle-capsule {
   display: inline-flex;
   align-items: center;
-  background: #090b10;
+  background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 3px;
@@ -263,14 +273,14 @@ body {
   transition: all 0.15s ease;
 }
 .perf-toggle-capsule button.active {
-  background: var(--accent-green-badge-bg);
-  color: var(--accent-green-badge-text);
-  border: 1px solid var(--accent-green-badge-border);
+  background: rgba(168, 85, 247, 0.25);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
 }
 
-.btn-lime-pill {
-  background: var(--accent-lime);
-  color: #000000;
+.btn-purple-pill {
+  background: var(--purple-gradient);
+  color: #ffffff;
   font-weight: 700;
   font-size: 13px;
   border-radius: 9999px;
@@ -278,23 +288,22 @@ body {
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 0 20px var(--accent-lime-glow);
+  box-shadow: 0 0 22px rgba(217, 70, 239, 0.45);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
 }
-.btn-lime-pill:hover {
-  background: var(--accent-lime-hover);
-  box-shadow: 0 0 28px rgba(163, 230, 53, 0.55);
+.btn-purple-pill:hover {
+  box-shadow: 0 0 30px rgba(217, 70, 239, 0.7);
   transform: translateY(-1px);
 }
 
 .btn-kill-switch {
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.28);
   color: #f87171;
   font-size: 11px;
   font-weight: 700;
@@ -307,6 +316,7 @@ body {
 .btn-kill-switch:hover {
   background: rgba(239, 68, 68, 0.25);
   border-color: #ef4444;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
 }
 
 .mode-capsule {
@@ -314,7 +324,7 @@ body {
   align-items: center;
   padding: 3px;
   border-radius: 9999px;
-  background: #10131c;
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
 }
 .mode-btn {
@@ -332,9 +342,10 @@ body {
   transition: all 0.2s ease;
 }
 .mode-btn.active {
-  background: #181e2b;
+  background: rgba(168, 85, 247, 0.22);
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
 }
 
 .toggle-switch {
@@ -349,9 +360,9 @@ body {
   display: inline-block;
 }
 .toggle-switch.active {
-  background: var(--accent-lime);
-  border-color: var(--accent-lime);
-  box-shadow: 0 0 10px rgba(163, 230, 53, 0.4);
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
 }
 .toggle-handle {
   position: absolute;
@@ -365,7 +376,7 @@ body {
 }
 .toggle-switch.active .toggle-handle {
   transform: translateX(18px);
-  background: #000000;
+  background: #ffffff;
 }
 
 ::-webkit-scrollbar {
@@ -376,7 +387,7 @@ body {
   background: var(--bg-pitch);
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e2433;
+  background: rgba(168, 85, 247, 0.25);
   border-radius: 4px;
 }
 """
@@ -437,9 +448,9 @@ function switchConsoleMode(mode) {
     if (testBtn) testBtn.classList.remove('active');
     if (statusPill) {
       statusPill.textContent = 'LIVE SPOT';
-      statusPill.style.color = '#34d399';
+      statusPill.style.color = '#c084fc';
     }
-    if (actionBtnText) actionBtnText.textContent = 'Explore Leaders';
+    if (actionBtnText) actionBtnText.textContent = '+ Configure Strategy';
     if (viewMain) viewMain.style.display = 'block';
     if (viewTest) viewTest.style.display = 'none';
   } else {
@@ -449,7 +460,7 @@ function switchConsoleMode(mode) {
       statusPill.textContent = 'TESTNET SANDBOX';
       statusPill.style.color = '#fbbf24';
     }
-    if (actionBtnText) actionBtnText.textContent = '+ Create Strategy';
+    if (actionBtnText) actionBtnText.textContent = '+ Configure Strategy';
     if (viewMain) viewMain.style.display = 'none';
     if (viewTest) viewTest.style.display = 'block';
   }
@@ -622,11 +633,11 @@ def generate_dashboard_html():
     </tr>
     """
 
-    donut_circles = '<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#a3e635" stroke-width="4.5" stroke-dasharray="100 0" stroke-dashoffset="0" />'
+    donut_circles = '<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#c084fc" stroke-width="4.5" stroke-dasharray="100 0" stroke-dashoffset="0" />'
     donut_legend = """
     <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0;">
       <span style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:11px;">
-        <span style="width:7px; height:7px; border-radius:50%; background:#a3e635; display:inline-block;"></span>
+        <span style="width:7px; height:7px; border-radius:50%; background:#c084fc; display:inline-block;"></span>
         MA Crossover (₹10,000)
       </span>
       <span style="font-family:var(--font-mono); color:#ffffff; font-weight:600; font-size:11px;">100%</span>
@@ -726,33 +737,33 @@ def generate_dashboard_html():
                     </div>
                     <div>
                         <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Target 2 (TP2)</div>
-                        <div style="font-size:15px; font-weight:600; color:#a3e635; font-family:var(--font-mono); margin-top:2px;">${ot_tp2:,.2f}</div>
+                        <div style="font-size:15px; font-weight:600; color:#c084fc; font-family:var(--font-mono); margin-top:2px;">${ot_tp2:,.2f}</div>
                     </div>
                 </div>
 
                 <div style="margin-top:14px;">
                     <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
                         <span style="color:#8e95a5; font-weight:500;">Target Progress</span>
-                        <span style="color:#a3e635; font-family:var(--font-mono); font-weight:600;">{progress_pct:.1f}%</span>
+                        <span style="color:#c084fc; font-family:var(--font-mono); font-weight:600;">{progress_pct:.1f}%</span>
                     </div>
-                    <div style="height:6px; width:100%; background:#141722; border-radius:9999px; position:relative; overflow:hidden;">
-                        <div style="height:100%; width:{progress_pct}%; background:linear-gradient(90deg, #10b981 0%, #a3e635 100%); border-radius:9999px; transition:width 0.4s ease;"></div>
+                    <div style="height:6px; width:100%; background:rgba(168,85,247,0.15); border-radius:9999px; position:relative; overflow:hidden;">
+                        <div style="height:100%; width:{progress_pct}%; background:linear-gradient(90deg, #8b5cf6 0%, #d946ef 100%); border-radius:9999px; transition:width 0.4s ease; box-shadow:0 0 10px rgba(217,70,239,0.5);"></div>
                     </div>
                     <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; font-family:var(--font-mono); margin-top:5px;">
                         <span>Entry (${ot_entry:,.2f})</span>
                         <span style="color:#34d399;">TP1 (${ot_tp1:,.2f})</span>
-                        <span style="color:#a3e635;">TP2 (${ot_tp2:,.2f})</span>
+                        <span style="color:#c084fc;">TP2 (${ot_tp2:,.2f})</span>
                     </div>
                 </div>
             </div>
             """
     elif weekend_active:
         open_trade_html = """
-        <div class="clean-card" style="padding:16px 20px; margin-bottom:24px; color:#fbbf24; background:#0f121a; display:flex; align-items:center; gap:14px;">
+        <div class="clean-card" style="padding:16px 20px; margin-bottom:24px; color:#fbbf24; background:rgba(168,85,247,0.06); border:1px solid rgba(168,85,247,0.22); display:flex; align-items:center; gap:14px;">
             <div style="font-size:20px;">⏸️</div>
             <div>
                 <div style="font-weight:600; font-size:13px; color:#ffffff;">Weekend Low-Liquidity Window Active</div>
-                <div style="font-size:11px; color:#8e95a5; margin-top:2px;">Institutional banks & CME futures are closed. New market entries paused to prevent choppy stop-hunts. Stop-Loss and runner protections remain active.</div>
+                <div style="font-size:11px; color:#9490b0; margin-top:2px;">Institutional banks & CME futures are closed. New market entries paused to prevent choppy stop-hunts. Stop-Loss and runner protections remain active.</div>
             </div>
         </div>
         """
@@ -765,12 +776,12 @@ def generate_dashboard_html():
                 </div>
                 <div>
                     <div style="font-size:13px; font-weight:600; color:#ffffff;">No Open Positions Currently Active</div>
-                    <div style="font-size:11px; color:#8e95a5; margin-top:1px;">Moving Average Engine is actively scanning BTCUSDT for Fast/Slow EMA crossovers with RSI momentum.</div>
+                    <div style="font-size:11px; color:#9490b0; margin-top:1px;">Moving Average Engine is actively scanning BTCUSDT for Fast/Slow EMA crossovers with RSI momentum.</div>
                 </div>
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
-                <span style="width:7px; height:7px; border-radius:50%; background:#a3e635; display:inline-block; box-shadow:0 0 6px rgba(163,230,53,0.6);"></span>
-                <span style="font-size:11px; font-family:var(--font-mono); color:#a3e635; font-weight:600;">SCANNING 24/7</span>
+                <span style="width:7px; height:7px; border-radius:50%; background:#c084fc; display:inline-block; box-shadow:0 0 8px rgba(192,132,252,0.8);"></span>
+                <span style="font-size:11px; font-family:var(--font-mono); color:#c084fc; font-weight:600;">SCANNING 24/7</span>
             </div>
         </div>
         """
@@ -817,7 +828,7 @@ def generate_dashboard_html():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="25">
-  <title>Mirror pip — Trading Dashboard</title>
+  <title>NEXORA ALGO — Quantitative Trading Terminal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -827,16 +838,18 @@ def generate_dashboard_html():
 </head>
 <body>
 
-  <!-- Top Sticky Navigation (Mirror pip Style) -->
-  <header style="height:60px; border-bottom:1px solid #141720; background:rgba(8,9,13,0.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); padding:0 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
+  <!-- Top Sticky Navigation (NEXORA ALGO Purple Glow Style) -->
+  <header style="height:60px; border-bottom:1px solid rgba(168,85,247,0.22); background:rgba(6,5,12,0.95); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); padding:0 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
     <div style="display:flex; align-items:center; gap:28px;">
-      <!-- Mirror pip Sleek Brand Logo -->
-      <div style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-        <div style="position:relative; width:30px; height:30px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:26px; height:26px; border-radius:50%; background:#1c2230; opacity:0.8;"></div>
-          <div style="position:absolute; width:16px; height:16px; border-radius:50%; background:#a3e635; right:2px; top:3px; box-shadow:0 0 12px rgba(163,230,53,0.8);"></div>
+      <!-- NEXORA ALGO Sleek Brand Logo -->
+      <div style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+        <div style="width:34px; height:34px; border-radius:10px; background:var(--purple-gradient); display:flex; align-items:center; justify-content:center; box-shadow:0 0 16px rgba(217,70,239,0.55);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
-        <span style="font-size:16px; font-weight:700; letter-spacing:-0.02em; color:#ffffff;">Mirror pip</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:17px; font-weight:800; letter-spacing:0.04em; color:#ffffff;">NEXORA</span>
+          <span style="font-size:10px; font-weight:800; background:var(--purple-gradient); color:#ffffff; padding:2px 7px; border-radius:5px; letter-spacing:0.06em; box-shadow:0 0 10px rgba(217,70,239,0.4);">ALGO</span>
+        </div>
       </div>
 
       <!-- Navigation Links -->
@@ -845,18 +858,16 @@ def generate_dashboard_html():
           Dashboard
           <div class="active-indicator"></div>
         </a>
-        <a href="#watchlist" class="nav-tab">Watchlist</a>
-        <a href="#options" class="nav-tab">Options <span class="badge-new">New</span></a>
-        <a href="#leaders" class="nav-tab">Leaders</a>
         <a href="#positions" class="nav-tab">Positions</a>
-        <a href="#help" class="nav-tab">Help</a>
+        <a href="#strategy" class="nav-tab">Strategy Hub <span class="badge-purple">Ready</span></a>
+        <a href="#history" class="nav-tab">Ledger</a>
       </nav>
     </div>
 
     <!-- CENTER SWITCHER: LIVE vs TESTNET Capsule -->
     <div class="mode-capsule">
       <button id="mode-main-btn" class="mode-btn active" onclick="switchConsoleMode('main')">
-        <span style="width:6px; height:6px; border-radius:50%; background:#a3e635; display:inline-block; box-shadow:0 0 6px rgba(163,230,53,0.7);"></span>
+        <span style="width:6px; height:6px; border-radius:50%; background:#a855f7; display:inline-block; box-shadow:0 0 8px rgba(168,85,247,0.9);"></span>
         LIVE
       </button>
       <button id="mode-test-btn" class="mode-btn" onclick="switchConsoleMode('test')">
@@ -882,9 +893,9 @@ def generate_dashboard_html():
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
 
-      <!-- User Avatar with Green Ring -->
+      <!-- User Avatar with Purple Ring -->
       <div class="user-avatar-ring" title="Nandalal meher">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a3e635" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </div>
 
       <!-- Emergency Kill Switch (Clean) -->
@@ -904,10 +915,11 @@ def generate_dashboard_html():
     <!-- ============================================== -->
     <div id="view-main">
 
-      <!-- Greeting & Timeframe Bar (Mirror pip Exact Header) -->
+      <!-- Greeting & Timeframe Bar (NEXORA ALGO Header) -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
         <div>
-          <h1 style="font-size:22px; font-weight:600; color:#ffffff; letter-spacing:-0.02em;">Hello, Nandalal meher</h1>
+          <h1 style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:-0.02em;">Hello, Nandalal meher</h1>
+          <p style="font-size:12px; color:#c084fc; margin-top:2px; font-weight:500;">⚡ NEXORA Quantitative Engine • Automated Spot Trading Terminal</p>
         </div>
 
         <div style="display:flex; align-items:center; gap:12px;">
@@ -929,7 +941,7 @@ def generate_dashboard_html():
       </div>
 
       <!-- ============================================== -->
-      <!-- TOP 4 METRICS CARDS (Mirror pip 4-Column Layout)-->
+      <!-- TOP 4 METRICS CARDS (NEXORA Glowing Purple Cards)-->
       <!-- ============================================== -->
       <section style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:22px;">
         
@@ -938,17 +950,17 @@ def generate_dashboard_html():
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="stat-icon-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
               </div>
-              <span style="font-size:13px; font-weight:500; color:#8e95a5;">Estimated Balance</span>
+              <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">Estimated Balance</span>
             </div>
-            <span style="color:#525a6c; cursor:pointer;" title="Hide balance">👁️</span>
+            <span style="color:var(--text-muted); cursor:pointer;" title="Hide balance">👁️</span>
           </div>
           <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:14px; letter-spacing:-0.02em; font-family:var(--font-mono);">
             $9,992.78
           </div>
-          <div style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11px; color:#8e95a5;">
-            <span style="color:#34d399; font-weight:bold;">✓</span> Across 2 exchanges
+          <div style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11px; color:var(--text-secondary);">
+            <span style="color:#c084fc; font-weight:bold;">✓</span> Binance Spot Testnet
           </div>
         </div>
 
@@ -957,16 +969,16 @@ def generate_dashboard_html():
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="stat-icon-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/><rect x="8" y="2" width="14" height="14" rx="2"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/><rect x="8" y="2" width="14" height="14" rx="2"/></svg>
               </div>
-              <span style="font-size:13px; font-weight:500; color:#8e95a5;">Open Position</span>
+              <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">Open Position</span>
             </div>
           </div>
           <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:14px; letter-spacing:-0.02em; font-family:var(--font-mono);">
             {len(open_trades)}
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#8e95a5;">
-            {'BTCUSDT Active' if open_trades else 'Across exchange'}
+          <div style="margin-top:6px; font-size:11px; color:var(--text-secondary);">
+            {'BTCUSDT Active' if open_trades else '0 Active Positions'}
           </div>
         </div>
 
@@ -975,15 +987,15 @@ def generate_dashboard_html():
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="stat-icon-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
               </div>
-              <span style="font-size:13px; font-weight:500; color:#8e95a5;">P&L</span>
+              <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">P&L</span>
             </div>
           </div>
           <div id="pnl-display-val" style="font-size:24px; font-weight:700; color:{'#34d399' if pnl >= 0 else '#f87171'}; margin-top:14px; letter-spacing:-0.02em; font-family:var(--font-mono);">
             {pnl_str}
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#8e95a5;">
+          <div style="margin-top:6px; font-size:11px; color:var(--text-secondary);">
             All time
           </div>
         </div>
@@ -993,39 +1005,38 @@ def generate_dashboard_html():
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="stat-icon-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
               </div>
-              <span style="font-size:13px; font-weight:500; color:#8e95a5;">Win Rate</span>
+              <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">Win Rate</span>
             </div>
           </div>
           <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:14px; letter-spacing:-0.02em; font-family:var(--font-mono);">
             {win_rate:.2f}%
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#8e95a5;">
+          <div style="margin-top:6px; font-size:11px; color:var(--text-secondary);">
             All Closed Trades
           </div>
         </div>
       </section>
 
       <!-- ============================================== -->
-      <!-- MID SECTION: Portfolio Performance + Mirror Card-->
+      <!-- MID SECTION: Portfolio Performance + Strategy Hub-->
       <!-- ============================================== -->
       <section style="display:grid; grid-template-columns:2.1fr 1fr; gap:18px; margin-bottom:22px;">
         
-        <!-- Left: Portfolio Performance Chart -->
+        <!-- Left: Portfolio Performance Chart (Neon Purple Curve) -->
         <div class="clean-card" style="padding:22px;">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
               <span style="font-size:14px; font-weight:600; color:#ffffff;">Portfolio Performance</span>
             </div>
 
             <!-- Venues dropdown & View Toggle Capsule -->
             <div style="display:flex; align-items:center; gap:8px;">
-              <select style="background:#090b10; border:1px solid #1a1e2a; border-radius:6px; color:#8e95a5; font-size:11px; padding:5px 10px; outline:none; font-family:var(--font-main);">
-                <option>All venues</option>
-                <option>Binance Spot</option>
-                <option>Strategy Lab</option>
+              <select style="background:var(--bg-inset); border:1px solid var(--border-subtle); border-radius:6px; color:var(--text-secondary); font-size:11px; padding:5px 10px; outline:none; font-family:var(--font-main);">
+                <option>Binance Spot Testnet</option>
+                <option>Quantitative Engine</option>
               </select>
 
               <div class="perf-toggle-capsule">
@@ -1036,10 +1047,10 @@ def generate_dashboard_html():
             </div>
           </div>
 
-          <!-- Mirror pip Minimalist Neon Green Curve Chart -->
+          <!-- NEXORA Neon Purple Curve Chart -->
           <div style="position:relative; width:100%; height:210px; margin-top:10px;">
             <!-- Y-Axis Labels -->
-            <div style="position:absolute; left:0; top:0; bottom:20px; width:30px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:#525a6c; font-family:var(--font-mono);">
+            <div style="position:absolute; left:0; top:0; bottom:20px; width:30px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:var(--text-muted); font-family:var(--font-mono);">
               <span>25</span>
               <span>20</span>
               <span>15</span>
@@ -1051,53 +1062,68 @@ def generate_dashboard_html():
             <div style="margin-left:36px; height:100%;">
               <svg style="width:100%; height:190px; overflow:visible;" viewBox="0 0 500 180" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="neonGreenGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#22c55e" stop-opacity="0.25" />
-                    <stop offset="100%" stop-color="#22c55e" stop-opacity="0.0" />
+                  <linearGradient id="neonPurpleGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#a855f7" stop-opacity="0.32" />
+                    <stop offset="100%" stop-color="#a855f7" stop-opacity="0.0" />
                   </linearGradient>
-                  <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
+                  <filter id="neonPurpleGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="3.5" result="blur" />
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                   </filter>
                 </defs>
 
                 <!-- Clean Dotted Horizontal Grid Lines -->
-                <line x1="0" y1="5" x2="500" y2="5" stroke="#161a24" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="40" x2="500" y2="40" stroke="#161a24" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="75" x2="500" y2="75" stroke="#161a24" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="110" x2="500" y2="110" stroke="#161a24" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="145" x2="500" y2="145" stroke="#161a24" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="175" x2="500" y2="175" stroke="#161a24" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="0" y1="5" x2="500" y2="5" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="0" y1="40" x2="500" y2="40" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="0" y1="75" x2="500" y2="75" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="0" y1="110" x2="500" y2="110" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="0" y1="145" x2="500" y2="145" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="0" y1="175" x2="500" y2="175" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
 
-                <!-- Green Glow Area Fill -->
-                <path id="perf-chart-area" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168 L 140,180 L 0,180 Z" fill="url(#neonGreenGradient)" />
+                <!-- Purple Glow Area Fill -->
+                <path id="perf-chart-area" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168 L 140,180 L 0,180 Z" fill="url(#neonPurpleGradient)" />
 
-                <!-- Neon Green Line Curve (Mirror pip Signature Line) -->
-                <path id="perf-chart-line" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#neonGlow)" />
+                <!-- Neon Purple Line Curve (NEXORA Signature Line) -->
+                <path id="perf-chart-line" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168" fill="none" stroke="#c084fc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" filter="url(#neonPurpleGlow)" />
               </svg>
 
               <!-- Chart Bottom Timeline -->
-              <div style="display:flex; justify-content:space-between; font-size:10px; color:#525a6c; font-family:var(--font-mono); margin-top:6px;">
+              <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); font-family:var(--font-mono); margin-top:6px;">
                 <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>Current</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Right: Mirror Leaders / Strategy Lab Prompt Card -->
+        <!-- Right: Quantitative Strategy Hub Card -->
         <div class="clean-card" style="padding:22px; display:flex; flex-direction:column; justify-content:space-between;">
-          <div style="height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:20px 8px;">
-            <div style="font-size:13px; color:#8e95a5; line-height:1.6; margin-bottom:24px;">
-              You haven't mirrored any leaders yet
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.18); padding-bottom:12px;">
+              <div style="font-size:14px; font-weight:600; color:#ffffff; display:flex; align-items:center; gap:8px;">
+                <span style="font-size:16px;">⚡</span> Strategy Engine Hub
+              </div>
+              <span style="font-size:10px; font-weight:700; color:#c084fc; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:2px 8px; border-radius:9999px;">READY</span>
             </div>
-            <button onclick="handleDeployAction()" class="btn-lime-pill">
-              Explore Leaders
-            </button>
+
+            <div style="text-align:center; padding:22px 8px;">
+              <div style="width:48px; height:48px; border-radius:12px; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.28); display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto; box-shadow:0 0 16px rgba(168,85,247,0.25);">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d946ef" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              </div>
+              <div style="font-size:15px; font-weight:700; color:#ffffff; margin-bottom:5px;">
+                Strategy Hub Ready
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); line-height:1.5; margin-bottom:18px;">
+                Old strategies cleared. Ready to design & configure your next trading strategy.
+              </div>
+              <button onclick="handleDeployAction()" class="btn-purple-pill">
+                + Configure Strategy
+              </button>
+            </div>
           </div>
 
-          <div style="border-top:1px solid #161a24; padding-top:12px; display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono);">
+          <div style="border-top:1px solid rgba(168,85,247,0.18); padding-top:12px; display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); font-family:var(--font-mono);">
             <span>MA Crossover Engine</span>
-            <span style="color:#a3e635;">Active 24/7</span>
+            <span style="color:#c084fc; font-weight:600;">Active 24/7</span>
           </div>
         </div>
       </section>
@@ -1112,18 +1138,18 @@ def generate_dashboard_html():
         
         <!-- Active Strategy Table with Capital Limits -->
         <div class="clean-card" style="padding:22px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1a1e2a; padding-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.18); padding-bottom:12px;">
             <div>
               <h3 style="font-size:14px; font-weight:600; color:#ffffff;">Active Strategy (Isolated Capital)</h3>
-              <p style="font-size:11px; color:#8e95a5; margin-top:2px;">Strategy strictly bounded to isolated margin allocation limit.</p>
+              <p style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Strategy strictly bounded to isolated margin allocation limit.</p>
             </div>
-            <span style="font-size:10px; font-family:var(--font-mono); color:#a3e635; background:rgba(163,230,53,0.1); border:1px solid rgba(163,230,53,0.25); padding:3px 8px; border-radius:6px;">Max ₹10,000</span>
+            <span style="font-size:10px; font-family:var(--font-mono); color:#c084fc; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:6px;">Max ₹10,000</span>
           </div>
 
           <div style="overflow-x:auto; margin-top:8px;">
             <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
               <thead>
-                <tr style="border-bottom:1px solid #161a24; font-size:10px; text-transform:uppercase; color:#64748b; letter-spacing:0.04em;">
+                <tr style="border-bottom:1px solid rgba(168,85,247,0.15); font-size:10px; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.04em;">
                   <th style="padding:10px 8px;">Strategy</th>
                   <th style="padding:10px 8px;">Allocated Limit</th>
                   <th style="padding:10px 8px;">Status</th>
@@ -1140,7 +1166,7 @@ def generate_dashboard_html():
         <!-- Right: Groq AI Market Intelligence -->
         <div class="clean-card" style="padding:22px; display:flex; flex-direction:column; justify-content:space-between;">
           <div>
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1a1e2a; padding-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.18); padding-bottom:12px;">
               <div style="font-size:14px; font-weight:600; color:#ffffff; display:flex; align-items:center; gap:8px;">
                 <span>🤖</span> AI Market Analysis
               </div>
@@ -1150,32 +1176,32 @@ def generate_dashboard_html():
             <!-- Score Bar -->
             <div style="margin-top:14px;">
               <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:5px;">
-                <span style="color:#8e95a5;">Signal Confidence</span>
-                <span style="color:#34d399; font-weight:600; font-family:var(--font-mono);">{score}/100</span>
+                <span style="color:var(--text-secondary);">Signal Confidence</span>
+                <span style="color:#c084fc; font-weight:600; font-family:var(--font-mono);">{score}/100</span>
               </div>
-              <div style="height:5px; width:100%; background:#141722; border-radius:9999px; overflow:hidden;">
-                <div style="height:100%; width:{min(score, 100)}%; background:linear-gradient(90deg, #3b82f6, #a3e635); border-radius:9999px;"></div>
+              <div style="height:5px; width:100%; background:rgba(168,85,247,0.15); border-radius:9999px; overflow:hidden;">
+                <div style="height:100%; width:{min(score, 100)}%; background:linear-gradient(90deg, #8b5cf6, #d946ef); border-radius:9999px; box-shadow:0 0 10px rgba(217,70,239,0.5);"></div>
               </div>
             </div>
 
             <!-- Technical Gauges -->
             <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px; font-family:var(--font-mono);">
-              <div style="background:#090b10; padding:7px 10px; border-radius:6px; border:1px solid #161a25;">
-                <span style="color:#64748b;">RSI:</span> <span style="color:#ffffff; font-weight:600;">{rsi}</span>
+              <div style="background:var(--bg-inset); padding:7px 10px; border-radius:6px; border:1px solid var(--border-subtle);">
+                <span style="color:var(--text-muted);">RSI:</span> <span style="color:#ffffff; font-weight:600;">{rsi}</span>
               </div>
-              <div style="background:#090b10; padding:7px 10px; border-radius:6px; border:1px solid #161a25;">
-                <span style="color:#64748b;">Vol Ratio:</span> <span style="color:#34d399; font-weight:600;">{vol}x</span>
+              <div style="background:var(--bg-inset); padding:7px 10px; border-radius:6px; border:1px solid var(--border-subtle);">
+                <span style="color:var(--text-muted);">Vol Ratio:</span> <span style="color:#34d399; font-weight:600;">{vol}x</span>
               </div>
             </div>
 
             <!-- Groq Brain Reasoning -->
-            <div style="margin-top:12px; background:#090b10; border:1px solid #1a1e2a; border-left:3px solid #a3e635; border-radius:6px; padding:10px 12px;">
-              <div style="font-size:10px; color:#a3e635; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Groq Brain Reasoning</div>
+            <div style="margin-top:12px; background:var(--bg-inset); border:1px solid var(--border-subtle); border-left:3px solid var(--accent-purple); border-radius:6px; padding:10px 12px;">
+              <div style="font-size:10px; color:#c084fc; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Groq Brain Reasoning</div>
               <p style="font-size:11px; color:#cbd5e1; line-height:1.5; margin-top:3px;">{reason}</p>
             </div>
           </div>
 
-          <div style="margin-top:12px; font-size:10px; color:#64748b; font-family:var(--font-mono); display:flex; justify-content:space-between;">
+          <div style="margin-top:12px; font-size:10px; color:var(--text-muted); font-family:var(--font-mono); display:flex; justify-content:space-between;">
             <span>Target: Dynamic ATR TP</span>
             <span>Risk: Controlled</span>
           </div>
