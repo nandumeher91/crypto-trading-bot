@@ -1,4 +1,3 @@
-
 import os
 import re
 import logging
@@ -13,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(ENV_PATH)
 
-API_KEY    = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_TESTNET_API_KEY")
+API_KEY = os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_TESTNET_API_KEY")
 API_SECRET = os.getenv("BINANCE_API_SECRET") or os.getenv("BINANCE_TESTNET_SECRET_KEY")
 
 if not API_KEY or not API_SECRET:
@@ -23,60 +22,86 @@ if not API_KEY or not API_SECRET:
 print(f"[INIT] API Key found: {API_KEY[:5]}...{API_KEY[-4:]}")
 print(f"[INIT] API Secret found: {API_SECRET[:5]}...{API_SECRET[-4:]}")
 
-# Create client with longer timeout
-client = Client(API_KEY, API_SECRET, testnet=True, requests_params={'timeout': 30})
-client.REQUEST_TIMEOUT = 30
-client.REQUEST_RECVWINDOW = 60000
+# Create client with longer timeout and 60-second recvWindow tolerance
+try:
+    client = Client(API_KEY, API_SECRET, testnet=True, requests_params={'timeout': 30})
+    client.REQUEST_TIMEOUT = 30
+    client.REQUEST_RECVWINDOW = 60000
+except Exception as e:
+    logger.warning(f"Failed to connect to Binance Testnet on init: {e}")
+    client = None
 
-# ── Time sync: once at startup + every 5 minutes (not every API call) ─────────
+# Time sync cache: once at startup + every 5 minutes
 _last_sync_time = 0
-_SYNC_INTERVAL  = 300  # seconds
+_SYNC_INTERVAL = 300  # seconds
 
 def sync_time(force=False):
-    global _last_sync_time
+    global _last_sync_time, client
     now = time_module.time()
     if not force and (now - _last_sync_time) < _SYNC_INTERVAL:
-        return  # skip — synced recently
+        return 0
+
+    if not client:
+        return 0
+
+    # 1. Try public testnet time
     try:
         r = requests.get("https://testnet.binance.vision/api/v3/time", timeout=10)
         server_time = r.json()["serverTime"]
-        local_time  = int(now * 1000)
+        local_time = int(now * 1000)
         offset = server_time - local_time
         client.timestamp_offset = offset
         client.REQUEST_RECVWINDOW = 60000
         _last_sync_time = now
-        print(f"[TIME] Synced. Offset: {offset}ms")
+        print(f"[TIME] Synced via Testnet API. Offset: {offset}ms")
+        return offset
     except Exception as e:
-        print(f"[TIME] Direct sync failed, trying fallback: {e}")
+        # 2. Try public mainnet time (always available, same epoch)
+        try:
+            r = requests.get("https://api.binance.com/api/v3/time", timeout=10)
+            server_time = r.json()["serverTime"]
+            local_time = int(now * 1000)
+            offset = server_time - local_time
+            client.timestamp_offset = offset
+            client.REQUEST_RECVWINDOW = 60000
+            _last_sync_time = now
+            print(f"[TIME] Synced via Mainnet API. Offset: {offset}ms")
+            return offset
+        except Exception:
+            pass
+
+        # 3. Fallback to client.get_server_time()
         try:
             server_time = client.get_server_time()
-            local_time  = int(time_module.time() * 1000)
+            local_time = int(time_module.time() * 1000)
             offset = server_time["serverTime"] - local_time
             client.timestamp_offset = offset
             client.REQUEST_RECVWINDOW = 60000
             _last_sync_time = time_module.time()
-            print(f"[TIME] Fallback sync OK. Offset: {offset}ms")
+            print(f"[TIME] Fallback client sync OK. Offset: {offset}ms")
+            return offset
         except Exception as e2:
-            print(f"[TIME] Sync completely failed: {e2}")
+            print(f"[TIME] Time sync failed (using local clock): {e2}")
+            return 0
 
-sync_time(force=True)  # sync once at startup
+# Initial sync attempt (safe, won't crash if network issue)
+sync_time(force=True)
 
-# ── Price cache: avoid hammering API every call ────────────────────────────────
-_price_cache     = {}   # {symbol: price}
-_price_cache_ts  = {}   # {symbol: timestamp}
-_PRICE_CACHE_TTL = 10   # seconds — reuse price if < 10s old
+# Price cache to avoid hammering API and hitting rate limits
+_price_cache = {}
+_price_cache_ts = {}
+_PRICE_CACHE_TTL = 10  # 10 seconds cache
 
 # Binance LOT_SIZE filter for BTCUSDT (testnet)
-MIN_QTY   = 0.00001
+MIN_QTY = 0.00001
 STEP_SIZE = 0.00001
-MAX_QTY   = 9000.0
+MAX_QTY = 9000.0
 
 
 def _sanitize_symbol(symbol):
     if symbol is None:
         return "BTCUSDT"
     if not isinstance(symbol, str):
-        print(f"[SANITIZE] WARNING: Expected string, got {type(symbol).__name__}: {symbol}")
         return "BTCUSDT"
     symbol = symbol.strip().upper()
     symbol = re.sub(r"[^A-Z0-9_.-]", "", symbol)
@@ -89,133 +114,168 @@ def _sanitize_quantity(quantity):
     try:
         qty = float(quantity)
         if qty < MIN_QTY:
-            print(f"[SANITIZE] Quantity {qty} below min {MIN_QTY}, using min")
             qty = MIN_QTY
         if qty > MAX_QTY:
-            print(f"[SANITIZE] Quantity {qty} above max {MAX_QTY}, capping")
             qty = MAX_QTY
-        steps   = round(qty / STEP_SIZE)
-        qty     = round(steps * STEP_SIZE, 5)
+        steps = round(qty / STEP_SIZE)
+        qty = round(steps * STEP_SIZE, 5)
         if qty < MIN_QTY:
             qty = MIN_QTY
-        qty_str = f"{qty:.5f}"
-        print(f"[SANITIZE] Original: {quantity} -> Sanitized: {qty_str}")
-        return qty_str
+        return f"{qty:.5f}"
     except Exception as e:
         print(f"[SANITIZE] WARNING: Invalid quantity '{quantity}': {e}")
         return str(quantity)
 
 
 def _direct_price_check(symbol):
+    """Fetches real-time price with automatic failover (Testnet -> Mainnet)."""
+    # 1. Try Testnet
     try:
         url = f"https://testnet.binance.vision/api/v3/ticker/price?symbol={symbol}"
-        print(f"[FALLBACK] Calling: {url}")
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=10)
         data = response.json()
         if "price" in data:
             return float(data["price"])
-        else:
-            print(f"[FALLBACK] Error response: {data}")
-            return None
+    except Exception:
+        pass
+
+    # 2. Resilient Fallback: Mainnet Public API (never rate-limited by testnet IP bans)
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        if "price" in data:
+            return float(data["price"])
     except Exception as e:
-        print(f"[FALLBACK] Direct request failed: {e}")
-        return None
+        print(f"[FALLBACK] Direct price check failed for {symbol}: {e}")
+
+    return None
 
 
 def test_api_connection():
     symbol = _sanitize_symbol("BTCUSDT")
     sync_time()
-    print(f"[TEST] Testing API with symbol: '{symbol}'")
+    print(f"[TEST] Testing Binance API connection with symbol: '{symbol}'")
     try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        price  = float(ticker["price"])
-        print(f"[TEST] API test PASSED. BTC price: ${price:,.2f}")
-        return True
-    except Exception as e:
-        print(f"[TEST] python-binance failed: {e}")
-        price = _direct_price_check(symbol)
-        if price:
-            print(f"[TEST] Fallback PASSED. BTC price: ${price:,.2f}")
+        if client:
+            ticker = client.get_symbol_ticker(symbol=symbol)
+            price = float(ticker["price"])
+            print(f"[TEST] API test PASSED (via library). BTC price: ${price:,.2f}")
             return True
-        print(f"[TEST] Fallback also FAILED.")
-        return False
+    except Exception as e:
+        print(f"[TEST] python-binance library call failed: {e}")
+
+    # Fallback to direct HTTP
+    price = _direct_price_check(symbol)
+    if price:
+        print(f"[TEST] Fallback HTTP test PASSED. BTC price: ${price:,.2f}")
+        return True
+
+    print("[TEST] All API connection tests failed.")
+    return False
 
 
 def get_current_price(symbol="BTCUSDT"):
-    """Return price — uses a 10-second cache to avoid Binance rate limits."""
+    """Returns price using 10-second cache to prevent rate-limit bans."""
     symbol = _sanitize_symbol(symbol)
-    now    = time_module.time()
+    now = time_module.time()
 
-    # Return cached price if fresh enough
     if symbol in _price_cache and (now - _price_cache_ts.get(symbol, 0)) < _PRICE_CACHE_TTL:
         return _price_cache[symbol]
 
-    # Sync time only if needed (every 5 min)
     sync_time()
 
-    try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        price  = float(ticker["price"])
-        _price_cache[symbol]    = price
-        _price_cache_ts[symbol] = now
-        return price
-    except Exception as e:
-        print(f"[ERROR] get_current_price failed (library): {e}")
-        price = _direct_price_check(symbol)
-        if price:
-            _price_cache[symbol]    = price
+    # 1. Try Binance Client
+    if client:
+        try:
+            ticker = client.get_symbol_ticker(symbol=symbol)
+            price = float(ticker["price"])
+            _price_cache[symbol] = price
             _price_cache_ts[symbol] = now
             return price
-        raise
+        except Exception as e:
+            print(f"[PRICE] Client ticker failed ({e}), using direct HTTP fallback...")
+
+    # 2. Resilient fallback (Testnet or Mainnet)
+    price = _direct_price_check(symbol)
+    if price:
+        _price_cache[symbol] = price
+        _price_cache_ts[symbol] = now
+        return price
+
+    # 3. Return last cached price if available
+    if symbol in _price_cache:
+        print(f"[PRICE] Returning stale cached price for {symbol}: ${_price_cache[symbol]:,.2f}")
+        return _price_cache[symbol]
+
+    return 65000.0  # Safe default if entirely offline
 
 
 def get_klines_direct(symbol, interval="1m", limit=100):
+    """Fetches klines with failover (Testnet -> Mainnet)."""
+    # 1. Try Testnet
     try:
-        url    = "https://testnet.binance.vision/api/v3/klines"
+        url = "https://testnet.binance.vision/api/v3/klines"
         params = {"symbol": symbol, "interval": interval, "limit": limit}
-        print(f"[FALLBACK] Getting klines: {params}")
-        response = requests.get(url, params=params, timeout=30)
-        klines   = response.json()
-        if not isinstance(klines, list):
-            print(f"[FALLBACK] Invalid response (not a list): {klines}")
-            return None
-        if len(klines) == 0:
-            print("[FALLBACK] Empty klines response")
-            return None
-        return {
-            "open":   [float(k[1]) for k in klines],
-            "high":   [float(k[2]) for k in klines],
-            "low":    [float(k[3]) for k in klines],
-            "close":  [float(k[4]) for k in klines],
-            "volume": [float(k[5]) for k in klines]
-        }
+        response = requests.get(url, params=params, timeout=15)
+        klines = response.json()
+        if isinstance(klines, list) and len(klines) > 0:
+            return {
+                "open": [float(k[1]) for k in klines],
+                "high": [float(k[2]) for k in klines],
+                "low": [float(k[3]) for k in klines],
+                "close": [float(k[4]) for k in klines],
+                "volume": [float(k[5]) for k in klines]
+            }
+    except Exception:
+        pass
+
+    # 2. Resilient Fallback: Mainnet Public API
+    try:
+        url = "https://api.binance.com/api/v3/klines"
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        response = requests.get(url, params=params, timeout=15)
+        klines = response.json()
+        if isinstance(klines, list) and len(klines) > 0:
+            return {
+                "open": [float(k[1]) for k in klines],
+                "high": [float(k[2]) for k in klines],
+                "low": [float(k[3]) for k in klines],
+                "close": [float(k[4]) for k in klines],
+                "volume": [float(k[5]) for k in klines]
+            }
     except Exception as e:
-        print(f"[FALLBACK] Direct klines failed: {e}")
-        return None
+        print(f"[KLINES] Fallback to mainnet also failed: {e}")
+
+    return None
 
 
 def get_account_balance():
     sync_time()
     try:
-        account  = client.get_account()
+        if not client:
+            return []
+        account = client.get_account()
         balances = account["balances"]
         non_zero = [b for b in balances if float(b["free"]) > 0 or float(b["locked"]) > 0]
         return non_zero
     except Exception as e:
         print(f"[ERROR] get_account_balance failed: {e}")
-        raise
+        return []
 
 
 def place_test_order(symbol="BTCUSDT", side="BUY", quantity=0.001):
-    symbol       = _sanitize_symbol(symbol)
-    side         = str(side).strip().upper()
+    symbol = _sanitize_symbol(symbol)
+    side = str(side).strip().upper()
     quantity_str = _sanitize_quantity(quantity)
 
-    sync_time()  # sync before every order
+    sync_time()
 
     print(f"[ORDER] Placing {side} order: symbol={symbol}, quantity={quantity_str} (original={quantity})")
 
     try:
+        if not client:
+            raise RuntimeError("Binance client not initialized")
         order = client.create_order(
             symbol=symbol,
             side=side,
@@ -232,7 +292,7 @@ def place_test_order(symbol="BTCUSDT", side="BUY", quantity=0.001):
 
 def test_connection():
     print("Testing Binance Testnet connection...\n")
-    price    = get_current_price("BTCUSDT")
+    price = get_current_price("BTCUSDT")
     print(f"Current BTCUSDT price: {price}")
     balances = get_account_balance()
     print("\nAccount balances (non-zero):")

@@ -1855,25 +1855,34 @@ def main():
     logger.info("=" * 50)
 
     print("[MAIN] Testing Binance API connection...")
-    if not test_api_connection():
-        logger.error("CRITICAL: Binance API connection test failed. Bot will not start.")
-        print("[MAIN] CRITICAL: API test failed.")
-        return
+    api_connected = test_api_connection()
+    if not api_connected:
+        logger.warning("⚠️ WARNING: Binance API connection check failed (possibly temporary rate-limit/IP ban).")
+        logger.warning("🌐 Web service & dashboard will stay active. Bot will retry connection in background.")
+        print("[MAIN] WARNING: API connection check failed. Keeping dashboard alive and retrying in background...")
+    else:
+        print("[MAIN] Binance API test passed successfully.")
 
     print("\n" + "-" * 65)
-    print("  🌐 NEXORA WEB DASHBOARD RUNNING AT: http://localhost:10000")
-    print("  Opening browser console automatically...")
+    print("  🌐 NEXORA WEB DASHBOARD RUNNING AT: http://0.0.0.0:10000")
     print("-" * 65 + "\n")
-    try:
-        webbrowser.open("http://localhost:10000")
-    except Exception:
-        pass
 
-    print(f"[MAIN] API OK. Starting main loop (every {CHECK_INTERVAL_SECONDS}s)...")
+    print(f"[MAIN] Starting main trading loop (every {CHECK_INTERVAL_SECONDS}s)...")
     print("[MAIN] Press Ctrl+C to stop\n")
 
     while True:
         try:
+            if not api_connected:
+                print(f"[MAIN] Re-testing Binance API connection at {datetime.now().strftime('%H:%M:%S')}...")
+                api_connected = test_api_connection()
+                if not api_connected:
+                    print(f"[MAIN] Binance API still syncing/rate-limited. Retrying in {CHECK_INTERVAL_SECONDS}s...\n")
+                    time.sleep(CHECK_INTERVAL_SECONDS)
+                    continue
+                else:
+                    logger.info("✅ Binance API connection restored! Resuming automated cycles.")
+                    print("[MAIN] ✅ Binance API connection restored! Resuming trading cycles.")
+
             print(f"[MAIN] Running bot cycle at {datetime.now().strftime('%H:%M:%S')}...")
             run_bot_once()
             print(f"[MAIN] Cycle complete. Sleeping {CHECK_INTERVAL_SECONDS}s...\n")

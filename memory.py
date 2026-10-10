@@ -10,22 +10,20 @@ STATS_FILE = Path(os.path.join(BASE_DIR, "stats.json"))
 
 
 def read_ledger():
-    if not LEDGER_FILE.exists() or os.path.getsize(LEDGER_FILE) < 10:
-        sync_ledger_from_binance()
-
-    if LEDGER_FILE.exists():
+    if not LEDGER_FILE.exists():
         try:
-            with open(LEDGER_FILE, 'r') as f:
-                data = json.load(f)
-                if not data:
-                    sync_ledger_from_binance()
-                    with open(LEDGER_FILE, 'r') as f2:
-                        data = json.load(f2)
-                return data
-        except Exception as e:
-            print(f"[MEMORY] Warning: Failed to read ledger.json: {e}")
-            return []
-    return []
+            with open(LEDGER_FILE, 'w') as f:
+                json.dump([], f, indent=2)
+        except Exception:
+            pass
+        return []
+
+    try:
+        with open(LEDGER_FILE, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[MEMORY] Warning: Failed to read ledger.json: {e}")
+        return []
 
 
 def write_ledger(trades):
