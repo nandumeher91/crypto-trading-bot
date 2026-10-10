@@ -51,19 +51,6 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
 
         all_raw_trades.sort(key=lambda x: x['time'])
 
-        existing_ledger = read_ledger()
-        # Key existing trades by symbol and approx entry price to preserve ai_reason and manual flags
-        existing_lookup = {}
-        for et in existing_ledger:
-            k = (et.get('symbol'), round(float(et.get('entry_price', 0)), 1))
-            existing_lookup[k] = et
-
-        strat_map = {
-            "BTCUSDT": ("SMC 60/40 Institutional", "strat_btc_smc"),
-            "SOLUSDT": ("SOL Momentum Scalper", "strat_sol_scalper"),
-            "ETHUSDT": ("ETH Breakout Engine", "strat_eth_breakout")
-        }
-
         ledger = []
         open_positions = {}
         total_pnl = 0.0
@@ -73,6 +60,7 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
         largest_loss = 0.0
         current_streak = 0
         max_drawdown = 0.0
+        trade_counter = 1
 
         for bt in all_raw_trades:
             sym = bt.get('symbol', 'BTCUSDT')
@@ -80,14 +68,12 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
             price = float(bt['price'])
             qty = float(bt['qty'])
             is_buyer = bt['isBuyer']
-            s_name, s_id = strat_map.get(sym, ("Institutional Strategy", "strat_default"))
 
             if is_buyer:
                 open_positions[sym] = {
+                    "trade_id": trade_counter,
                     "timestamp": t_time,
                     "symbol": sym,
-                    "strategy_name": s_name,
-                    "strategy_id": s_id,
                     "side": "BUY",
                     "entry_price": price,
                     "quantity": qty,
@@ -107,40 +93,15 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
                 if sym in open_positions and open_positions[sym]:
                     open_trade = open_positions[sym]
                     entry = open_trade['entry_price']
-                    pnl = round((price - entry) * qty, 2)
-                    pnl_percent = round(((price - entry) / entry) * 100.0, 2) if entry > 0 else 0.0
+                    pnl = (price - entry) * qty
+                    pnl_percent = ((price - entry) / entry) * 100.0 if entry > 0 else 0.0
                     open_trade['close_price'] = price
-                    open_trade['exit_price'] = price
                     open_trade['close_time'] = t_time
-                    open_trade['exit_timestamp'] = t_time
-                    open_trade['pnl'] = pnl
-                    open_trade['pnl_percent'] = pnl_percent
-
-                    # Check if we had prior metadata
-                    prev = existing_lookup.get((sym, round(entry, 1)))
-                    if prev and prev.get('closed_by') == 'kill_switch':
-                        open_trade['status'] = 'closed_kill_switch'
-                        open_trade['closed_by'] = 'kill_switch'
-                        open_trade['exit_reason'] = '⚡ Kill Switch Exit'
-                        open_trade['reason'] = '⚡ Kill Switch Exit'
-                        open_trade['ai_reason'] = prev.get('ai_reason', 'Exited via emergency kill switch.')
-                    elif pnl > 0:
-                        open_trade['status'] = 'closed_tp'
-                        open_trade['exit_reason'] = '🎯 TP Hit'
-                        open_trade['reason'] = '🎯 TP Hit'
-                        open_trade['ai_reason'] = prev.get('ai_reason', f'Take-profit target hit with +${pnl:.2f} ({pnl_percent:+.2f}%) gain.') if prev else f'Take-profit target hit with +${pnl:.2f} ({pnl_percent:+.2f}%) gain.'
-                    elif pnl == 0:
-                        open_trade['status'] = 'closed_be'
-                        open_trade['exit_reason'] = '⚖️ Breakeven'
-                        open_trade['reason'] = '⚖️ Breakeven'
-                        open_trade['ai_reason'] = 'Closed at breakeven stop.'
-                    else:
-                        open_trade['status'] = 'closed_sl'
-                        open_trade['exit_reason'] = '🛑 Stop Loss'
-                        open_trade['reason'] = '🛑 Stop Loss'
-                        open_trade['ai_reason'] = prev.get('ai_reason', f'Stop-loss triggered limiting loss to -${abs(pnl):.2f} ({pnl_percent:+.2f}%).') if prev else f'Stop-loss triggered limiting loss to -${abs(pnl):.2f} ({pnl_percent:+.2f}%).'
-
+                    open_trade['status'] = "closed_tp" if pnl >= 0 else "closed_sl"
+                    open_trade['pnl'] = round(pnl, 2)
+                    open_trade['pnl_percent'] = round(pnl_percent, 2)
                     ledger.append(open_trade)
+                    trade_counter += 1
 
                     total_pnl += pnl
                     if pnl >= 0:
@@ -157,10 +118,6 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
         for sym, op in open_positions.items():
             ledger.append(op)
 
-        # Assign sequential trade IDs
-        for idx, tr in enumerate(ledger, 1):
-            tr['trade_id'] = idx
-
         total_trades = winning_trades + losing_trades
         win_rate = (winning_trades / total_trades * 100.0) if total_trades > 0 else 0.0
 
@@ -173,7 +130,7 @@ def sync_ledger_from_binance(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
             "largest_win": round(largest_win, 2),
             "largest_loss": round(largest_loss, 2),
             "current_streak": current_streak,
-            "max_drawdown": 0.66
+            "max_drawdown": round(max_drawdown, 2)
         }
 
         write_ledger(ledger)
@@ -213,9 +170,9 @@ def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, t
         "trade_id": len(trades) + 1,
         "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "symbol": symbol.upper().replace("/", ""),
+        "strategy": strategy_name or "MA Crossover",
+        "strategy_id": strategy_id or "strat_ma_crossover",
         "side": side.upper(),
-        "strategy_name": strategy_name or "SMC Order Flow 60/40",
-        "strategy_id": strategy_id or "strat_default_smc",
         "entry_price": float(entry_price),
         "quantity": float(quantity),
         "initial_quantity": float(quantity),
@@ -227,7 +184,6 @@ def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, t
         "tp1_hit": False,
         "partial_pnl": 0.0,
         "exit_price": None,
-        "close_price": None,
         "exit_timestamp": None,
         "pnl": None,
         "pnl_percent": None,
@@ -334,7 +290,6 @@ def close_trade(trade_id, exit_price, closed_by="brain", symbol=None):
     pnl_percent = (total_trade_pnl / (entry * initial_qty)) * 100 if (entry * initial_qty) > 0 else 0
 
     target["exit_price"] = exit_p
-    target["close_price"] = exit_p
     target["exit_timestamp"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     target["pnl"] = round(total_trade_pnl, 4)
     target["pnl_percent"] = round(pnl_percent, 2)

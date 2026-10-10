@@ -119,17 +119,16 @@ def ask_brain(brain_input=None, symbol="BTCUSDT"):
     context = build_context(symbol)
     sd = context['signal_data']
 
-    prompt = f"""You are an elite Crypto Derivatives Quant & Smart Money Concepts (SMC) Execution Specialist for BTCUSDT.
+    prompt = f"""You are an elite Crypto Derivatives Quantitative Trading Specialist for {context['symbol']}.
 
-## CURRENT MARKET & SMC TRIAD DATA
+## CURRENT MARKET & TECHNICAL DATA
 - Symbol: {context['symbol']}
 - Price: ${context['current_price']:,.2f}
 - Technical Signal: {sd['signal']} (Score: {sd['score']}/100, Confirmations: {sd['confirmations']})
-- Liquidity Sweep Signal: {sd.get('sweep_signal', 'NONE')}
-- 15m/5m Macro Trend: {sd.get('macro_trend', 'NEUTRAL')}
-- 5m Fib OTE Sweet Spot (0.705): ${sd.get('fib_ote_sweet_spot', 0) or 0:,.2f}
+- Trend Direction: {sd.get('macro_trend', 'NEUTRAL')}
+- RSI Momentum: {sd.get('rsi', 50.0)}
 - ATR (Volatility): ${sd['atr']:.2f}
-- Reasons & Checklist: {', '.join(sd['reasons'])}
+- Key Technical Indicators: {', '.join(sd['reasons'])}
 
 ## TRADING PERFORMANCE & CAPITAL RISK
 - Total Trades: {context['stats']['total_trades']}
@@ -144,25 +143,25 @@ def ask_brain(brain_input=None, symbol="BTCUSDT"):
 {context['learnings']}
 
 ## STRATEGY PLAYBOOK & EXECUTION RULES:
-The strategy evaluates TWO High-Probability Setups targeting 1:3.2+ Asymmetric Risk-to-Reward:
+The strategy evaluates Moving Average (MA) crossovers and RSI momentum:
 
-### SETUP A: DEEP OTE / LIQUIDITY SWEEP REVERSAL
-- 1H Macro Trend Alignment
-- Deep 1H Fib Golden Zone Retracement (0.618 - 0.786) OR 15m/5m Liquidity Sweep (SSL/BSL) OR Oversold/Overbought RSI
-- Output: "action": "BUY" (or "SELL"), "confidence": 7-9.
+### BUY SETUP:
+- Fast EMA crosses or is aligned above Slow EMA.
+- RSI in healthy bullish momentum (above 45 and below 70, not overbought).
+- Macro trend aligned with upward momentum.
+- Output: "action": "BUY", "confidence": 7-9.
 
-### SETUP B: TREND CONTINUATION FVG ENTRY
-- 1H Macro Trend Alignment (1H Trend = BULL or BEAR)
-- 5m Fair Value Gap (FVG) / Order Block Bounce with healthy RSI momentum
-- High Volume Institutional Displacement
-- Output: "action": "BUY" (or "SELL"), "confidence": 6-8.
+### SELL SETUP:
+- Fast EMA crosses or is aligned below Slow EMA.
+- RSI in bearish momentum (below 55 and above 30, not oversold).
+- Macro trend aligned with downward momentum.
+- Output: "action": "SELL", "confidence": 7-9.
 
 ### STRICT FILTERS:
-1. If market is in choppy consolidation with no clean trend, FVG, or sweep, output "action": "HOLD", "confidence": 1-4.
-2. Target Minimum 1:3.2 Risk-to-Reward Ratio (R:R) for optimal asymmetric returns (Tight SL, Big Profit Target).
+1. If market is in choppy consolidation with flat moving averages or extreme RSI, output "action": "HOLD", "confidence": 1-4.
+2. Ensure asymmetric Risk-to-Reward ratio before approving trades.
 
 Output MUST be a JSON object with keys: "action" ("BUY", "SELL", or "HOLD"), "confidence" (1-10 integer), "reasoning" (string), "risk_level" ("LOW", "MEDIUM", or "HIGH").
-
 """
 
     models_to_try = [MODEL_NAME, FALLBACK_MODEL_NAME]
