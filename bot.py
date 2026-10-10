@@ -393,7 +393,7 @@ body {
 """
 
 DASHBOARD_JS = """
-let currentMode = 'main';
+let currentMode = 'test';
 
 function toggleSwitch(el) {
   el.classList.toggle('active');
@@ -435,35 +435,15 @@ function switchPerfView(view, btn) {
 }
 
 function switchConsoleMode(mode) {
-  currentMode = mode;
+  if (mode === 'main') {
+    alert('🔒 REAL LIVE ACCOUNT NOT CONNECTED:\\n\\nYou are currently running in 100% Risk-Free Simulation Sandbox on Binance Spot Testnet & Delta Demo.\\n\\nReal money account is not connected yet.');
+    return;
+  }
+  currentMode = 'test';
   const mainBtn = document.getElementById('mode-main-btn');
   const testBtn = document.getElementById('mode-test-btn');
-  const statusPill = document.getElementById('engine-status-text');
-  const actionBtnText = document.getElementById('action-btn-text');
-  const viewMain = document.getElementById('view-main');
-  const viewTest = document.getElementById('view-test');
-
-  if (mode === 'main') {
-    if (mainBtn) mainBtn.classList.add('active');
-    if (testBtn) testBtn.classList.remove('active');
-    if (statusPill) {
-      statusPill.textContent = 'LIVE SPOT';
-      statusPill.style.color = '#c084fc';
-    }
-    if (actionBtnText) actionBtnText.textContent = '+ Configure Strategy';
-    if (viewMain) viewMain.style.display = 'block';
-    if (viewTest) viewTest.style.display = 'none';
-  } else {
-    if (testBtn) testBtn.classList.add('active');
-    if (mainBtn) mainBtn.classList.remove('active');
-    if (statusPill) {
-      statusPill.textContent = 'TESTNET SANDBOX';
-      statusPill.style.color = '#fbbf24';
-    }
-    if (actionBtnText) actionBtnText.textContent = '+ Configure Strategy';
-    if (viewMain) viewMain.style.display = 'none';
-    if (viewTest) viewTest.style.display = 'block';
-  }
+  if (testBtn) testBtn.classList.add('active');
+  if (mainBtn) mainBtn.classList.remove('active');
 }
 
 function handleDeployAction() {
@@ -586,6 +566,62 @@ def generate_dashboard_html():
 
     # Win rate circle stroke calculation (perimeter = 2 * PI * 14 = ~88)
     win_dash = round((win_rate / 100.0) * 88, 1)
+
+    # Live Balances: Binance Spot Testnet + Delta Exchange India Testnet
+    binance_usdt_bal = 9992.78
+    try:
+        from exchange import get_account_balance
+        b_balances = get_account_balance()
+        for b in b_balances:
+            if b.get("asset") == "USDT":
+                binance_usdt_bal = float(b.get("free", 0))
+                break
+    except Exception:
+        pass
+    binance_bal_str = f"${binance_usdt_bal:,.2f} USDT"
+
+    delta_usd_bal = 0.0
+    delta_status_text = "Not Connected"
+    delta_status_color = "#9490b0"
+    delta_ip_warning = ""
+    try:
+        import delta_exchange
+        if delta_exchange.DELTA_API_KEY:
+            d_bal = delta_exchange.get_balance()
+            if isinstance(d_bal, dict) and d_bal.get("error") == "ip_not_whitelisted":
+                client_ip = d_bal.get("client_ip", "")
+                delta_status_text = "IP Not Whitelisted"
+                delta_status_color = "#fbbf24"
+                delta_ip_warning = f"Delta API has IP restriction. To view Delta balances, add Render server IP ({client_ip or 'see /ip'}) to Delta API key settings, or uncheck 'Restrict IP' in Delta API settings."
+            elif isinstance(d_bal, dict) and len(d_bal) > 0:
+                delta_usd_bal = delta_exchange.get_usd_balance()
+                delta_status_text = f"${delta_usd_bal:,.2f} USD"
+                delta_status_color = "#34d399"
+            else:
+                delta_status_text = "$0.00 USD (Demo)"
+                delta_status_color = "#c084fc"
+        else:
+            delta_status_text = "API Key Missing"
+            delta_status_color = "#9490b0"
+    except Exception:
+        delta_status_text = "Sync Error"
+        delta_status_color = "#9490b0"
+
+    total_sandbox_balance = binance_usdt_bal + delta_usd_bal
+    total_sandbox_bal_str = f"${total_sandbox_balance:,.2f}"
+
+    delta_ip_notice_html = ""
+    if delta_ip_warning:
+        delta_ip_notice_html = f"""
+        <div style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.3); border-radius:10px; padding:12px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">⚠️</span>
+            <span style="font-size:12px; font-weight:700; color:#fbbf24;">Delta Exchange Notice:</span>
+            <span style="font-size:11px; color:#e2e8f0;">{delta_ip_warning}</span>
+          </div>
+          <span style="font-size:10px; font-family:var(--font-mono); color:#fbbf24; background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.3); padding:3px 8px; border-radius:4px;">IP RESTRICTION ON API</span>
+        </div>
+        """
 
     # Emergency Kill Switch / Circuit Breaker Banner
     kill_switch_banner = ""
@@ -864,15 +900,15 @@ def generate_dashboard_html():
       </nav>
     </div>
 
-    <!-- CENTER SWITCHER: LIVE vs TESTNET Capsule -->
+    <!-- CENTER SWITCHER: TESTNET vs REAL LIVE Capsule -->
     <div class="mode-capsule">
-      <button id="mode-main-btn" class="mode-btn active" onclick="switchConsoleMode('main')">
+      <button id="mode-test-btn" class="mode-btn active" onclick="switchConsoleMode('test')" title="Paper Sandbox Active">
         <span style="width:6px; height:6px; border-radius:50%; background:#a855f7; display:inline-block; box-shadow:0 0 8px rgba(168,85,247,0.9);"></span>
-        LIVE
+        TESTNET SANDBOX
       </button>
-      <button id="mode-test-btn" class="mode-btn" onclick="switchConsoleMode('test')">
+      <button id="mode-main-btn" class="mode-btn" onclick="switchConsoleMode('main')" style="opacity:0.6;" title="Real Money Not Connected">
         <span style="width:6px; height:6px; border-radius:50%; background:#64748b; display:inline-block;"></span>
-        TESTNET
+        🔒 REAL LIVE
       </button>
     </div>
 
@@ -910,6 +946,20 @@ def generate_dashboard_html():
 
     {kill_switch_banner}
 
+    <!-- Top Sandbox Status Banner -->
+    <div style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:10px; padding:10px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; box-shadow:0 0 16px rgba(168,85,247,0.1);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="width:8px; height:8px; border-radius:50%; background:#c084fc; box-shadow:0 0 8px #c084fc;"></span>
+        <span style="font-size:12px; font-weight:700; color:#ffffff;">TESTNET PAPER SANDBOX MODE</span>
+        <span style="font-size:11px; color:#9490b0;">— Real account is not connected yet. Current trading is running on Binance Spot Testnet & Delta Demo (Zero Real-Money Risk).</span>
+      </div>
+      <div style="font-size:11px; font-family:var(--font-mono); color:#c084fc; font-weight:600;">
+        Paper Trading • Risk Free
+      </div>
+    </div>
+
+    {delta_ip_notice_html}
+
     <!-- ============================================== -->
     <!-- VIEW-MAIN: LIVE TRADING ENGINE & REAL POSITIONS -->
     <!-- ============================================== -->
@@ -945,22 +995,32 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <section style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:22px;">
         
-        <!-- Card 1: Estimated Balance -->
+        <!-- Card 1: Estimated Sandbox Balance (Binance + Delta) -->
         <div class="stat-card">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="stat-icon-box">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
               </div>
-              <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">Estimated Balance</span>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:13px; font-weight:600; color:#ffffff;">Testnet Balance</span>
+                <span style="font-size:9px; font-weight:700; color:#c084fc; background:rgba(168,85,247,0.18); border:1px solid rgba(168,85,247,0.35); padding:1px 5px; border-radius:4px; font-family:var(--font-mono);">SANDBOX</span>
+              </div>
             </div>
-            <span style="color:var(--text-muted); cursor:pointer;" title="Hide balance">👁️</span>
+            <span style="color:var(--text-muted); cursor:pointer;" title="Virtual Testnet Balance">👁️</span>
           </div>
-          <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:14px; letter-spacing:-0.02em; font-family:var(--font-mono);">
-            $9,992.78
+          <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:12px; letter-spacing:-0.02em; font-family:var(--font-mono);">
+            {total_sandbox_bal_str}
           </div>
-          <div style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11px; color:var(--text-secondary);">
-            <span style="color:#c084fc; font-weight:bold;">✓</span> Binance Spot Testnet
+          <div style="margin-top:10px; display:flex; flex-direction:column; gap:4px; font-size:11px; font-family:var(--font-mono); border-top:1px solid rgba(168,85,247,0.14); padding-top:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary);">Binance Testnet:</span>
+              <span style="color:#ffffff; font-weight:600;">{binance_bal_str}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary);">Delta Testnet:</span>
+              <span style="color:{delta_status_color}; font-weight:600;">{delta_status_text}</span>
+            </div>
           </div>
         </div>
 

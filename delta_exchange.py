@@ -28,8 +28,19 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-DELTA_API_KEY    = os.getenv("DELTA_TESTENT_API_KEY") or os.getenv("DELTA_TESTNET_API_KEY", "")
-DELTA_API_SECRET = os.getenv("DELTA_TESTENT_API_SECRET") or os.getenv("DELTA_TESTNET_API_SECRET", "")
+DELTA_API_KEY = (
+    os.getenv("DELTA_API_KEY") or
+    os.getenv("DELTA_TESTNET_API_KEY") or
+    os.getenv("DELTA_TESTENT_API_KEY") or
+    os.getenv("DELTA_TELTA_API_KEY") or
+    ""
+)
+DELTA_API_SECRET = (
+    os.getenv("DELTA_API_SECRET") or
+    os.getenv("DELTA_TESTNET_API_SECRET") or
+    os.getenv("DELTA_TESTENT_API_SECRET") or
+    ""
+)
 
 # Delta India Testnet base URL
 DELTA_BASE_URL = "https://cdn-ind.testnet.deltaex.org"
@@ -70,8 +81,9 @@ def get_balance() -> dict:
         client = _get_client()
         raw = client.get_all_wallet_balances()
         if isinstance(raw, dict) and raw.get("code") == "ip_not_whitelisted_for_api_key":
-            logger.error("[DELTA] ❌ API Key Error: IP is not whitelisted in Delta Exchange API settings!")
-            return {"error": "ip_not_whitelisted"}
+            client_ip = raw.get("context", {}).get("client_ip", "")
+            logger.error(f"[DELTA] ❌ API Key Error: IP is not whitelisted ({client_ip}) in Delta Exchange!")
+            return {"error": "ip_not_whitelisted", "client_ip": client_ip}
         result = {}
         if isinstance(raw, list):
             for item in raw:
