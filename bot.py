@@ -1,3 +1,12 @@
+import sys
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 import json
 import time
 import datetime
@@ -435,15 +444,24 @@ function switchPerfView(view, btn) {
 }
 
 function switchConsoleMode(mode) {
-  if (mode === 'main') {
-    alert('🔒 REAL LIVE ACCOUNT NOT CONNECTED:\\n\\nYou are currently running in 100% Risk-Free Simulation Sandbox on Binance Spot Testnet & Delta Demo.\\n\\nReal money account is not connected yet.');
-    return;
-  }
-  currentMode = 'test';
   const mainBtn = document.getElementById('mode-main-btn');
   const testBtn = document.getElementById('mode-test-btn');
-  if (testBtn) testBtn.classList.add('active');
-  if (mainBtn) mainBtn.classList.remove('active');
+  const viewTestnet = document.getElementById('view-testnet');
+  const viewLive = document.getElementById('view-live');
+
+  if (mode === 'main') {
+    currentMode = 'main';
+    if (testBtn) testBtn.classList.remove('active');
+    if (mainBtn) mainBtn.classList.add('active');
+    if (viewTestnet) viewTestnet.style.display = 'none';
+    if (viewLive) viewLive.style.display = 'block';
+  } else {
+    currentMode = 'test';
+    if (mainBtn) mainBtn.classList.remove('active');
+    if (testBtn) testBtn.classList.add('active');
+    if (viewTestnet) viewTestnet.style.display = 'block';
+    if (viewLive) viewLive.style.display = 'none';
+  }
 }
 
 function handleDeployAction() {
@@ -559,6 +577,40 @@ def generate_dashboard_html():
     pnl = safe_float(stats.get("total_pnl", 0.0))
     pnl_str = f"+${pnl:,.2f}" if pnl >= 0 else f"-${abs(pnl):,.2f}"
     pnl_color = "#34d399" if pnl >= 0 else "#f87171"
+
+    # Real Dynamic PnL calculation across timeframes from ledger
+    now_dt = datetime.now()
+    pnl_1d_val = 0.0
+    pnl_1w_val = 0.0
+    pnl_1m_val = 0.0
+    pnl_1y_val = 0.0
+    for t in ledger:
+        if isinstance(t, dict) and "pnl" in t:
+            trade_pnl = safe_float(t.get("pnl", 0.0))
+            t_str = t.get("timestamp", "")
+            try:
+                t_dt = datetime.strptime(t_str, "%Y-%m-%d %H:%M")
+                diff_days = (now_dt - t_dt).days
+                if diff_days <= 1:
+                    pnl_1d_val += trade_pnl
+                if diff_days <= 7:
+                    pnl_1w_val += trade_pnl
+                if diff_days <= 30:
+                    pnl_1m_val += trade_pnl
+                if diff_days <= 365:
+                    pnl_1y_val += trade_pnl
+            except Exception:
+                pass
+
+    def _fmt_pnl(val):
+        return f"+${val:,.2f}" if val >= 0 else f"-${abs(val):,.2f}"
+
+    pnl_1d_str = _fmt_pnl(pnl_1d_val)
+    pnl_1w_str = _fmt_pnl(pnl_1w_val)
+    pnl_1m_str = _fmt_pnl(pnl_1m_val)
+    pnl_1y_str = _fmt_pnl(pnl_1y_val)
+    pnl_all_str = pnl_str
+
     win_rate = safe_float(stats.get('win_rate', 0.0))
     total_trades = stats.get("total_trades", 0)
     streak = stats.get("current_streak", 0)
@@ -568,7 +620,7 @@ def generate_dashboard_html():
     win_dash = round((win_rate / 100.0) * 88, 1)
 
     # Live Balances: Binance Spot Testnet + Delta Exchange India Testnet
-    binance_usdt_bal = 9992.78
+    binance_usdt_bal = 10295.82
     try:
         from exchange import get_account_balance
         b_balances = get_account_balance()
@@ -584,26 +636,41 @@ def generate_dashboard_html():
     delta_status_text = "Not Connected"
     delta_status_color = "#9490b0"
     delta_ip_warning = ""
+    delta_client_ip = ""
+    delta_ticker_subrow = ""
     try:
         import delta_exchange
         if delta_exchange.DELTA_API_KEY:
             d_bal = delta_exchange.get_balance()
             if isinstance(d_bal, dict) and d_bal.get("error") == "ip_not_whitelisted":
-                client_ip = d_bal.get("client_ip", "")
-                delta_status_text = "IP Not Whitelisted"
+                delta_client_ip = d_bal.get("client_ip", "")
+                delta_status_text = f"IP Whitelist Needed ({delta_client_ip or 'Check IP'})"
                 delta_status_color = "#fbbf24"
-                delta_ip_warning = f"Delta API has IP restriction. To view Delta balances, add Render server IP ({client_ip or 'see /ip'}) to Delta API key settings, or uncheck 'Restrict IP' in Delta API settings."
-            elif isinstance(d_bal, dict) and len(d_bal) > 0:
+                delta_ip_warning = f"Delta Exchange Testnet API key has IP restriction active. Your current server/client IP is <strong style='color:#ffffff; font-family:var(--font-mono);'>{delta_client_ip or '49.42.203.195'}</strong>. To sync wallet balance: open Delta Exchange Testnet &rarr; API Settings &rarr; either add IP '<span style='color:#c084fc;'>{delta_client_ip or '49.42.203.195'}</span>' or uncheck 'Restrict IP'."
+            elif isinstance(d_bal, dict) and d_bal.get("error") == "invalid_api_key":
+                delta_status_text = "Invalid API Key"
+                delta_status_color = "#f87171"
+            elif isinstance(d_bal, dict) and len(d_bal) > 0 and not d_bal.get("error"):
                 delta_usd_bal = delta_exchange.get_usd_balance()
                 delta_status_text = f"${delta_usd_bal:,.2f} USD"
                 delta_status_color = "#34d399"
             else:
-                delta_status_text = "$0.00 USD (Demo)"
+                delta_status_text = "$0.00 USD (Connected)"
                 delta_status_color = "#c084fc"
+
+            # Live Delta BTC ticker
+            dt = delta_exchange.get_ticker("BTC")
+            if dt and dt.get("mark_price", 0) > 0:
+                delta_ticker_subrow = f"""
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+                  <span style="color:var(--text-secondary);">Delta BTC Perp:</span>
+                  <span style="color:#c084fc; font-weight:600;">${dt['mark_price']:,.2f}</span>
+                </div>
+                """
         else:
             delta_status_text = "API Key Missing"
             delta_status_color = "#9490b0"
-    except Exception:
+    except Exception as e:
         delta_status_text = "Sync Error"
         delta_status_color = "#9490b0"
 
@@ -613,13 +680,18 @@ def generate_dashboard_html():
     delta_ip_notice_html = ""
     if delta_ip_warning:
         delta_ip_notice_html = f"""
-        <div style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.3); border-radius:10px; padding:12px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.3); border-radius:10px; padding:12px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; box-shadow:0 0 16px rgba(251,191,36,0.08);">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:16px;">⚠️</span>
             <span style="font-size:12px; font-weight:700; color:#fbbf24;">Delta Exchange Notice:</span>
             <span style="font-size:11px; color:#e2e8f0;">{delta_ip_warning}</span>
           </div>
-          <span style="font-size:10px; font-family:var(--font-mono); color:#fbbf24; background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.3); padding:3px 8px; border-radius:4px;">IP RESTRICTION ON API</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button onclick="navigator.clipboard.writeText('{delta_client_ip or '49.42.203.195'}'); alert('Copied IP {delta_client_ip or '49.42.203.195'} to clipboard!');" style="background:rgba(251,191,36,0.2); border:1px solid rgba(251,191,36,0.4); color:#fbbf24; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">
+              📋 Copy IP ({delta_client_ip or '49.42.203.195'})
+            </button>
+            <span style="font-size:10px; font-family:var(--font-mono); color:#fbbf24; background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.3); padding:3px 8px; border-radius:4px;">IP RESTRICTION</span>
+          </div>
         </div>
         """
 
@@ -642,41 +714,29 @@ def generate_dashboard_html():
         </div>
         """
 
-    # Strategy Allocation Data (Moving Average Crossover Strategy)
-    total_allocated_inr = 10000.0
-    total_allocated_usd = 120.0
-    subscribed_count = 1
+    # Strategy Allocation Data
+    total_allocated_inr = 0.0
+    total_allocated_usd = 0.0
+    subscribed_count = 0
 
     live_strat_rows = """
-    <tr style="border-bottom:1px solid #161a24; transition:background 0.15s;" onmouseover="this.style.background='#131722'" onmouseout="this.style.background='transparent'">
-      <td style="padding:14px 10px; font-weight:600; color:#ffffff;">
-        MA Crossover Momentum <span style="font-size:10px; color:#8e95a5; background:#161a25; border:1px solid #222838; padding:2px 7px; border-radius:4px; margin-left:6px; font-family:var(--font-mono);">BTCUSDT • 5M</span>
-        <div style="font-size:11px; color:#64748b; font-weight:normal; margin-top:2px;">Fast EMA(9) / Slow EMA(21) crossover with RSI(14) momentum filter and dynamic ATR targets.</div>
-      </td>
-      <td style="padding:14px 10px; font-family:var(--font-mono);">
-        <span style="color:#ffffff; font-weight:600;">₹10,000</span> <span style="font-size:10px; color:#64748b;">($120.00)</span>
-      </td>
-      <td style="padding:14px 10px; font-family:var(--font-mono); font-weight:600; color:#34d399;">
-        Active <span style="font-size:10px; color:#64748b; font-weight:normal;">(Live)</span>
-      </td>
-      <td style="padding:14px 10px; text-align:right;">
-        <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px;">
-          <div class="toggle-switch active" onclick="toggleSwitch(this)">
-            <div class="toggle-handle"></div>
-          </div>
-        </div>
+    <tr>
+      <td colspan="4" style="text-align:center; padding:32px 10px; color:#9490b0;">
+        <div style="font-size:22px; margin-bottom:6px;">⚡</div>
+        <div style="font-weight:600; color:#ffffff; font-size:13px;">No Custom Strategies Configured</div>
+        <div style="font-size:11px; color:#64748b; margin-top:3px;">All strategies cleared. Click "+ Configure Strategy" above to add a new strategy.</div>
       </td>
     </tr>
     """
 
-    donut_circles = '<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#c084fc" stroke-width="4.5" stroke-dasharray="100 0" stroke-dashoffset="0" />'
+    donut_circles = '<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#334155" stroke-width="4.5" stroke-dasharray="100 0" stroke-dashoffset="0" />'
     donut_legend = """
     <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0;">
       <span style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:11px;">
-        <span style="width:7px; height:7px; border-radius:50%; background:#c084fc; display:inline-block;"></span>
-        MA Crossover (₹10,000)
+        <span style="width:7px; height:7px; border-radius:50%; background:#64748b; display:inline-block;"></span>
+        No Active Strategy
       </span>
-      <span style="font-family:var(--font-mono); color:#ffffff; font-weight:600; font-size:11px;">100%</span>
+      <span style="font-family:var(--font-mono); color:#64748b; font-weight:600; font-size:11px;">0%</span>
     </div>
     """
 
@@ -826,37 +886,42 @@ def generate_dashboard_html():
     rows_html = ""
     recent_trades = list(reversed([t for t in ledger if isinstance(t, dict)][-10:]))
     if not recent_trades:
-        recent_trades = [
-            {"trade_id": 14, "timestamp": "2026-09-22 13:37", "symbol": "BTCUSDT", "side": "BUY", "entry_price": 81908.01, "exit_price": 85176.80, "status": "closed_tp", "pnl": 181.55, "reason": "TP2 Major Liquidity"},
-            {"trade_id": 13, "timestamp": "2026-09-22 13:25", "symbol": "ETHUSDT", "side": "BUY", "entry_price": 2655.47, "exit_price": 2719.11, "status": "closed_tp", "pnl": 0.21, "reason": "TP1 Nearest 60%"}
-        ]
-
-    for t in recent_trades:
-        t_id = t.get('trade_id', '-')
-        t_time = t.get('timestamp', '')
-        t_sym = t.get('symbol', 'BTCUSDT')
-        t_side = t.get('side', 'BUY')
-        t_entry = safe_float(t.get('entry_price', 0.0))
-        t_exit = safe_float(t.get('exit_price', 0.0))
-        t_pnl = safe_float(t.get('pnl', 0.0))
-        t_reason = str(t.get('reason', t.get('status', 'CLOSED'))).upper()
-        t_reason_disp = (t_reason[:22] + "...") if len(t_reason) > 24 else t_reason
-        pnl_color = "#34d399" if t_pnl >= 0 else "#f87171"
-        pnl_val_text = f"+${t_pnl:,.2f}" if t_pnl >= 0 else f"-${abs(t_pnl):,.2f}"
-
-        rows_html += f"""
-        <tr style="border-bottom:1px solid #161a24; transition:background 0.15s;" onmouseover="this.style.background='#131722'" onmouseout="this.style.background='transparent'">
-            <td style="padding:12px 14px; font-weight:600; color:#ffffff; font-family:var(--font-mono);">#{t_id}</td>
-            <td style="padding:12px 14px; color:#64748b; font-family:var(--font-mono); font-size:11px;">{t_time}</td>
-            <td style="padding:12px 14px; color:#8e95a5; font-weight:600;">MA Crossover</td>
-            <td style="padding:12px 14px; font-weight:600; color:#ffffff; font-family:var(--font-mono);">{t_sym}</td>
-            <td style="padding:12px 14px; font-weight:700; color:{'#34d399' if t_side=='BUY' else '#f87171'};">{t_side}</td>
-            <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">${t_entry:,.2f}</td>
-            <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">${t_exit:,.2f}</td>
-            <td style="padding:12px 14px;"><span title="{t_reason}" style="padding:2px 8px; border-radius:4px; background:rgba(52,211,153,0.1); color:#34d399; border:1px solid rgba(52,211,153,0.25); font-size:10px; font-weight:600; white-space:nowrap; display:inline-block; max-width:180px; overflow:hidden; text-overflow:ellipsis;">{t_reason_disp}</span></td>
-            <td style="padding:12px 14px; text-align:right; font-weight:700; color:{pnl_color}; font-family:var(--font-mono);">{pnl_val_text}</td>
+        rows_html = """
+        <tr>
+            <td colspan="9" style="text-align:center; padding:36px 14px; color:#9490b0; font-size:12px;">
+                <div style="font-size:24px; margin-bottom:8px;">📡</div>
+                <div style="font-weight:600; color:#ffffff; font-size:13px; margin-bottom:4px;">No Closed Trades Yet</div>
+                <div style="color:#64748b; font-size:11px;">Bot is monitoring market conditions. Executed trades and profit realizations will appear here.</div>
+            </td>
         </tr>
         """
+    else:
+        for t in recent_trades:
+            t_id = t.get('trade_id', '-')
+            t_time = t.get('timestamp', '')
+            t_sym = t.get('symbol', 'BTCUSDT')
+            t_side = t.get('side', 'BUY')
+            t_entry = safe_float(t.get('entry_price', 0.0))
+            t_exit = safe_float(t.get('exit_price', 0.0))
+            t_pnl = safe_float(t.get('pnl', 0.0))
+            t_reason = str(t.get('reason', t.get('status', 'CLOSED'))).upper()
+            t_reason_disp = (t_reason[:22] + "...") if len(t_reason) > 24 else t_reason
+            pnl_color = "#34d399" if t_pnl >= 0 else "#f87171"
+            pnl_val_text = f"+${t_pnl:,.2f}" if t_pnl >= 0 else f"-${abs(t_pnl):,.2f}"
+
+            rows_html += f"""
+            <tr style="border-bottom:1px solid #161a24; transition:background 0.15s;" onmouseover="this.style.background='#131722'" onmouseout="this.style.background='transparent'">
+                <td style="padding:12px 14px; font-weight:600; color:#ffffff; font-family:var(--font-mono);">#{t_id}</td>
+                <td style="padding:12px 14px; color:#64748b; font-family:var(--font-mono); font-size:11px;">{t_time}</td>
+                <td style="padding:12px 14px; color:#8e95a5; font-weight:600;">MA Crossover</td>
+                <td style="padding:12px 14px; font-weight:600; color:#ffffff; font-family:var(--font-mono);">{t_sym}</td>
+                <td style="padding:12px 14px; font-weight:700; color:{'#34d399' if t_side=='BUY' else '#f87171'};">{t_side}</td>
+                <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">${t_entry:,.2f}</td>
+                <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">${t_exit:,.2f}</td>
+                <td style="padding:12px 14px;"><span title="{t_reason}" style="padding:2px 8px; border-radius:4px; background:rgba(52,211,153,0.1); color:#34d399; border:1px solid rgba(52,211,153,0.25); font-size:10px; font-weight:600; white-space:nowrap; display:inline-block; max-width:180px; overflow:hidden; text-overflow:ellipsis;">{t_reason_disp}</span></td>
+                <td style="padding:12px 14px; text-align:right; font-weight:700; color:{pnl_color}; font-family:var(--font-mono);">{pnl_val_text}</td>
+            </tr>
+            """
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -963,7 +1028,7 @@ def generate_dashboard_html():
     <!-- ============================================== -->
     <!-- VIEW-MAIN: LIVE TRADING ENGINE & REAL POSITIONS -->
     <!-- ============================================== -->
-    <div id="view-main">
+    <div id="view-testnet">
 
       <!-- Greeting & Timeframe Bar (NEXORA ALGO Header) -->
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
@@ -981,11 +1046,11 @@ def generate_dashboard_html():
 
           <!-- Timeframe Segmented Capsule -->
           <div class="timeframe-segmented-capsule">
-            <button onclick="changePnlTimeframe('1D', '+$24.10', this)">1D</button>
-            <button onclick="changePnlTimeframe('1W', '+$181.76', this)">1W</button>
-            <button onclick="changePnlTimeframe('1M', '+$1,450.20', this)">1M</button>
-            <button onclick="changePnlTimeframe('1Y', '+$6,820.40', this)">1Y</button>
-            <button class="active" onclick="changePnlTimeframe('All', '{pnl_str}', this)">All</button>
+            <button onclick="changePnlTimeframe('1D', '{pnl_1d_str}', this)">1D</button>
+            <button onclick="changePnlTimeframe('1W', '{pnl_1w_str}', this)">1W</button>
+            <button onclick="changePnlTimeframe('1M', '{pnl_1m_str}', this)">1M</button>
+            <button onclick="changePnlTimeframe('1Y', '{pnl_1y_str}', this)">1Y</button>
+            <button class="active" onclick="changePnlTimeframe('All', '{pnl_all_str}', this)">All</button>
           </div>
         </div>
       </div>
@@ -1021,6 +1086,7 @@ def generate_dashboard_html():
               <span style="color:var(--text-secondary);">Delta Testnet:</span>
               <span style="color:{delta_status_color}; font-weight:600;">{delta_status_text}</span>
             </div>
+            {delta_ticker_subrow}
           </div>
         </div>
 
@@ -1203,7 +1269,7 @@ def generate_dashboard_html():
               <h3 style="font-size:14px; font-weight:600; color:#ffffff;">Active Strategy (Isolated Capital)</h3>
               <p style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Strategy strictly bounded to isolated margin allocation limit.</p>
             </div>
-            <span style="font-size:10px; font-family:var(--font-mono); color:#c084fc; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:6px;">Max ₹10,000</span>
+            <span style="font-size:10px; font-family:var(--font-mono); color:#c084fc; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:6px;">0 Active Strategies</span>
           </div>
 
           <div style="overflow-x:auto; margin-top:8px;">
@@ -1302,26 +1368,79 @@ def generate_dashboard_html():
         </div>
       </section>
 
-    </div> <!-- END VIEW-MAIN -->
+    </div> <!-- END VIEW-TESTNET -->
 
+        <!-- ================================================================ -->
+    <!-- VIEW-LIVE: REAL MONEY LIVE EXECUTION CONSOLE                     -->
     <!-- ================================================================ -->
-    <!-- VIEW-TEST: TESTNET MONITOR                                       -->
-    <!-- ================================================================ -->
-    <div id="view-test" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
-        <div>
-          <h1 style="font-size:22px; font-weight:600; color:#ffffff; letter-spacing:-0.02em;">Binance Spot Testnet Console</h1>
-          <p style="font-size:12px; color:#8e95a5; margin-top:4px;">Paper trading simulation on live Binance candles using Moving Average Crossover strategy.</p>
+    <div id="view-live" style="display:none;">
+      <!-- Real Live Safety Banner -->
+      <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:12px; padding:20px 24px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; box-shadow:0 0 25px rgba(239,68,68,0.12);">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div style="width:42px; height:42px; border-radius:10px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); display:flex; align-items:center; justify-content:center; font-size:20px;">
+            🔒
+          </div>
+          <div>
+            <div style="font-size:15px; font-weight:700; color:#ffffff;">REAL LIVE ENVIRONMENT: DISCONNECTED & LOCKED</div>
+            <div style="font-size:12px; color:#fca5a5; margin-top:2px;">
+              Zero Real-Money Risk • Automated bot cycles are strictly isolated to TESTNET SANDBOX.
+            </div>
+          </div>
         </div>
-        <div style="text-align:right; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-          Feed: Live Binance WebSocket
+        <button onclick="switchConsoleMode('test')" class="btn-purple-pill" style="cursor:pointer;">
+          ⚡ Open Testnet Sandbox
+        </button>
+      </div>
+
+      <!-- Real Live Checklist Cards -->
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:24px;">
+        <div class="stat-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:13px; font-weight:600; color:#ffffff;">Binance Real Spot</span>
+            <span style="font-size:10px; font-weight:700; color:#9490b0; background:rgba(148,144,176,0.15); border:1px solid rgba(148,144,176,0.25); padding:2px 6px; border-radius:4px;">DISCONNECTED</span>
+          </div>
+          <div style="font-size:22px; font-weight:700; color:#9490b0; margin-top:12px; font-family:var(--font-mono);">$0.00 USD</div>
+          <div style="font-size:11px; color:#64748b; margin-top:8px;">Configure BINANCE_API_KEY & SECRET in .env to connect real account.</div>
+        </div>
+
+        <div class="stat-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:13px; font-weight:600; color:#ffffff;">Delta India Real Futures</span>
+            <span style="font-size:10px; font-weight:700; color:#9490b0; background:rgba(148,144,176,0.15); border:1px solid rgba(148,144,176,0.25); padding:2px 6px; border-radius:4px;">DISCONNECTED</span>
+          </div>
+          <div style="font-size:22px; font-weight:700; color:#9490b0; margin-top:12px; font-family:var(--font-mono);">$0.00 USD</div>
+          <div style="font-size:11px; color:#64748b; margin-top:8px;">Configure DELTA_API_KEY & SECRET in .env to connect real futures.</div>
+        </div>
+
+        <div class="stat-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:13px; font-weight:600; color:#ffffff;">Live Risk Protection</span>
+            <span style="font-size:10px; font-weight:700; color:#34d399; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.25); padding:2px 6px; border-radius:4px;">ARMED</span>
+          </div>
+          <div style="font-size:16px; font-weight:700; color:#34d399; margin-top:12px;">Circuit Breaker (-$50)</div>
+          <div style="font-size:11px; color:#64748b; margin-top:8px;">Emergency Kill Switch and Daily Drawdown limits active.</div>
         </div>
       </div>
-      <div class="clean-card" style="padding:22px;">
-        <h3 style="font-size:15px; font-weight:700; color:#ffffff;">Automated MA Strategy Running</h3>
-        <p style="font-size:12px; color:#8e95a5; margin-top:6px;">Trading bot is active on BTCUSDT. Simulated order executions and stop-loss trailing are handled in real-time.</p>
+
+      <!-- Real Live Safety Instructions -->
+      <div class="clean-card" style="padding:24px;">
+        <h3 style="font-size:15px; font-weight:700; color:#ffffff; margin-bottom:8px;">Real-Money Deployment Guide</h3>
+        <p style="font-size:12px; color:var(--text-secondary); line-height:1.6; margin-bottom:16px;">
+          To prevent any accidental losses, real trading is guarded until verified. To test your strategies without risk, always use the <strong style="color:#c084fc;">TESTNET SANDBOX</strong>. When you are ready for real funds:
+        </p>
+        <ol style="margin-left:20px; font-size:12px; color:#cbd5e1; line-height:1.8;">
+          <li>Create real API keys on Binance / Delta Exchange with <strong>Enable Trading</strong> only (NEVER enable Withdrawals).</li>
+          <li>Set IP Whitelisting on your exchange dashboard for maximum safety.</li>
+          <li>Update your <code style="color:#c084fc; font-family:var(--font-mono);">.env</code> file or deployment environment variables with production keys.</li>
+          <li>Restart the bot engine to begin live capital deployment.</li>
+        </ol>
+        <div style="margin-top:20px;">
+          <button onclick="switchConsoleMode('test')" class="btn-purple-pill">
+            &larr; Return to Active Testnet Sandbox
+          </button>
+        </div>
       </div>
-    </div> <!-- END VIEW-TEST -->
+    </div> <!-- END VIEW-LIVE -->
 
   </main>
 
