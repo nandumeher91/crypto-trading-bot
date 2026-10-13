@@ -2,7 +2,6 @@
 delta_exchange.py
 =================
 Delta Exchange India Testnet API Integration Layer
-Used by: strategy_dhurandhar.py (Dhurandhar 24H Trend Hunter + Options Strangle)
 
 Capabilities:
   - Fetch real-time 24-Hour High / Low for BTC and ETH
@@ -23,6 +22,15 @@ from delta_rest_client import DeltaRestClient, OrderType
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 
+import sys
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,12 +41,15 @@ DELTA_API_KEY = (
     os.getenv("DELTA_TESTNET_API_KEY") or
     os.getenv("DELTA_TESTENT_API_KEY") or
     os.getenv("DELTA_TELTA_API_KEY") or
+    os.getenv("DELTA_KEY") or
     ""
 )
 DELTA_API_SECRET = (
     os.getenv("DELTA_API_SECRET") or
     os.getenv("DELTA_TESTNET_API_SECRET") or
     os.getenv("DELTA_TESTENT_API_SECRET") or
+    os.getenv("DELTA_TELTA_API_SECRET") or
+    os.getenv("DELTA_SECRET") or
     ""
 )
 
@@ -76,14 +87,11 @@ def get_balance() -> dict:
     """
     Return wallet balances as a clean dict.
     Returns: {"USD": 100.0, "INR": 8500.0, "BTC": 0.0, "ETH": 0.0}
+    Or error dict: {"error": "ip_not_whitelisted", "client_ip": "..."}
     """
     try:
         client = _get_client()
         raw = client.get_all_wallet_balances()
-        if isinstance(raw, dict) and raw.get("code") == "ip_not_whitelisted_for_api_key":
-            client_ip = raw.get("context", {}).get("client_ip", "")
-            logger.error(f"[DELTA] ❌ API Key Error: IP is not whitelisted ({client_ip}) in Delta Exchange!")
-            return {"error": "ip_not_whitelisted", "client_ip": client_ip}
         result = {}
         if isinstance(raw, list):
             for item in raw:
@@ -92,8 +100,41 @@ def get_balance() -> dict:
         logger.info(f"[DELTA] Balance: {result}")
         return result
     except Exception as e:
+        err_obj = None
+        if hasattr(e, 'args') and len(e.args) > 0:
+            if isinstance(e.args[0], dict):
+                err_obj = e.args[0]
+            elif isinstance(e.args[0], str) and "{" in e.args[0]:
+                try:
+                    import ast
+                    err_obj = ast.literal_eval(e.args[0])
+                except Exception:
+                    pass
+
+        if isinstance(err_obj, dict):
+            code = err_obj.get("code")
+            if code == "ip_not_whitelisted_for_api_key":
+                client_ip = err_obj.get("context", {}).get("client_ip", "")
+                logger.error(f"[DELTA] ❌ IP Not Whitelisted in Delta Exchange ({client_ip})")
+                return {"error": "ip_not_whitelisted", "client_ip": client_ip}
+            elif code == "invalid_api_key":
+                logger.error("[DELTA] ❌ Invalid Delta API Key or Secret")
+                return {"error": "invalid_api_key"}
+            else:
+                logger.error(f"[DELTA] API Error: {err_obj}")
+                return {"error": code or "api_error", "detail": str(err_obj)}
+
+        err_str = str(e)
+        if "ip_not_whitelisted" in err_str:
+            import re
+            m = re.search(r"client_ip['\"]?:\s*['\"]([^'\"]+)['\"]", err_str)
+            client_ip = m.group(1) if m else ""
+            return {"error": "ip_not_whitelisted", "client_ip": client_ip}
+        elif "invalid_api_key" in err_str:
+            return {"error": "invalid_api_key"}
+
         logger.error(f"[DELTA] get_balance error: {e}")
-        return {}
+        return {"error": "unknown_error", "detail": str(e)}
 
 
 def get_usd_balance() -> float:
@@ -101,7 +142,6 @@ def get_usd_balance() -> float:
     bal = get_balance()
     if isinstance(bal, dict) and bal.get("error"):
         return 0.0
-    # Check for USD, USDT, or DET (Delta USD token)
     usd = bal.get("USD", 0.0) or bal.get("USDT", 0.0) or bal.get("DET", 0.0)
     if usd == 0.0 and len(bal) > 0:
         usd = sum(v for k, v in bal.items() if isinstance(v, (int, float)))
@@ -136,7 +176,7 @@ def get_ticker(asset: str) -> dict:
 def get_24h_range(asset: str) -> dict:
     """
     Returns the live 24-Hour High and Low for BTC or ETH.
-    These are the breakout levels for Dhurandhar Trend Hunter.
+    Used for 24-Hour range boundary and volatility analysis.
     """
     t = get_ticker(asset)
     return {
@@ -318,7 +358,7 @@ def get_options_for_strangle(asset: str, otm_pct: float = 0.12, prefer_monthly: 
     """
     Find the best OTM Call and Put to sell for a Strangle.
 
-    Pushkar's Dhurandhar logic:
+    Options Strangle logic:
       - Asset at $72k → Sell $81k CALL (~12% OTM) + $62k PUT (~14% OTM)
       - Target: Monthly expiry (8-35 days away) for maximum Theta decay
       - If no monthly found → use nearest weekly (>5 days)
@@ -487,7 +527,7 @@ def sell_option(product_id: int, symbol: str, contracts: int = 1) -> dict:
 
 def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.12) -> dict:
     """
-    Full Dhurandhar Option Selling: Sell OTM Call + Sell OTM Put.
+    Quantitative Option Selling: Sell OTM Call + Sell OTM Put.
 
     Both legs are sold simultaneously to collect premium from both sides.
     Profit comes from Theta (time decay) as long as price stays in the range.
@@ -575,7 +615,7 @@ if __name__ == "__main__":
     print("  DELTA EXCHANGE TESTNET - CONNECTION TEST")
     print("="*55)
     test_connection()
-    print("\n--- 24-Hour Range (Dhurandhar Breakout Levels) ---")
+    print("\n--- 24-Hour Range (Market Breakout Levels) ---")
     for asset in ["BTC", "ETH"]:
         r = get_24h_range(asset)
         print(f"  {asset}: Current ${r['current']:,.2f} | 24H High ${r['high_24h']:,.2f} | 24H Low ${r['low_24h']:,.2f}")

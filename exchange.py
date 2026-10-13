@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import logging
@@ -5,6 +6,13 @@ import requests
 import time as time_module
 from dotenv import load_dotenv
 from binance.client import Client
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 logger = logging.getLogger(__name__)
 
