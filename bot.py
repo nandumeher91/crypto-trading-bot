@@ -58,11 +58,11 @@ def safe_float(val, default=0.0):
 
 DASHBOARD_CSS = """
 :root {
-  --bg-pitch: #06050c;
-  --bg-surface: #0a0815;
-  --bg-card: #0d0a1c;
-  --bg-card-hover: #130f28;
-  --bg-inset: #070512;
+  --bg-pitch: #000000;
+  --bg-surface: #000000;
+  --bg-card: #000000;
+  --bg-card-hover: #030205;
+  --bg-inset: #000000;
   --border-subtle: rgba(168, 85, 247, 0.20);
   --border-hover: rgba(217, 70, 239, 0.50);
   --border-active: #a855f7;
@@ -98,30 +98,31 @@ body {
 }
 
 .clean-card {
-  background: var(--bg-card);
+  background: #000000;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   transition: all 0.25s ease;
   position: relative;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
 }
 .clean-card:hover {
   border-color: var(--border-hover);
+  background: #030205;
   box-shadow: 0 0 25px rgba(168, 85, 247, 0.20), inset 0 0 15px rgba(217, 70, 239, 0.05);
 }
 
 .stat-card {
-  background: var(--bg-card);
+  background: #000000;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   padding: 20px 22px;
   transition: all 0.25s ease;
   position: relative;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
 }
 .stat-card:hover {
   border-color: var(--border-hover);
-  background: var(--bg-card-hover);
+  background: #030205;
   box-shadow: 0 0 26px rgba(168, 85, 247, 0.25), inset 0 0 12px rgba(217, 70, 239, 0.04);
   transform: translateY(-1px);
 }
@@ -1140,7 +1141,7 @@ def generate_dashboard_html():
 <body>
 
   <!-- Top Sticky Navigation (NEXORA ALGO Purple Glow Style) -->
-  <header style="height:60px; border-bottom:1px solid rgba(168,85,247,0.22); background:rgba(6,5,12,0.95); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); padding:0 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
+  <header style="height:60px; border-bottom:1px solid rgba(168,85,247,0.22); background:rgba(0,0,0,0.96); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); padding:0 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
     <div style="display:flex; align-items:center; gap:28px;">
       <!-- NEXORA ALGO Sleek Brand Logo -->
       <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="switchNavTab('dashboard')">
@@ -1198,7 +1199,7 @@ def generate_dashboard_html():
     {kill_switch_banner}
 
     <!-- Top Sandbox Status Banner -->
-    <div style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:10px; padding:10px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; box-shadow:0 0 16px rgba(168,85,247,0.1);">
+    <div style="background:#000000; border:1px solid rgba(168,85,247,0.25); border-radius:10px; padding:10px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; box-shadow:0 0 16px rgba(0,0,0,0.5);">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="width:8px; height:8px; border-radius:50%; background:#c084fc; box-shadow:0 0 8px #c084fc;"></span>
         <span style="font-size:12px; font-weight:700; color:#ffffff;">TESTNET PAPER SANDBOX MODE</span>
@@ -1676,7 +1677,7 @@ def generate_dashboard_html():
 
     <!-- Strategy Configuration Modal -->
     <div id="strategy-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(6,5,12,0.85); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); z-index:100; align-items:center; justify-content:center;">
-      <div class="clean-card" style="width:90%; max-width:520px; background:#0d0a1c; border:1px solid rgba(168,85,247,0.4); box-shadow:0 0 40px rgba(168,85,247,0.35); padding:26px; border-radius:16px;">
+      <div class="clean-card" style="width:90%; max-width:520px; background:#000000; border:1px solid rgba(168,85,247,0.4); box-shadow:0 0 40px rgba(168,85,247,0.35); padding:26px; border-radius:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.2); padding-bottom:14px; margin-bottom:18px;">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-size:20px;">⚙️</span>
