@@ -834,15 +834,8 @@ def generate_dashboard_html():
                 delta_status_text = "$0.00 USD (Connected)"
                 delta_status_color = "#c084fc"
 
-            # Live Delta BTC ticker
-            dt = delta_exchange.get_ticker("BTC")
-            if dt and dt.get("mark_price", 0) > 0:
-                delta_ticker_subrow = f"""
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
-                  <span style="color:var(--text-secondary);">Delta BTC Perp:</span>
-                  <span style="color:#c084fc; font-weight:600;">${dt['mark_price']:,.2f}</span>
-                </div>
-                """
+            # Delta connected successfully
+            pass
         else:
             delta_status_text = "API Key Missing"
             delta_status_color = "#9490b0"
@@ -1279,7 +1272,6 @@ def generate_dashboard_html():
               <span style="color:var(--text-secondary);">Delta Testnet:</span>
               <span style="color:{delta_status_color}; font-weight:600;">{delta_status_text}</span>
             </div>
-            {delta_ticker_subrow}
           </div>
         </div>
 
@@ -1836,25 +1828,7 @@ STRATEGIES_FILE = os.path.join(BASE_DIR, "strategies.json")
 
 def load_strategies():
     if not os.path.exists(STRATEGIES_FILE):
-        default_strats = [
-            {
-                "id": "strat_ma_crossover",
-                "name": "MA Crossover Momentum",
-                "symbol": "BTCUSDT",
-                "type": "Trend Following (EMA 9/21 + RSI)",
-                "capital_usd": 120.0,
-                "sl_pct": 1.2,
-                "tp1_pct": 1.8,
-                "tp2_pct": 3.0,
-                "active": True
-            }
-        ]
-        try:
-            with open(STRATEGIES_FILE, "w") as f:
-                json.dump(default_strats, f, indent=2)
-        except Exception:
-            pass
-        return default_strats
+        return []
     try:
         with open(STRATEGIES_FILE, "r") as f:
             return json.load(f)
@@ -2483,10 +2457,16 @@ def run_bot_once():
         logger.info(f"Max open positions reached ({len(open_trades)}/{MAX_OPEN_POSITIONS}): {open_symbols}. Managing active positions.")
         return
 
-    sym = PRIMARY_SYMBOL
-    strat_name = "MA Crossover Momentum"
-    strat_id = "strat_ma_crossover"
-    cap_usd = 120.0
+    active_strats = [s for s in load_strategies() if s.get("active", True)]
+    if not active_strats:
+        logger.info("⏸️ STRATEGY HUB: No active custom strategies configured. Automated entries on standby.")
+        return
+
+    current_strat = active_strats[0]
+    sym = current_strat.get("symbol", PRIMARY_SYMBOL)
+    strat_name = current_strat.get("name", "Custom Quantitative Strategy")
+    strat_id = current_strat.get("id", "custom_strat")
+    cap_usd = float(current_strat.get("capital_usd", 100.0))
 
     if sym in open_symbols:
         return
