@@ -1,0 +1,13 @@
+[
+  {
+    "id": "strat_ma_crossover",
+    "name": "MA Crossover Momentum",
+    "symbol": "BTCUSDT",
+    "type": "Trend Following (EMA 9/21 + RSI)",
+    "capital_usd": 120.0,
+    "sl_pct": 1.2,
+    "tp1_pct": 1.8,
+    "tp2_pct": 3.0,
+    "active": true
+  }
+]

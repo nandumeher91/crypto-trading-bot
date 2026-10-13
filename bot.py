@@ -403,9 +403,187 @@ body {
 
 DASHBOARD_JS = """
 let currentMode = 'test';
+let currentOrderSide = 'BUY';
+window.lastKnownPrice = 83000;
 
-function toggleSwitch(el) {
-  el.classList.toggle('active');
+function selectOrderSide(side) {
+  currentOrderSide = side;
+  const buyBtn = document.getElementById('side-buy-btn');
+  const sellBtn = document.getElementById('side-sell-btn');
+  if (side === 'BUY') {
+    if (buyBtn) { buyBtn.style.background = 'rgba(16,185,129,0.25)'; buyBtn.style.borderColor = '#10b981'; }
+    if (sellBtn) { sellBtn.style.background = 'rgba(239,68,68,0.08)'; sellBtn.style.borderColor = 'rgba(239,68,68,0.25)'; }
+  } else {
+    if (sellBtn) { sellBtn.style.background = 'rgba(239,68,68,0.25)'; sellBtn.style.borderColor = '#ef4444'; }
+    if (buyBtn) { buyBtn.style.background = 'rgba(16,185,129,0.08)'; buyBtn.style.borderColor = 'rgba(16,185,129,0.25)'; }
+  }
+}
+
+function setAmountQuick(amt) {
+  const inp = document.getElementById('manual-order-amount');
+  if (inp) {
+    inp.value = amt;
+    updateEstQty();
+  }
+}
+
+function updateEstQty() {
+  const symEl = document.getElementById('manual-order-symbol');
+  const amtEl = document.getElementById('manual-order-amount');
+  const sym = symEl ? symEl.value : 'BTCUSDT';
+  const amt = parseFloat(amtEl ? amtEl.value : 20);
+  const disp = document.getElementById('est-qty-display');
+  if (!disp) return;
+  let p = window.lastKnownPrice || 83000;
+  let q = (amt / p);
+  if (sym.includes('BTC')) disp.innerText = 'Est. Size: ~' + q.toFixed(5) + ' BTC (~$' + amt.toFixed(2) + ')';
+  else if (sym.includes('ETH')) disp.innerText = 'Est. Size: ~' + (amt/2600).toFixed(4) + ' ETH (~$' + amt.toFixed(2) + ')';
+  else if (sym.includes('SOL')) disp.innerText = 'Est. Size: ~' + (amt/140).toFixed(2) + ' SOL (~$' + amt.toFixed(2) + ')';
+}
+
+function executeManualOrder() {
+  const symEl = document.getElementById('manual-order-symbol');
+  const amtEl = document.getElementById('manual-order-amount');
+  const sym = symEl ? symEl.value : 'BTCUSDT';
+  const amt = parseFloat(amtEl ? amtEl.value : 20);
+  if (amt < 15) {
+    alert('⚠️ Minimum Binance testnet order value is $15 USD.');
+    return;
+  }
+  const btn = document.getElementById('manual-order-submit-btn');
+  if (btn) { btn.disabled = true; btn.innerText = 'Submitting to Binance...'; }
+
+  fetch('/api/manual_order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol: sym, side: currentOrderSide, amount_usd: amt })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (btn) { btn.disabled = false; btn.innerText = '⚡ Execute Order'; }
+    if (data.success) {
+      alert('✅ SUCCESS: ' + data.message);
+      window.location.reload();
+    } else {
+      alert('❌ FAILED: ' + (data.message || data.error));
+    }
+  })
+  .catch(err => {
+    if (btn) { btn.disabled = false; btn.innerText = '⚡ Execute Order'; }
+    alert('Network error executing order: ' + err);
+  });
+}
+
+function openStrategyModal() {
+  const m = document.getElementById('strategy-modal');
+  if (m) m.style.display = 'flex';
+}
+
+function closeStrategyModal() {
+  const m = document.getElementById('strategy-modal');
+  if (m) m.style.display = 'none';
+}
+
+function saveCustomStrategy(e) {
+  if (e) e.preventDefault();
+  const name = document.getElementById('strat-name-input').value;
+  const type = document.getElementById('strat-type-input').value;
+  const sym = document.getElementById('strat-sym-input').value;
+  const cap = parseFloat(document.getElementById('strat-cap-input').value);
+  const sl = parseFloat(document.getElementById('strat-sl-input').value);
+  const tp = parseFloat(document.getElementById('strat-tp-input').value);
+
+  fetch('/api/save_strategy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: name,
+      type: type,
+      symbol: sym,
+      capital_usd: cap,
+      sl_pct: sl,
+      tp1_pct: (tp * 0.6),
+      tp2_pct: tp,
+      active: true
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      alert('✅ Strategy Configured & Saved Successfully!');
+      closeStrategyModal();
+      window.location.reload();
+    } else {
+      alert('❌ Failed: ' + (data.message || data.error));
+    }
+  })
+  .catch(err => alert('Network error: ' + err));
+}
+
+function toggleStrategyStatus(stratId) {
+  fetch('/api/toggle_strategy?id=' + stratId)
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) window.location.reload();
+  });
+}
+
+function deleteStrategy(stratId) {
+  if (!confirm('Are you sure you want to delete this strategy?')) return;
+  fetch('/api/delete_strategy?id=' + stratId)
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) window.location.reload();
+  });
+}
+
+function toggleBotAutoScan() {
+  fetch('/api/toggle_bot')
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      window.location.reload();
+    }
+  })
+  .catch(err => alert('Error toggling bot auto-scan: ' + err));
+}
+
+function switchNavTab(tabName, event) {
+  if (event) event.preventDefault();
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
+
+  const secMap = {
+    'dashboard': 'sec-dashboard',
+    'positions': 'sec-positions',
+    'strategy': 'sec-strategy',
+    'manual-trade': 'sec-manual-trade',
+    'history': 'sec-history'
+  };
+  const targetId = secMap[tabName] || 'sec-dashboard';
+  const el = document.getElementById(targetId);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function handleDeployAction() {
+  openStrategyModal();
+}
+
+function switchPerfView(view, btn) {
+  const buttons = btn.parentElement.querySelectorAll('button');
+  buttons.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const tvCont = document.getElementById('chart-tv-container');
+  const pnlCont = document.getElementById('chart-pnl-container');
+  if (view === 'tv') {
+    if (tvCont) tvCont.style.display = 'block';
+    if (pnlCont) pnlCont.style.display = 'none';
+  } else {
+    if (tvCont) tvCont.style.display = 'none';
+    if (pnlCont) pnlCont.style.display = 'block';
+  }
 }
 
 function changePnlTimeframe(tf, val, btn) {
@@ -413,31 +591,6 @@ function changePnlTimeframe(tf, val, btn) {
   if (pnlDisp) {
     pnlDisp.innerHTML = val;
   }
-  const buttons = btn.parentElement.querySelectorAll('button');
-  buttons.forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-
-  const chartPath = document.getElementById('perf-chart-line');
-  const chartArea = document.getElementById('perf-chart-area');
-  if (chartPath && chartArea) {
-    let p = "M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168";
-    let a = "M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168 L 140,180 L 0,180 Z";
-    if (tf === '1D') {
-      p = "M 0,150 Q 60,110 120,135 T 240,70 T 360,95 T 500,45";
-      a = "M 0,150 Q 60,110 120,135 T 240,70 T 360,95 T 500,45 L 500,180 L 0,180 Z";
-    } else if (tf === '1W') {
-      p = "M 0,160 Q 50,140 100,110 T 200,90 T 350,60 T 500,30";
-      a = "M 0,160 Q 50,140 100,110 T 200,90 T 350,60 T 500,30 L 500,180 L 0,180 Z";
-    } else if (tf === '1M') {
-      p = "M 0,170 Q 70,160 140,115 T 280,100 T 400,40 T 500,20";
-      a = "M 0,170 Q 70,160 140,115 T 280,100 T 400,40 T 500,20 L 500,180 L 0,180 Z";
-    }
-    chartPath.setAttribute('d', p);
-    chartArea.setAttribute('d', a);
-  }
-}
-
-function switchPerfView(view, btn) {
   const buttons = btn.parentElement.querySelectorAll('button');
   buttons.forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -464,23 +617,29 @@ function switchConsoleMode(mode) {
   }
 }
 
-function handleDeployAction() {
-  if (currentMode === 'main') {
-    switchConsoleMode('test');
-    const formEl = document.getElementById('new-strat-creator-card');
-    if (formEl) formEl.scrollIntoView({ behavior: 'smooth' });
-  } else {
-    const formEl = document.getElementById('new-strat-creator-card');
-    if (formEl) formEl.scrollIntoView({ behavior: 'smooth' });
+let balanceHidden = false;
+function toggleBalanceVisibility() {
+  balanceHidden = !balanceHidden;
+  const el = document.getElementById('total-balance-display');
+  if (el) {
+    if (!el.dataset.val) el.dataset.val = el.innerText;
+    el.innerText = balanceHidden ? '••••••••' : el.dataset.val;
   }
 }
 
+function filterLedgerTable(query) {
+  query = (query || '').toLowerCase();
+  const rows = document.querySelectorAll('#ledger-table-body tr');
+  rows.forEach(r => {
+    const text = r.innerText.toLowerCase();
+    r.style.display = text.includes(query) ? '' : 'none';
+  });
+}
 
 function manualClosePosition(tradeId, symbol) {
   if (!confirm('⚠️ CONFIRM MANUAL MARKET EXIT:\\n\\nAre you sure you want to close Trade #' + tradeId + ' (' + symbol + ') at current market price?')) {
     return;
   }
-  
   fetch('/api/close_position?id=' + tradeId, { method: 'GET' })
     .then(r => r.json())
     .then(data => {
@@ -529,6 +688,23 @@ function resumeBot() {
     })
     .catch(err => alert('Network error: ' + err));
 }
+
+// Live background price polling every 5s without full page reload
+function fetchLiveStatus() {
+  fetch('/api/status')
+    .then(r => r.json())
+    .then(d => {
+      if (!d || !d.success) return;
+      if (d.current_price) {
+        window.lastKnownPrice = d.current_price;
+        updateEstQty();
+        const pricePills = document.querySelectorAll('.live-price-val');
+        pricePills.forEach(p => p.innerText = '$' + d.current_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+      }
+    })
+    .catch(() => {});
+}
+setInterval(fetchLiveStatus, 5000);
 """
 
 def generate_dashboard_html():
@@ -715,19 +891,51 @@ def generate_dashboard_html():
         """
 
     # Strategy Allocation Data
-    total_allocated_inr = 0.0
-    total_allocated_usd = 0.0
-    subscribed_count = 0
+    strategies_list = load_strategies()
+    active_strats = [s for s in strategies_list if s.get("active", True)]
+    active_strat_count = len(active_strats)
+    total_strat_count = len(strategies_list)
 
-    live_strat_rows = """
-    <tr>
-      <td colspan="4" style="text-align:center; padding:32px 10px; color:#9490b0;">
-        <div style="font-size:22px; margin-bottom:6px;">⚡</div>
-        <div style="font-weight:600; color:#ffffff; font-size:13px;">No Custom Strategies Configured</div>
-        <div style="font-size:11px; color:#64748b; margin-top:3px;">All strategies cleared. Click "+ Configure Strategy" above to add a new strategy.</div>
-      </td>
-    </tr>
-    """
+    live_strat_rows = ""
+    if not strategies_list:
+        live_strat_rows = """
+        <tr>
+          <td colspan="4" style="text-align:center; padding:32px 10px; color:#9490b0;">
+            <div style="font-size:22px; margin-bottom:6px;">⚡</div>
+            <div style="font-weight:600; color:#ffffff; font-size:13px;">No Custom Strategies Configured</div>
+            <div style="font-size:11px; color:#64748b; margin-top:3px;">Click "+ Configure Strategy" above to add your first strategy.</div>
+          </td>
+        </tr>
+        """
+    else:
+        for s in strategies_list:
+            s_id = s.get("id", "strat_default")
+            s_name = s.get("name", "Strategy")
+            s_sym = s.get("symbol", "BTCUSDT")
+            s_cap = safe_float(s.get("capital_usd", 100.0))
+            s_active = s.get("active", True)
+            status_badge = '<span style="font-size:10px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); padding:2px 8px; border-radius:9999px;">RUNNING</span>' if s_active else '<span style="font-size:10px; font-weight:700; color:#94a3b8; background:rgba(148,163,184,0.12); border:1px solid rgba(148,163,184,0.3); padding:2px 8px; border-radius:9999px;">PAUSED</span>'
+            btn_toggle_text = "Pause" if s_active else "Resume"
+            btn_toggle_color = "#fbbf24" if s_active else "#34d399"
+
+            live_strat_rows += f"""
+            <tr style="border-bottom:1px solid rgba(168,85,247,0.12);">
+              <td style="padding:12px 10px;">
+                <div style="font-weight:600; color:#ffffff; font-size:13px;">{s_name}</div>
+                <div style="font-size:10px; color:#c084fc; font-family:var(--font-mono); margin-top:2px;">{s_sym} • {s.get('type', 'Custom')}</div>
+              </td>
+              <td style="padding:12px 10px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">
+                ${s_cap:,.2f} USD
+              </td>
+              <td style="padding:12px 10px;">
+                {status_badge}
+              </td>
+              <td style="padding:12px 10px; text-align:right;">
+                <button onclick="toggleStrategyStatus('{s_id}')" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:{btn_toggle_color}; font-size:10px; font-weight:600; padding:4px 8px; border-radius:6px; cursor:pointer; margin-right:6px;">{btn_toggle_text}</button>
+                <button onclick="deleteStrategy('{s_id}')" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); color:#f87171; font-size:10px; font-weight:600; padding:4px 8px; border-radius:6px; cursor:pointer;" title="Delete Strategy">✕</button>
+              </td>
+            </tr>
+            """
 
     donut_circles = '<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#334155" stroke-width="4.5" stroke-dasharray="100 0" stroke-dashoffset="0" />'
     donut_legend = """
@@ -928,7 +1136,6 @@ def generate_dashboard_html():
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="25">
   <title>NEXORA ALGO — Quantitative Trading Terminal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -943,7 +1150,7 @@ def generate_dashboard_html():
   <header style="height:60px; border-bottom:1px solid rgba(168,85,247,0.22); background:rgba(6,5,12,0.95); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); padding:0 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
     <div style="display:flex; align-items:center; gap:28px;">
       <!-- NEXORA ALGO Sleek Brand Logo -->
-      <div style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+      <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="switchNavTab('dashboard')">
         <div style="width:34px; height:34px; border-radius:10px; background:var(--purple-gradient); display:flex; align-items:center; justify-content:center; box-shadow:0 0 16px rgba(217,70,239,0.55);">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
@@ -955,13 +1162,14 @@ def generate_dashboard_html():
 
       <!-- Navigation Links -->
       <nav style="display:flex; align-items:center; gap:22px;">
-        <a href="#dashboard" class="nav-tab active">
+        <a href="#dashboard" class="nav-tab active" data-tab="dashboard" onclick="switchNavTab('dashboard', event)">
           Dashboard
           <div class="active-indicator"></div>
         </a>
-        <a href="#positions" class="nav-tab">Positions</a>
-        <a href="#strategy" class="nav-tab">Strategy Hub <span class="badge-purple">Ready</span></a>
-        <a href="#history" class="nav-tab">Ledger</a>
+        <a href="#positions" class="nav-tab" data-tab="positions" onclick="switchNavTab('positions', event)">Positions</a>
+        <a href="#strategy" class="nav-tab" data-tab="strategy" onclick="switchNavTab('strategy', event)">Strategy Hub <span class="badge-purple">Ready</span></a>
+        <a href="#manual-trade" class="nav-tab" data-tab="manual-trade" onclick="switchNavTab('manual-trade', event)" style="color:#c084fc; font-weight:700;">⚡ Quick Trade</a>
+        <a href="#history" class="nav-tab" data-tab="history" onclick="switchNavTab('history', event)">Ledger</a>
       </nav>
     </div>
 
@@ -979,25 +1187,10 @@ def generate_dashboard_html():
 
     <!-- Header Right Controls -->
     <div style="display:flex; align-items:center; gap:10px;">
-      <!-- Search Ghost Button -->
-      <button class="btn-ghost-circle" title="Search">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <!-- Auto Scan Toggle -->
+      <button id="bot-auto-btn" onclick="toggleBotAutoScan()" style="padding:6px 12px; border-radius:8px; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.35); color:#c084fc; font-size:11px; font-weight:700; cursor:pointer;" title="Toggle Automated Strategy Scanning">
+        {'⚡ AUTO-SCAN: ON' if BOT_AUTO_RUN else '⏸️ AUTO-SCAN: OFF'}
       </button>
-
-      <!-- Bell Ghost Button -->
-      <button class="btn-ghost-circle" title="Notifications">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      </button>
-
-      <!-- Dark Mode Ghost Button -->
-      <button class="btn-ghost-circle" title="Toggle Theme">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-      </button>
-
-      <!-- User Avatar with Purple Ring -->
-      <div class="user-avatar-ring" title="Nandalal meher">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      </div>
 
       <!-- Emergency Kill Switch (Clean) -->
       <button onclick="triggerKillSwitch()" class="btn-kill-switch" title="Emergency Stop">
@@ -1072,9 +1265,9 @@ def generate_dashboard_html():
                 <span style="font-size:9px; font-weight:700; color:#c084fc; background:rgba(168,85,247,0.18); border:1px solid rgba(168,85,247,0.35); padding:1px 5px; border-radius:4px; font-family:var(--font-mono);">SANDBOX</span>
               </div>
             </div>
-            <span style="color:var(--text-muted); cursor:pointer;" title="Virtual Testnet Balance">👁️</span>
+            <span onclick="toggleBalanceVisibility()" style="color:var(--text-muted); cursor:pointer;" title="Hide/Show Balance">👁️</span>
           </div>
-          <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:12px; letter-spacing:-0.02em; font-family:var(--font-mono);">
+          <div id="total-balance-display" data-val="{total_sandbox_bal_str}" style="font-size:24px; font-weight:700; color:#ffffff; margin-top:12px; letter-spacing:-0.02em; font-family:var(--font-mono);">
             {total_sandbox_bal_str}
           </div>
           <div style="margin-top:10px; display:flex; flex-direction:column; gap:4px; font-size:11px; font-family:var(--font-mono); border-top:1px solid rgba(168,85,247,0.14); padding-top:8px;">
@@ -1150,32 +1343,30 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <section style="display:grid; grid-template-columns:2.1fr 1fr; gap:18px; margin-bottom:22px;">
         
-        <!-- Left: Portfolio Performance Chart (Neon Purple Curve) -->
+        <!-- Left: Portfolio Performance Chart (TradingView Live + PnL Curve) -->
         <div class="clean-card" style="padding:22px;">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-              <span style="font-size:14px; font-weight:600; color:#ffffff;">Portfolio Performance</span>
+              <span style="font-size:14px; font-weight:600; color:#ffffff;">Live Market & Performance</span>
             </div>
 
             <!-- Venues dropdown & View Toggle Capsule -->
             <div style="display:flex; align-items:center; gap:8px;">
-              <select style="background:var(--bg-inset); border:1px solid var(--border-subtle); border-radius:6px; color:var(--text-secondary); font-size:11px; padding:5px 10px; outline:none; font-family:var(--font-main);">
-                <option>Binance Spot Testnet</option>
-                <option>Quantitative Engine</option>
-              </select>
-
               <div class="perf-toggle-capsule">
-                <button class="active" onclick="switchPerfView('pnl', this)">P&L</button>
-                <button onclick="switchPerfView('daily', this)">Daily</button>
-                <button onclick="switchPerfView('perday', this)">Per Day</button>
+                <button class="active" onclick="switchPerfView('tv', this)">📊 Candlesticks</button>
+                <button onclick="switchPerfView('pnl', this)">📈 P&L Curve</button>
               </div>
             </div>
           </div>
 
-          <!-- NEXORA Neon Purple Curve Chart -->
-          <div style="position:relative; width:100%; height:210px; margin-top:10px;">
-            <!-- Y-Axis Labels -->
+          <!-- TradingView Live Candlestick Widget -->
+          <div id="chart-tv-container" style="position:relative; width:100%; height:230px; margin-top:8px; border-radius:10px; overflow:hidden;">
+            <iframe src="https://s.tradingview.com/widgetembed/?symbol=BINANCE%3ABTCUSDT&interval=5&theme=dark&style=1&timezone=Etc%2FUTC&hide_side_toolbar=1&allow_symbol_change=1" style="width:100%; height:100%; border:none; border-radius:10px;"></iframe>
+          </div>
+
+          <!-- NEXORA Neon Purple Curve Chart (Alternate View) -->
+          <div id="chart-pnl-container" style="display:none; position:relative; width:100%; height:210px; margin-top:10px;">
             <div style="position:absolute; left:0; top:0; bottom:20px; width:30px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:var(--text-muted); font-family:var(--font-mono);">
               <span>25</span>
               <span>20</span>
@@ -1197,23 +1388,15 @@ def generate_dashboard_html():
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                   </filter>
                 </defs>
-
-                <!-- Clean Dotted Horizontal Grid Lines -->
                 <line x1="0" y1="5" x2="500" y2="5" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
                 <line x1="0" y1="40" x2="500" y2="40" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
                 <line x1="0" y1="75" x2="500" y2="75" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
                 <line x1="0" y1="110" x2="500" y2="110" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
                 <line x1="0" y1="145" x2="500" y2="145" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
                 <line x1="0" y1="175" x2="500" y2="175" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-
-                <!-- Purple Glow Area Fill -->
                 <path id="perf-chart-area" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168 L 140,180 L 0,180 Z" fill="url(#neonPurpleGradient)" />
-
-                <!-- Neon Purple Line Curve (NEXORA Signature Line) -->
                 <path id="perf-chart-line" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168" fill="none" stroke="#c084fc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" filter="url(#neonPurpleGlow)" />
               </svg>
-
-              <!-- Chart Bottom Timeline -->
               <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); font-family:var(--font-mono); margin-top:6px;">
                 <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>Current</span>
               </div>
@@ -1239,28 +1422,82 @@ def generate_dashboard_html():
                 Strategy Hub Ready
               </div>
               <div style="font-size:12px; color:var(--text-secondary); line-height:1.5; margin-bottom:18px;">
-                Old strategies cleared. Ready to design & configure your next trading strategy.
+                Configure automated indicators & custom risk allocation.
               </div>
-              <button onclick="handleDeployAction()" class="btn-purple-pill">
+              <button onclick="openStrategyModal()" class="btn-purple-pill">
                 + Configure Strategy
               </button>
             </div>
           </div>
 
           <div style="border-top:1px solid rgba(168,85,247,0.18); padding-top:12px; display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); font-family:var(--font-mono);">
-            <span>MA Crossover Engine</span>
-            <span style="color:#c084fc; font-weight:600;">Active 24/7</span>
+            <span>Active Strategies:</span>
+            <span style="color:#c084fc; font-weight:600;">{active_strat_count} Running</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick Manual Execution Terminal -->
+      <section id="sec-manual-trade" class="clean-card" style="padding:22px; margin-bottom:22px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.18); padding-bottom:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:8px; background:rgba(168,85,247,0.15); display:flex; align-items:center; justify-content:center; font-size:16px;">⚡</div>
+            <div>
+              <h3 style="font-size:14px; font-weight:700; color:#ffffff;">Instant Order Execution Terminal</h3>
+              <p style="font-size:11px; color:var(--text-secondary); margin-top:1px;">Execute real-time test orders directly on Binance Spot Testnet with automated risk parameters.</p>
+            </div>
+          </div>
+          <span style="font-size:10px; font-family:var(--font-mono); font-weight:700; color:#34d399; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); padding:3px 8px; border-radius:6px;">LIVE TESTNET API</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:180px 180px 1fr 180px; gap:14px; align-items:end; flex-wrap:wrap;">
+          <div>
+            <label style="display:block; font-size:10px; color:var(--text-secondary); margin-bottom:6px; font-weight:700; text-transform:uppercase;">ORDER SIDE</label>
+            <div style="display:flex; gap:6px;">
+              <button id="side-buy-btn" onclick="selectOrderSide('BUY')" style="flex:1; padding:8px 0; border-radius:8px; border:1px solid #10b981; background:rgba(16,185,129,0.25); color:#34d399; font-weight:700; font-size:12px; cursor:pointer;">BUY (Long)</button>
+              <button id="side-sell-btn" onclick="selectOrderSide('SELL')" style="flex:1; padding:8px 0; border-radius:8px; border:1px solid rgba(239,68,68,0.25); background:rgba(239,68,68,0.08); color:#f87171; font-weight:700; font-size:12px; cursor:pointer;">SELL (Short)</button>
+            </div>
+          </div>
+
+          <div>
+            <label style="display:block; font-size:10px; color:var(--text-secondary); margin-bottom:6px; font-weight:700; text-transform:uppercase;">TRADING PAIR</label>
+            <select id="manual-order-symbol" onchange="updateEstQty()" style="width:100%; padding:8px 12px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-family:var(--font-mono); font-size:12px; outline:none;">
+              <option value="BTCUSDT">BTCUSDT</option>
+              <option value="ETHUSDT">ETHUSDT</option>
+              <option value="SOLUSDT">SOLUSDT</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display:block; font-size:10px; color:var(--text-secondary); margin-bottom:6px; font-weight:700; text-transform:uppercase;">POSITION CAPITAL (USD)</label>
+            <div style="display:flex; gap:6px;">
+              <input id="manual-order-amount" type="number" value="20" min="15" step="5" oninput="updateEstQty()" style="width:100px; padding:8px 12px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-family:var(--font-mono); font-size:12px; outline:none;">
+              <button onclick="setAmountQuick(15)" style="background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); color:#c084fc; font-size:11px; font-family:var(--font-mono); padding:0 10px; border-radius:6px; cursor:pointer;">$15</button>
+              <button onclick="setAmountQuick(30)" style="background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); color:#c084fc; font-size:11px; font-family:var(--font-mono); padding:0 10px; border-radius:6px; cursor:pointer;">$30</button>
+              <button onclick="setAmountQuick(50)" style="background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); color:#c084fc; font-size:11px; font-family:var(--font-mono); padding:0 10px; border-radius:6px; cursor:pointer;">$50</button>
+            </div>
+          </div>
+
+          <div>
+            <button id="manual-order-submit-btn" onclick="executeManualOrder()" class="btn-purple-pill" style="width:100%; padding:10px 0; font-size:12px; font-weight:700; cursor:pointer;">
+              ⚡ Execute Order
+            </button>
+            <div id="est-qty-display" style="font-size:10px; color:#94a3b8; font-family:var(--font-mono); text-align:center; margin-top:5px;">
+              Est. Size: ~0.00024 BTC (~$20.00)
+            </div>
           </div>
         </div>
       </section>
 
       <!-- Active Position Section (If Open) -->
-      {open_trade_html}
+      <div id="sec-positions">
+        {open_trade_html}
+      </div>
 
       <!-- ============================================== -->
       <!-- MID-LOWER: Active Strategy + Groq AI           -->
       <!-- ============================================== -->
-      <section style="display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-bottom:22px;">
+      <section id="sec-strategy" style="display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-bottom:22px;">
         
         <!-- Active Strategy Table with Capital Limits -->
         <div class="clean-card" style="padding:22px;">
@@ -1269,7 +1506,7 @@ def generate_dashboard_html():
               <h3 style="font-size:14px; font-weight:600; color:#ffffff;">Active Strategy (Isolated Capital)</h3>
               <p style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Strategy strictly bounded to isolated margin allocation limit.</p>
             </div>
-            <span style="font-size:10px; font-family:var(--font-mono); color:#c084fc; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:6px;">0 Active Strategies</span>
+            <span style="font-size:10px; font-family:var(--font-mono); color:#c084fc; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:6px;">{active_strat_count} Active Strategies</span>
           </div>
 
           <div style="overflow-x:auto; margin-top:8px;">
@@ -1279,7 +1516,7 @@ def generate_dashboard_html():
                   <th style="padding:10px 8px;">Strategy</th>
                   <th style="padding:10px 8px;">Allocated Limit</th>
                   <th style="padding:10px 8px;">Status</th>
-                  <th style="padding:10px 8px; text-align:right;">Active</th>
+                  <th style="padding:10px 8px; text-align:right;">Actions</th>
                 </tr>
               </thead>
               <tbody style="color:#cbd5e1;">
@@ -1337,13 +1574,16 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <!-- BOTTOM: Trade Execution History Table          -->
       <!-- ============================================== -->
-      <section class="clean-card" style="padding:22px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1a1e2a; padding-bottom:12px;">
+      <section id="sec-history" class="clean-card" style="padding:22px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1a1e2a; padding-bottom:12px; flex-wrap:wrap; gap:10px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <h3 style="font-size:14px; font-weight:600; color:#ffffff;">Trade Execution History</h3>
           </div>
-          <span style="font-size:11px; color:#64748b; font-family:var(--font-mono);">Binance Spot Testnet</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <input type="text" oninput="filterLedgerTable(this.value)" placeholder="🔍 Filter by Symbol or Side..." style="background:var(--bg-inset); border:1px solid var(--border-subtle); border-radius:6px; color:#ffffff; font-size:11px; padding:5px 12px; outline:none; width:200px;">
+            <span style="font-size:11px; color:#64748b; font-family:var(--font-mono);">Binance Spot Testnet</span>
+          </div>
         </div>
 
         <div style="overflow-x:auto; margin-top:8px;">
@@ -1361,7 +1601,7 @@ def generate_dashboard_html():
                 <th style="padding:10px 14px; text-align:right;">Realized Profit</th>
               </tr>
             </thead>
-            <tbody style="color:#cbd5e1;">
+            <tbody id="ledger-table-body" style="color:#cbd5e1;">
               {rows_html}
             </tbody>
           </table>
@@ -1441,6 +1681,71 @@ def generate_dashboard_html():
         </div>
       </div>
     </div> <!-- END VIEW-LIVE -->
+
+    <!-- Strategy Configuration Modal -->
+    <div id="strategy-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(6,5,12,0.85); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); z-index:100; align-items:center; justify-content:center;">
+      <div class="clean-card" style="width:90%; max-width:520px; background:#0d0a1c; border:1px solid rgba(168,85,247,0.4); box-shadow:0 0 40px rgba(168,85,247,0.35); padding:26px; border-radius:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(168,85,247,0.2); padding-bottom:14px; margin-bottom:18px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">⚙️</span>
+            <div>
+              <h2 style="font-size:16px; font-weight:800; color:#ffffff;">Configure Quantitative Strategy</h2>
+              <p style="font-size:11px; color:#c084fc;">Design and allocate capital to an automated engine</p>
+            </div>
+          </div>
+          <button onclick="closeStrategyModal()" style="background:transparent; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
+        </div>
+
+        <form id="strategy-form" onsubmit="saveCustomStrategy(event)">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <label style="display:block; font-size:11px; color:#94a3b8; font-weight:600; margin-bottom:5px;">STRATEGY NAME</label>
+              <input id="strat-name-input" type="text" value="Alpha Momentum Trend" required style="width:100%; padding:9px 12px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-size:12px; outline:none;">
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label style="display:block; font-size:11px; color:#94a3b8; font-weight:600; margin-bottom:5px;">STRATEGY LOGIC</label>
+                <select id="strat-type-input" style="width:100%; padding:9px 12px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-size:12px; outline:none;">
+                  <option value="MA Crossover (EMA 9/21 + RSI)">MA Crossover (EMA 9/21)</option>
+                  <option value="RSI Mean Reversion (30/70)">RSI Mean Reversion (30/70)</option>
+                  <option value="Breakout Volatility (Bollinger+ATR)">Breakout Volatility</option>
+                  <option value="Groq AI Conviction Engine">Groq AI Conviction Engine</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size:11px; color:#94a3b8; font-weight:600; margin-bottom:5px;">TARGET SYMBOL</label>
+                <select id="strat-sym-input" style="width:100%; padding:9px 12px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-family:var(--font-mono); font-size:12px; outline:none;">
+                  <option value="BTCUSDT">BTCUSDT</option>
+                  <option value="ETHUSDT">ETHUSDT</option>
+                  <option value="SOLUSDT">SOLUSDT</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+              <div>
+                <label style="display:block; font-size:10px; color:#94a3b8; font-weight:600; margin-bottom:5px;">CAPITAL ($)</label>
+                <input id="strat-cap-input" type="number" value="100" min="20" step="10" required style="width:100%; padding:8px 10px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-family:var(--font-mono); font-size:12px; outline:none;">
+              </div>
+              <div>
+                <label style="display:block; font-size:10px; color:#94a3b8; font-weight:600; margin-bottom:5px;">STOP LOSS (%)</label>
+                <input id="strat-sl-input" type="number" value="1.5" min="0.5" step="0.1" required style="width:100%; padding:8px 10px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-family:var(--font-mono); font-size:12px; outline:none;">
+              </div>
+              <div>
+                <label style="display:block; font-size:10px; color:#94a3b8; font-weight:600; margin-bottom:5px;">TAKE PROFIT (%)</label>
+                <input id="strat-tp-input" type="number" value="3.0" min="1.0" step="0.1" required style="width:100%; padding:8px 10px; border-radius:8px; background:var(--bg-inset); border:1px solid var(--border-subtle); color:#ffffff; font-family:var(--font-mono); font-size:12px; outline:none;">
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px; border-top:1px solid rgba(168,85,247,0.18); padding-top:16px;">
+              <button type="button" onclick="closeStrategyModal()" style="padding:9px 18px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; font-weight:600; font-size:12px; cursor:pointer;">Cancel</button>
+              <button type="submit" class="btn-purple-pill" style="cursor:pointer; padding:9px 22px;">🚀 Save & Activate</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
 
   </main>
 
@@ -1526,6 +1831,128 @@ def resume_bot_trading():
     write_learning("Bot trading resumed by user via dashboard.", category="system")
     return True, "Trading resumed successfully. Bot is now active and scanning market."
 
+BOT_AUTO_RUN = True
+STRATEGIES_FILE = os.path.join(BASE_DIR, "strategies.json")
+
+def load_strategies():
+    if not os.path.exists(STRATEGIES_FILE):
+        default_strats = [
+            {
+                "id": "strat_ma_crossover",
+                "name": "MA Crossover Momentum",
+                "symbol": "BTCUSDT",
+                "type": "Trend Following (EMA 9/21 + RSI)",
+                "capital_usd": 120.0,
+                "sl_pct": 1.2,
+                "tp1_pct": 1.8,
+                "tp2_pct": 3.0,
+                "active": True
+            }
+        ]
+        try:
+            with open(STRATEGIES_FILE, "w") as f:
+                json.dump(default_strats, f, indent=2)
+        except Exception:
+            pass
+        return default_strats
+    try:
+        with open(STRATEGIES_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_strategy_item(strat_dict):
+    strats = load_strategies()
+    strat_id = strat_dict.get("id") or f"strat_{int(time.time())}"
+    strat_dict["id"] = strat_id
+    updated = False
+    for i, s in enumerate(strats):
+        if s.get("id") == strat_id:
+            strats[i] = strat_dict
+            updated = True
+            break
+    if not updated:
+        strats.append(strat_dict)
+    with open(STRATEGIES_FILE, "w") as f:
+        json.dump(strats, f, indent=2)
+    return strat_dict
+
+def toggle_strategy_status(strat_id):
+    strats = load_strategies()
+    for s in strats:
+        if s.get("id") == strat_id:
+            s["active"] = not s.get("active", True)
+            break
+    with open(STRATEGIES_FILE, "w") as f:
+        json.dump(strats, f, indent=2)
+    return True
+
+def delete_strategy_item(strat_id):
+    strats = load_strategies()
+    strats = [s for s in strats if s.get("id") != strat_id]
+    with open(STRATEGIES_FILE, "w") as f:
+        json.dump(strats, f, indent=2)
+    return True
+
+def toggle_bot_auto_run():
+    global BOT_AUTO_RUN
+    BOT_AUTO_RUN = not BOT_AUTO_RUN
+    status_str = "ACTIVE (Scanning 24/7)" if BOT_AUTO_RUN else "PAUSED (Standby)"
+    logger.info(f"Bot Auto-Scanning toggled: {status_str}")
+    return True, f"Bot Auto-Scan is now {status_str}"
+
+def execute_manual_order(symbol="BTCUSDT", side="BUY", amount_usd=15.0, sl_pct=1.5, tp_pct=3.0):
+    try:
+        if BOT_HALTED:
+            return False, "Bot is currently HALTED by kill switch. Lift halt first."
+        curr_price = get_current_price(symbol)
+        if not curr_price or curr_price <= 0:
+            return False, f"Could not fetch current price for {symbol}"
+        amount_usd = max(15.0, float(amount_usd))
+        raw_qty = amount_usd / curr_price
+        if "BTC" in symbol:
+            qty = round(raw_qty, 5)
+        elif "ETH" in symbol:
+            qty = round(raw_qty, 4)
+        elif "SOL" in symbol:
+            qty = round(raw_qty, 2)
+        else:
+            qty = round(raw_qty, 4)
+        if qty < MIN_QTY:
+            qty = MIN_QTY
+        side = side.upper()
+        if side not in ["BUY", "SELL"]:
+            return False, f"Invalid order side: {side}"
+
+        order = place_test_order(symbol=symbol, side=side, quantity=qty)
+
+        if side == "BUY":
+            sl = round(curr_price * (1 - sl_pct / 100.0), 2)
+            tp1 = round(curr_price * (1 + (tp_pct * 0.6) / 100.0), 2)
+            tp2 = round(curr_price * (1 + tp_pct / 100.0), 2)
+        else:
+            sl = round(curr_price * (1 + sl_pct / 100.0), 2)
+            tp1 = round(curr_price * (1 - (tp_pct * 0.6) / 100.0), 2)
+            tp2 = round(curr_price * (1 - tp_pct / 100.0), 2)
+
+        trade_id = log_new_trade(
+            symbol=symbol,
+            side=side,
+            entry_price=curr_price,
+            quantity=qty,
+            reason=f"Manual Order via Terminal ({side} ${amount_usd:.2f})",
+            stop_loss=sl,
+            take_profit=tp2,
+            tp1=tp1,
+            tp2=tp2,
+            strategy_name="Manual Execution Terminal",
+            strategy_id="manual_terminal"
+        )
+        logger.info(f"MANUAL ORDER EXECUTED | #{trade_id} {side} {qty} {symbol} @ ${curr_price:,.2f}")
+        return True, f"Order #{trade_id} placed on Binance Testnet: {side} {qty} {symbol} at ${curr_price:,.2f}!"
+    except Exception as e:
+        logger.error(f"Manual order failed: {e}")
+        return False, f"Execution failed: {str(e)}"
 
 def check_circuit_breaker():
     """Checks if today's realized loss has exceeded the daily circuit breaker limit."""
@@ -1553,6 +1980,36 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
 
+        # API: System Status JSON
+        if parsed.path == "/api/status":
+            try:
+                curr_p = get_current_price(PRIMARY_SYMBOL)
+            except Exception:
+                curr_p = 0
+            state = {}
+            state_file = os.path.join(BASE_DIR, "market_state.json")
+            if os.path.exists(state_file):
+                try:
+                    with open(state_file, 'r') as f:
+                        state = json.load(f)
+                except Exception:
+                    pass
+            stats = get_stats()
+            open_trades = get_open_trades()
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": True,
+                "current_price": curr_p,
+                "bot_halted": BOT_HALTED,
+                "bot_auto_run": BOT_AUTO_RUN,
+                "open_trades_count": len(open_trades),
+                "market_state": state,
+                "stats": stats
+            }).encode('utf-8'))
+            return
+
         # API: Emergency Kill Switch
         if parsed.path == "/api/kill_switch":
             success, msg = emergency_kill_switch()
@@ -1569,6 +2026,37 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
             self.wfile.write(json.dumps({"success": success, "message": msg}).encode('utf-8'))
+            return
+
+        # API: Toggle Bot Auto Scanning
+        if parsed.path == "/api/toggle_bot":
+            success, msg = toggle_bot_auto_run()
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": success, "message": msg, "auto_run": BOT_AUTO_RUN}).encode('utf-8'))
+            return
+
+        # API: Toggle Strategy
+        if parsed.path == "/api/toggle_strategy":
+            qs = parse_qs(parsed.query)
+            s_id = qs.get("id", [""])[0]
+            success = toggle_strategy_status(s_id)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": success}).encode('utf-8'))
+            return
+
+        # API: Delete Strategy
+        if parsed.path == "/api/delete_strategy":
+            qs = parse_qs(parsed.query)
+            s_id = qs.get("id", [""])[0]
+            success = delete_strategy_item(s_id)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": success}).encode('utf-8'))
             return
 
         # API: Close position manually via GET
@@ -1591,7 +2079,6 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
                     return
 
-
         # Regular Dashboard GET
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
@@ -1608,6 +2095,48 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         from urllib.parse import urlparse
         parsed = urlparse(self.path)
+
+        # API: Manual Order Execution
+        if parsed.path == "/api/manual_order":
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length).decode('utf-8') if content_length > 0 else "{}"
+            try:
+                data = json.loads(post_data) if post_data else {}
+                sym = data.get("symbol", PRIMARY_SYMBOL)
+                side = data.get("side", "BUY")
+                amt = float(data.get("amount_usd", 20.0))
+                sl_pct = float(data.get("sl_pct", 1.5))
+                tp_pct = float(data.get("tp_pct", 3.0))
+                success, msg = execute_manual_order(symbol=sym, side=side, amount_usd=amt, sl_pct=sl_pct, tp_pct=tp_pct)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": success, "message": msg}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+            return
+
+        # API: Save Custom Strategy
+        if parsed.path == "/api/save_strategy":
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length).decode('utf-8') if content_length > 0 else "{}"
+            try:
+                data = json.loads(post_data) if post_data else {}
+                saved = save_strategy_item(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "strategy": saved}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+            return
+
         if parsed.path == "/api/close_position":
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8') if content_length > 0 else "{}"
@@ -1920,6 +2449,11 @@ def run_bot_once():
 
     # 2. Manage all open positions first (always active: TP1/TP2/Green Lock)
     manage_open_positions()
+
+    # 2b. Auto-Scan Pause Check
+    if not BOT_AUTO_RUN:
+        logger.info("⏸️ AUTO-SCAN PAUSED: Automated entries paused by user via dashboard. Active positions remain protected.")
+        return
 
     # 3. Weekend Filter: Skip new entries if institutional markets closed
     if is_weekend():
