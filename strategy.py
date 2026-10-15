@@ -1,257 +1,253 @@
-import numpy as np
+"""
+strategy.py
+===========
+Dhurandhar Trading Strategy (Options Strangle + 24H Trend Hunter Futures Breakout)
+==================================================================================
+
+Architecture:
+1. Leg 1 (Non-Directional / Range):
+   - Sell OTM Call (+10% to +14% above current price)
+   - Sell OTM Put (-10% to -14% below current price)
+   - Earn Theta (Time Decay) premium while price is inside the broad range.
+
+2. Leg 2 (Directional / 24-Hour Trend Hunter Futures Breakout):
+   - Monitors live 24-Hour High and 24-Hour Low.
+   - LONG_BREAKOUT: If Price breaks above 24H High -> Buy Futures (Hedges Call loss, rides bull trend).
+   - SHORT_BREAKDOWN: If Price breaks below 24H Low -> Sell/Short Futures (Hedges Put loss, rides bear crash).
+   - RANGE_BOUND: If Price stays inside 24H Range -> Strangle generates profit with minimal futures turnover.
+"""
+
 import logging
-from binance.client import Client
-from exchange import client, _sanitize_symbol, get_klines_direct
+import numpy as np
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
-def get_klines_data(symbol="BTCUSDT", interval="5m", limit=100):
-    """Get OHLCV data from Binance for specified interval"""
-    symbol = _sanitize_symbol(symbol)
-    interval = str(interval).strip().lower()
-    limit = int(limit)
+def _extract_asset(symbol: str) -> str:
+    """Normalize symbol to 'BTC' or 'ETH'."""
+    s = str(symbol).upper().replace("/", "").replace("_", "")
+    if "ETH" in s:
+        return "ETH"
+    return "BTC"
 
-    print(f"[STRATEGY] Getting klines: symbol={symbol}, interval={interval}, limit={limit}")
 
+def get_market_levels(symbol="BTCUSDT"):
+    """
+    Fetch live 24H High, 24H Low, and Mark Price.
+    Prioritizes Delta Exchange Testnet; falls back to Binance/Direct if needed.
+    """
+    asset = _extract_asset(symbol)
+    
+    # 1. Delta Exchange live ticker
     try:
-        if client:
-            klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
+        from delta_exchange import get_24h_range
+        r = get_24h_range(asset)
+        cur = float(r.get("current", 0))
+        high = float(r.get("high_24h", 0))
+        low = float(r.get("low_24h", 0))
+        if cur > 0 and high > 0 and low > 0:
             return {
-                "open": np.array([float(k[1]) for k in klines]),
-                "high": np.array([float(k[2]) for k in klines]),
-                "low": np.array([float(k[3]) for k in klines]),
-                "close": np.array([float(k[4]) for k in klines]),
-                "volume": np.array([float(k[5]) for k in klines])
+                "source": "delta_testnet",
+                "asset": asset,
+                "current_price": cur,
+                "high_24h": high,
+                "low_24h": low,
             }
     except Exception as e:
-        print(f"[STRATEGY] python-binance klines failed ({e}), trying resilient fallback...")
+        logger.warning(f"[STRATEGY] Delta ticker fetch warning for {asset}: {e}")
 
-    data = get_klines_direct(symbol, interval, limit)
-    if data:
-        return {
-            "open": np.array(data["open"]),
-            "high": np.array(data["high"]),
-            "low": np.array(data["low"]),
-            "close": np.array(data["close"]),
-            "volume": np.array(data["volume"])
-        }
-    raise RuntimeError(f"Unable to fetch klines for {symbol}")
+    # 2. Resilient Fallback to Binance
+    try:
+        from exchange import get_current_price
+        cur = get_current_price(f"{asset}USDT")
+        from exchange import get_klines_direct
+        data = get_klines_direct(f"{asset}USDT", "1d", 2)
+        if data and len(data["high"]) > 0:
+            high = float(data["high"][-1])
+            low = float(data["low"][-1])
+            return {
+                "source": "binance_fallback",
+                "asset": asset,
+                "current_price": cur,
+                "high_24h": high,
+                "low_24h": low,
+            }
+    except Exception as e:
+        logger.error(f"[STRATEGY] Fallback ticker fetch failed for {asset}: {e}")
 
-
-def calculate_atr(data, period=14):
-    highs, lows, closes = data["high"], data["low"], data["close"]
-    if len(closes) < period + 1:
-        return None
-    tr_list = []
-    for i in range(1, len(closes)):
-        tr1 = highs[i] - lows[i]
-        tr2 = abs(highs[i] - closes[i-1])
-        tr3 = abs(lows[i] - closes[i-1])
-        tr_list.append(max(tr1, tr2, tr3))
-    return np.mean(tr_list[-period:])
-
-
-def calculate_ema(prices, period):
-    if len(prices) < period:
-        return None
-    weights = np.exp(np.linspace(-1., 0., period))
-    weights /= weights.sum()
-    return np.convolve(prices, weights, mode="valid")[-1]
+    # Default fallback
+    base_price = 81000.0 if asset == "BTC" else 2350.0
+    return {
+        "source": "default",
+        "asset": asset,
+        "current_price": base_price,
+        "high_24h": base_price * 1.02,
+        "low_24h": base_price * 0.98,
+    }
 
 
-def calculate_sma(prices, period):
-    if len(prices) < period:
-        return None
-    return float(np.mean(prices[-period:]))
+def get_strangle_recommendation(asset="BTC"):
+    """
+    Fetch recommended Call & Put strikes from Delta Exchange options chain.
+    """
+    try:
+        from delta_exchange import get_options_for_strangle
+        s = get_options_for_strangle(asset, otm_pct=0.12)
+        if s and s.get("call") and s.get("put"):
+            return {
+                "call_symbol": s["call"]["symbol"],
+                "call_strike": float(s["call"]["strike"]),
+                "call_product_id": s["call"]["product_id"],
+                "put_symbol": s["put"]["symbol"],
+                "put_strike": float(s["put"]["strike"]),
+                "put_product_id": s["put"]["product_id"],
+                "expiry": s.get("expiry"),
+                "dte": s.get("dte", 0),
+            }
+    except Exception as e:
+        logger.warning(f"[STRATEGY] Could not fetch live strangle strikes: {e}")
 
-
-def calculate_rsi(closes, period=14):
-    if len(closes) < period + 1:
-        return 50.0
-    deltas = np.diff(closes)
-    seed = deltas[:period]
-    up = seed[seed >= 0].sum() / period
-    down = -seed[seed < 0].sum() / period
-    rs = up / down if down != 0 else 0
-    rsi = np.zeros_like(closes)
-    rsi[:period] = 100. - 100. / (1. + rs)
-
-    for i in range(period, len(closes)):
-        delta = deltas[i - 1]
-        if delta > 0:
-            upval = delta
-            downval = 0.
-        else:
-            upval = 0.
-            downval = -delta
-        up = (up * (period - 1) + upval) / period
-        down = (down * (period - 1) + downval) / period
-        rs = up / down if down != 0 else 0
-        rsi[i] = 100. - 100. / (1. + rs)
-    return round(float(rsi[-1]), 1)
+    # Theoretical estimate based on current price
+    return None
 
 
 def detect_early_reversal(symbol, side):
     """
-    Detects if market is reversing against the position using EMA crossover or candle reversal.
+    Checks if market has broken back into the opposite 24-hour boundary.
+    Long reversal: Price drops below 24-Hour Low.
+    Short reversal: Price surges above 24-Hour High.
     """
-    try:
-        data_5m = get_klines_data(symbol, interval="5m", limit=30)
-        closes = data_5m["close"]
-        if len(closes) < 15:
-            return False
+    levels = get_market_levels(symbol)
+    cur = levels["current_price"]
+    high = levels["high_24h"]
+    low = levels["low_24h"]
 
-        ema_short = calculate_ema(closes, 9)
-        ema_long = calculate_ema(closes, 21)
-
-        if side.upper() == "BUY":
-            # Reversal against BUY: short EMA drops below long EMA or latest close falls below EMA 9
-            return bool(ema_short and ema_long and (ema_short < ema_long or closes[-1] < ema_short * 0.998))
-        else:
-            # Reversal against SELL: short EMA crosses above long EMA or latest close rises above EMA 9
-            return bool(ema_short and ema_long and (ema_short > ema_long or closes[-1] > ema_short * 1.002))
-    except Exception as e:
-        print(f"[REVERSAL] Warning: check failed for {symbol}: {e}")
-        return False
+    side = str(side).upper()
+    if side == "BUY" or side == "LONG":
+        # If long future, reversal triggers if price breaks below 24h low
+        return cur <= low
+    elif side == "SELL" or side == "SHORT":
+        # If short future, reversal triggers if price breaks above 24h high
+        return cur >= high
+    return False
 
 
-def get_enhanced_signal(symbol="BTCUSDT", interval="5m"):
+def get_enhanced_signal(symbol="BTCUSDT", interval="24h"):
     """
-    Classic Moving Average (MA) Crossover Strategy with RSI Momentum Filter:
-    - Fast EMA: 9 periods
-    - Slow EMA: 21 periods
-    - Trend Filter: 50 EMA
-    - RSI Momentum Filter (period=14)
-    - Dynamic ATR Risk Management (TP1, TP2, SL)
+    Dhurandhar Strategy Core Signal Generator:
+    - Analyzes 24-Hour High/Low boundary
+    - Identifies Breakout (Future Long), Breakdown (Future Short), or Range-Bound (Strangle)
+    - Computes Dynamic Hedging TP/SL targets
     """
-    if not isinstance(symbol, str):
-        symbol = "BTCUSDT"
+    asset = _extract_asset(symbol)
+    levels = get_market_levels(symbol)
+    current_price = levels["current_price"]
+    high_24h = levels["high_24h"]
+    low_24h = levels["low_24h"]
 
-    print(f"[STRATEGY] Running MA Crossover Strategy for {symbol}...")
+    # Calculate range metrics
+    range_span = max(1.0, high_24h - low_24h)
+    range_pct = round((range_span / low_24h) * 100.0, 2)
 
-    try:
-        data_5m = get_klines_data(symbol, interval=interval, limit=100)
-        closes = data_5m["close"]
-        current_price = float(closes[-1])
-    except Exception as e:
-        print(f"[STRATEGY] Market data sync issue for {symbol}: {e}")
-        return {
-            "symbol": symbol,
-            "signal": "HOLD",
-            "score": 50,
-            "confirmations": 0,
-            "current_price": 65000.0,
-            "tp1": 66000.0,
-            "tp2": 67000.0,
-            "structure_sl": 64000.0,
-            "rsi": 50.0,
-            "atr": 500.0,
-            "adx": 20.0,
-            "volume_ratio": 1.0,
-            "macro_trend": "NEUTRAL",
-            "reasons": [f"Market data syncing ({e})"]
-        }
+    dist_to_high_pct = round(((high_24h - current_price) / current_price) * 100.0, 2)
+    dist_to_low_pct = round(((current_price - low_24h) / current_price) * 100.0, 2)
 
-    atr = calculate_atr(data_5m) or (current_price * 0.01)
-    rsi = calculate_rsi(closes)
+    # Fetch live Strangle recommendations
+    strangle_info = get_strangle_recommendation(asset)
+    if strangle_info:
+        call_strike = strangle_info["call_strike"]
+        put_strike = strangle_info["put_strike"]
+        dte = strangle_info["dte"]
+        profit_zone = f"${put_strike:,.0f} - ${call_strike:,.0f} ({dte} DTE)"
+    else:
+        call_strike = round(current_price * 1.12, 0)
+        put_strike = round(current_price * 0.88, 0)
+        profit_zone = f"${put_strike:,.0f} - ${call_strike:,.0f}"
 
-    ema_short = calculate_ema(closes, 9)
-    ema_long = calculate_ema(closes, 21)
-    ema_trend = calculate_ema(closes, 50) or ema_long
-
-    # Previous candle EMAs to detect fresh crossover
-    prev_closes = closes[:-1]
-    prev_ema_short = calculate_ema(prev_closes, 9)
-    prev_ema_long = calculate_ema(prev_closes, 21)
-
-    fresh_bull_cross = bool(prev_ema_short and prev_ema_long and prev_ema_short <= prev_ema_long and ema_short > ema_long)
-    fresh_bear_cross = bool(prev_ema_short and prev_ema_long and prev_ema_short >= prev_ema_long and ema_short < ema_long)
-
-    is_bullish_aligned = bool(ema_short and ema_long and ema_short > ema_long)
-    is_bearish_aligned = bool(ema_short and ema_long and ema_short < ema_long)
-
-    macro_trend = "BULLISH" if (ema_long and ema_trend and ema_long >= ema_trend) else ("BEARISH" if (ema_long and ema_trend and ema_long < ema_trend) else "NEUTRAL")
-
-    score = 50
-    signal = "HOLD"
     reasons = []
+    reasons.append(f"Dhurandhar Strategy | Asset: {asset}USD on Delta Testnet")
+    reasons.append(f"24H High: ${high_24h:,.2f} | 24H Low: ${low_24h:,.2f} | Range: {range_pct}%")
 
-    if (fresh_bull_cross or is_bullish_aligned) and rsi < 70:
-        if fresh_bull_cross:
-            signal = "STRONG_BUY"
-            score = 85
-            reasons.append(f"Golden Cross detected: Fast EMA(9) {ema_short:.2f} crossed above Slow EMA(21) {ema_long:.2f}")
-        else:
-            signal = "BUY"
-            score = 75
-            reasons.append(f"Bullish MA Alignment: Fast EMA(9) {ema_short:.2f} > Slow EMA(21) {ema_long:.2f}")
+    # ── Signal Decision Logic ────────────────────────────────────────────────
+    # Breakout threshold: 0.1% tolerance
+    is_bullish_breakout = current_price >= (high_24h * 0.999)
+    is_bearish_breakdown = current_price <= (low_24h * 1.001)
 
-        reasons.append(f"RSI Momentum: {rsi} (Bullish continuation zone)")
-        if macro_trend == "BULLISH":
-            score = min(score + 5, 95)
-            reasons.append("Macro Trend Aligned (Price above EMA 50)")
+    if is_bullish_breakout:
+        signal = "STRONG_BUY"
+        score = 90
+        macro_trend = "BULLISH_BREAKOUT"
+        reasons.append(f"🚀 24H High Breakout: Current ${current_price:,.2f} >= 24H High ${high_24h:,.2f}")
+        reasons.append("Trend Hunter Future: Open LONG to ride bull trend and hedge Call short loss")
 
-    elif (fresh_bear_cross or is_bearish_aligned) and rsi > 30:
-        if fresh_bear_cross:
-            signal = "STRONG_SELL"
-            score = 15
-            reasons.append(f"Death Cross detected: Fast EMA(9) {ema_short:.2f} crossed below Slow EMA(21) {ema_long:.2f}")
-        else:
-            signal = "SELL"
-            score = 25
-            reasons.append(f"Bearish MA Alignment: Fast EMA(9) {ema_short:.2f} < Slow EMA(21) {ema_long:.2f}")
+        # Future Targets
+        tp1 = round(current_price * 1.015, 2)   # +1.5% target
+        tp2 = round(current_price * 1.035, 2)   # +3.5% extension
+        structure_sl = round(low_24h, 2)        # 24H Low trailing SL
 
-        reasons.append(f"RSI Momentum: {rsi} (Bearish continuation zone)")
-        if macro_trend == "BEARISH":
-            score = max(score - 5, 5)
-            reasons.append("Macro Trend Aligned (Price below EMA 50)")
+    elif is_bearish_breakdown:
+        signal = "STRONG_SELL"
+        score = 10
+        macro_trend = "BEARISH_BREAKDOWN"
+        reasons.append(f"🔻 24H Low Breakdown: Current ${current_price:,.2f} <= 24H Low ${low_24h:,.2f}")
+        reasons.append("Trend Hunter Future: Open SHORT to ride bear crash and hedge Put short loss")
+
+        # Future Targets
+        tp1 = round(current_price * 0.985, 2)   # -1.5% target
+        tp2 = round(current_price * 0.965, 2)   # -3.5% extension
+        structure_sl = round(high_24h, 2)       # 24H High trailing SL
+
     else:
-        reasons.append(f"MA crossover neutral: EMA9={ema_short:.2f}, EMA21={ema_long:.2f}, RSI={rsi}")
+        signal = "HOLD"
+        score = 50
+        macro_trend = "RANGE_BOUND"
+        reasons.append(f"⏸️ Range-Bound: Inside 24H channel ({dist_to_low_pct}% above Low, {dist_to_high_pct}% below High)")
+        reasons.append(f"Option Strangle Leg Active: Safe Profit Zone {profit_zone}")
 
-    # Risk Management Targets (ATR based)
-    target_side = "BUY" if "BUY" in signal else ("SELL" if "SELL" in signal else "BUY")
-    if target_side == "BUY":
-        tp1 = round(current_price + (1.2 * atr), 2)
-        tp2 = round(current_price + (2.5 * atr), 2)
-        structure_sl = round(current_price - (1.0 * atr), 2)
-        if structure_sl > current_price * 0.995:
-            structure_sl = round(current_price * 0.995, 2)
-    else:
-        tp1 = round(current_price - (1.2 * atr), 2)
-        tp2 = round(current_price - (2.5 * atr), 2)
-        structure_sl = round(current_price + (1.0 * atr), 2)
-        if structure_sl < current_price * 1.005:
-            structure_sl = round(current_price * 1.005, 2)
-
-    confirmations = 2 if signal != "HOLD" else 0
-
-    print(f"[STRATEGY] Signal: {signal} | Score: {score} | RSI: {rsi} | TP1: ${tp1:,.2f} | TP2: ${tp2:,.2f} | SL: ${structure_sl:,.2f}")
+        tp1 = round(high_24h, 2)
+        tp2 = round(call_strike, 2)
+        structure_sl = round(low_24h, 2)
 
     return {
-        "symbol": symbol,
+        "symbol": f"{asset}USDT",
+        "asset": asset,
+        "strategy": "Dhurandhar Hybrid Strategy (Options Strangle + 24H Trend Hunter Futures)",
         "signal": signal,
         "score": score,
-        "confirmations": confirmations,
+        "confirmations": 2 if signal != "HOLD" else 0,
         "current_price": current_price,
+        "high_24h": high_24h,
+        "low_24h": low_24h,
+        "range_pct": range_pct,
+        "dist_to_high_pct": dist_to_high_pct,
+        "dist_to_low_pct": dist_to_low_pct,
+        "call_strike": call_strike,
+        "put_strike": put_strike,
+        "profit_zone": profit_zone,
+        "strangle_info": strangle_info,
         "tp1": tp1,
         "tp2": tp2,
         "structure_sl": structure_sl,
-        "rsi": rsi,
-        "atr": atr,
-        "adx": 25.0,
-        "volume_ratio": 1.2,
         "macro_trend": macro_trend,
         "reasons": reasons
     }
 
 
 def test_strategy():
-    print("Testing Moving Average Crossover Strategy on BTCUSDT...\n")
-    result = get_enhanced_signal("BTCUSDT")
-    print(f"Signal: {result['signal']} (Score: {result['score']}/100)")
-    print(f"Price: ${result['current_price']:,.2f}")
-    print("Reasons:", "\n - ".join(result['reasons']))
+    print("=" * 65)
+    print("  DHURANDHAR TRADING STRATEGY TEST (OPTIONS + 24H FUTURES BREAKOUT)")
+    print("=" * 65)
+    for asset in ["BTC", "ETH"]:
+        result = get_enhanced_signal(asset)
+        print(f"\n[{asset}] Signal: {result['signal']} (Score: {result['score']}/100) | State: {result['macro_trend']}")
+        print(f"Price: ${result['current_price']:,.2f} | 24H High: ${result['high_24h']:,.2f} | 24H Low: ${result['low_24h']:,.2f}")
+        print(f"Option Strangle Profit Zone: {result['profit_zone']}")
+        print(f"Targets: TP1=${result['tp1']:,.2f} | TP2=${result['tp2']:,.2f} | SL=${result['structure_sl']:,.2f}")
+        print("Reasons:")
+        for r in result["reasons"]:
+            print(f"  - {r}")
+    print("\n" + "=" * 65)
 
 
 if __name__ == "__main__":

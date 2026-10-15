@@ -349,6 +349,32 @@ def get_futures_position(asset: str) -> dict:
 
 # ── Options (OTM Strangle Selling) ───────────────────────────────────────────
 
+_cached_products = {"data": [], "timestamp": 0}
+
+def get_all_products(force_refresh: bool = False) -> list:
+    global _cached_products
+    now = time_module.time()
+    if not force_refresh and _cached_products["data"] and (now - _cached_products["timestamp"] < 300):
+        return _cached_products["data"]
+    try:
+        res = requests.get(f"{DELTA_BASE_URL}/v2/products", timeout=15)
+        if res.status_code == 200:
+            data = res.json().get("result", [])
+            _cached_products = {"data": data, "timestamp": now}
+            return data
+    except Exception as e:
+        logger.warning(f"[DELTA] get_all_products direct fetch warning: {e}")
+    try:
+        client = _get_client()
+        data = client.get_products()
+        if data:
+            _cached_products = {"data": data, "timestamp": now}
+            return data
+    except Exception as e:
+        logger.error(f"[DELTA] client.get_products failed: {e}")
+    return _cached_products.get("data", [])
+
+
 def _round_to_nearest(value: float, step: float) -> float:
     """Round a value down to the nearest multiple of step."""
     return math.floor(value / step) * step
@@ -372,13 +398,12 @@ def get_options_for_strangle(asset: str, otm_pct: float = 0.12, prefer_monthly: 
         {"call": {product_id, symbol, strike, expiry}, "put": {...}, "current_price": float}
     """
     try:
-        client = _get_client()
         ticker = get_ticker(asset)
         current_price = ticker.get("mark_price", 0)
         if current_price <= 0:
             return {}
 
-        products = client.get_products()
+        products = get_all_products()
         now      = datetime.now(timezone.utc)
         min_days = 7 if prefer_monthly else 2
         max_days = 60

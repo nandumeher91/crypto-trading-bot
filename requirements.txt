@@ -3,5 +3,7 @@ groq
 requests
 numpy
 pandas
+streamlit
 python-dotenv
-delta-rest-client==1.0.14
+delta-rest-client
+

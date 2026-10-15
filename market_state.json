@@ -1,0 +1,15 @@
+{
+  "symbol": "BTCUSDT",
+  "price": 81298.0,
+  "signal": "HOLD",
+  "score": 50,
+  "rsi": 50.0,
+  "atr": 1200.0,
+  "adx": 20.0,
+  "volume_ratio": 1.0,
+  "action": "STANDBY",
+  "confidence": 85,
+  "reason": "Dhurandhar Strategy Active: Market is Range-Bound ($80,240 - $84,132). Option Strangle safe zone active ($79,000 - $92,000). Trend Hunter 24H Breakout on standby.",
+  "risk_level": "LOW",
+  "updated_at": "2026-10-15 13:40:00 IST"
+}
