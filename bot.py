@@ -2379,7 +2379,19 @@ def close_open_position(open_trade, current_price, reason, closed_by="brain", is
     trade_symbol = open_trade.get("symbol", PRIMARY_SYMBOL)
     opposite_side = "SELL" if open_trade["side"].upper() == "BUY" else "BUY"
     try:
-        order = place_test_order(symbol=trade_symbol, side=opposite_side, quantity=open_trade["quantity"])
+        if "STRANGLE" in trade_symbol:
+            # Delta Option Strangle expiry / close
+            pass
+        elif open_trade.get("strategy_id") == "dhurandhar_btc" or trade_symbol.endswith("USD"):
+            try:
+                import delta_exchange
+                asset = "ETH" if "ETH" in trade_symbol else "BTC"
+                delta_exchange.close_futures_position(asset)
+            except Exception as e:
+                logger.error(f"[DELTA] Failed closing futures: {e}")
+        else:
+            order = place_test_order(symbol=trade_symbol, side=opposite_side, quantity=open_trade["quantity"])
+
         closed = close_trade(open_trade["trade_id"], current_price, closed_by, symbol=trade_symbol)
         pnl = closed["pnl"]
         pnl_pct = closed.get("pnl_percent", 0)
@@ -2467,7 +2479,9 @@ def run_bot_once():
     sym = current_strat.get("symbol", PRIMARY_SYMBOL)
     strat_name = current_strat.get("name", "Custom Quantitative Strategy")
     strat_id = current_strat.get("id", "custom_strat")
+    strat_type = current_strat.get("strategy_type", "")
     cap_usd = float(current_strat.get("capital_usd", 100.0))
+    asset = current_strat.get("asset") or ("ETH" if "ETH" in sym else "BTC")
 
     if sym in open_symbols:
         return
@@ -2477,7 +2491,102 @@ def run_bot_once():
         signal = signal_data["signal"]
         score = signal_data["score"]
         current_price = signal_data["current_price"]
+        macro_trend = signal_data.get("macro_trend", "RANGE_BOUND")
 
+        # ── DHURANDHAR HYBRID STRATEGY (OPTIONS STRANGLE + 24H FUTURES) ──────
+        if strat_type == "hybrid_options_futures" or strat_id == "dhurandhar_btc":
+            import delta_exchange
+
+            # Delta IP check and terminal warning
+            d_bal = delta_exchange.get_balance()
+            if isinstance(d_bal, dict) and d_bal.get("error") == "ip_not_whitelisted":
+                client_ip = d_bal.get("client_ip", "")
+                print(f"\n🚨 [DELTA IP ALERT] Current IP ({client_ip}) is NOT whitelisted in Delta Exchange!")
+                print(f"👉 Open https://testnet.delta.exchange/app/settings/api and add IP: {client_ip}\n")
+                logger.warning(f"🚨 Delta IP Whitelist Needed: {client_ip}")
+
+            # Write market state for dashboard
+            write_market_state(signal_data, current_price, {
+                "action": "STANDBY" if signal == "HOLD" else signal,
+                "confidence": 85 if signal == "HOLD" else score,
+                "reason": signal_data["reasons"][0] if signal_data.get("reasons") else "Dhurandhar Strategy Active"
+            })
+
+            # Check daily trade limits
+            if trades_today >= MAX_TRADES_PER_DAY:
+                logger.info(f"DECISION ({asset}): NO TRADE | Daily limit reached ({trades_today}/{MAX_TRADES_PER_DAY})")
+                return
+
+            # Leg 1: Range-Bound Option Strangle (Sell OTM Call + Put)
+            if macro_trend == "RANGE_BOUND" or signal == "HOLD":
+                if not delta_exchange.has_active_strangle(asset):
+                    otm_pct = float(current_strat.get("target_strangle_otm_pct", 12.0)) / 100.0
+                    print(f"[BOT] 🎯 Market Range-Bound! Executing Leg 1: Dhurandhar Option Strangle for {asset}...")
+                    strangle_res = delta_exchange.place_strangle(asset, contracts=1, otm_pct=otm_pct)
+                    if strangle_res.get("success"):
+                        s_info = strangle_res.get("strangle_info", {})
+                        c_strk = s_info.get("call", {}).get("strike", 0)
+                        p_strk = s_info.get("put", {}).get("strike", 0)
+                        reason_str = f"Option Strangle: Sold Call ${c_strk:,.0f} & Put ${p_strk:,.0f} ({s_info.get('dte')} DTE)"
+                        trade_id = log_new_trade(
+                            symbol=f"{asset}-STRANGLE",
+                            side="SELL_STRANGLE",
+                            entry_price=current_price,
+                            quantity=1,
+                            reason=f"[{strat_name}] {reason_str}",
+                            stop_loss=signal_data.get("high_24h"),
+                            take_profit=signal_data.get("low_24h"),
+                            strategy_name=strat_name,
+                            strategy_id=strat_id
+                        )
+                        trades_today += 1
+                        last_trade_time = datetime.now()
+                        print(f"[BOT] ✅ STRANGLE EXECUTED! #{trade_id} ({asset}) | Safe Zone: {signal_data.get('profit_zone')}")
+                        logger.info(f"STRANGLE EXECUTED | #{trade_id} ({asset}) | Safe Zone: {signal_data.get('profit_zone')}")
+                        write_learning(f"New Strangle #{trade_id} [{strat_name}]: {reason_str}. Zone: {signal_data.get('profit_zone')}", category="trade_open", trade_id=trade_id)
+                    else:
+                        err = strangle_res.get("error") or "Order rejected"
+                        logger.warning(f"[STRANGLE] Execution notice: {err}")
+                        print(f"[BOT] ⚠️ Strangle notice: {err}")
+                else:
+                    logger.info(f"⏸️ Active Strangle already running for {asset}. Safe Zone: {signal_data.get('profit_zone')}. Monitoring theta decay.")
+                return
+
+            # Leg 2: 24-Hour Breakout / Breakdown (Futures Long / Short)
+            elif signal in ["STRONG_BUY", "STRONG_SELL"]:
+                fut_side = "buy" if signal == "STRONG_BUY" else "sell"
+                fut_action = "BUY_FUTURES" if signal == "STRONG_BUY" else "SELL_FUTURES"
+                stop_loss = signal_data.get("structure_sl")
+                tp1 = signal_data.get("tp1")
+                tp2 = signal_data.get("tp2")
+                print(f"[BOT] 🚀 24H {signal} Breakout! Executing Delta Futures {fut_action} for {asset}...")
+                fut_res = delta_exchange.place_futures_order(asset, side=fut_side, notional_usd=cap_usd)
+                if fut_res.get("success"):
+                    trade_id = log_new_trade(
+                        symbol=f"{asset}USD",
+                        side=fut_action,
+                        entry_price=current_price,
+                        quantity=fut_res.get("contracts", 1),
+                        reason=f"[{strat_name}] 24H Breakout {signal}: SL=${stop_loss:,.2f}, TP1=${tp1:,.2f}",
+                        stop_loss=stop_loss,
+                        take_profit=tp2,
+                        tp1=tp1,
+                        tp2=tp2,
+                        strategy_name=strat_name,
+                        strategy_id=strat_id
+                    )
+                    trades_today += 1
+                    last_trade_time = datetime.now()
+                    logger.info(f"FUTURES EXECUTED | #{trade_id} ({asset}) [{strat_name}] | {fut_action} | ${current_price:,.2f}")
+                    print(f"[BOT] ✅ FUTURES EXECUTED! #{trade_id} ({asset}) {fut_action} at ${current_price:,.2f}")
+                    write_learning(f"New Futures Trade #{trade_id} [{strat_name}]: {fut_action} {asset} at ${current_price}. SL=${stop_loss:.2f}", category="trade_open", trade_id=trade_id)
+                else:
+                    err = fut_res.get("error") or "Order rejected"
+                    logger.warning(f"[FUTURES] Execution notice: {err}")
+                    print(f"[BOT] ⚠️ Futures notice: {err}")
+                return
+
+        # ── REGULAR SPOT STRATEGY EXECUTION ──────────────────────────────────
         brain_input = {
             "symbol": sym,
             "strategy": strat_name,

@@ -71,14 +71,67 @@ FUTURES_MAP = {
 }
 
 
+# ── Clock Sync & Resilient Network ───────────────────────────────────────────
+_DELTA_TIME_OFFSET = -6.0
+
+def _sync_server_time(server_time_hint: float = None):
+    global _DELTA_TIME_OFFSET
+    if server_time_hint:
+        _DELTA_TIME_OFFSET = float(server_time_hint) - time_module.time()
+        logger.info(f"[DELTA] Server time calibrated via error hint: offset={_DELTA_TIME_OFFSET:+.2f}s")
+        return
+    try:
+        import email.utils
+        r = requests.get(f"{DELTA_BASE_URL}/v2/products", timeout=5)
+        if "date" in r.headers or "Date" in r.headers:
+            d_hdr = r.headers.get("Date") or r.headers.get("date")
+            server_ts = email.utils.parsedate_to_datetime(d_hdr).timestamp()
+            _DELTA_TIME_OFFSET = server_ts - time_module.time()
+            logger.info(f"[DELTA] Synced with server clock. Offset: {_DELTA_TIME_OFFSET:+.2f}s")
+    except Exception as e:
+        logger.debug(f"[DELTA] Clock sync note: {e}")
+
+try:
+    import delta_rest_client.delta_rest_client as _drc
+    _drc.get_time_stamp = lambda: str(int(time_module.time() + _DELTA_TIME_OFFSET))
+except Exception:
+    pass
+
+_sync_server_time()
+
+
 def _get_client() -> DeltaRestClient:
-    """Return a fresh authenticated DeltaRestClient."""
-    return DeltaRestClient(
+    """Return a fresh authenticated DeltaRestClient with resilient timeout and auto-healing time sync."""
+    client = DeltaRestClient(
         base_url=DELTA_BASE_URL,
         api_key=DELTA_API_KEY,
         api_secret=DELTA_API_SECRET,
         raise_for_status=False
     )
+    orig_req = client.session.request
+    def resilient_request(*args, **kwargs):
+        kwargs["timeout"] = (10, 20)
+        return orig_req(*args, **kwargs)
+    client.session.request = resilient_request
+
+    orig_client_req = client.request
+    def auto_healing_request(*args, **kwargs):
+        res = orig_client_req(*args, **kwargs)
+        try:
+            if hasattr(res, "json"):
+                data = res.json()
+                if isinstance(data, dict):
+                    err = data.get("error")
+                    if isinstance(err, dict) and err.get("code") == "expired_signature":
+                        server_time = err.get("context", {}).get("server_time")
+                        if server_time:
+                            _sync_server_time(server_time)
+                            res = orig_client_req(*args, **kwargs)
+        except Exception:
+            pass
+        return res
+    client.request = auto_healing_request
+    return client
 
 
 # ── Account ───────────────────────────────────────────────────────────────────
@@ -155,22 +208,58 @@ def get_ticker(asset: str) -> dict:
     Get ticker for BTC or ETH.
     Returns: {mark_price, high_24h, low_24h, best_bid, best_ask, product_id}
     """
+    symbol = f"{asset}USD"
     try:
-        symbol = f"{asset}USD"
+        r = requests.get(f"{DELTA_BASE_URL}/v2/tickers/{symbol}", timeout=10)
+        if r.status_code == 200:
+            t = r.json().get("result", {})
+            mark = float(t.get("mark_price") or t.get("close") or 0)
+            if mark > 0:
+                return {
+                    "symbol":     symbol,
+                    "product_id": t.get("product_id"),
+                    "mark_price": mark,
+                    "high_24h":   float(t.get("high") or 0),
+                    "low_24h":    float(t.get("low") or 0),
+                    "best_bid":   float(t.get("quotes", {}).get("best_bid", 0) or 0),
+                    "best_ask":   float(t.get("quotes", {}).get("best_ask", 0) or 0),
+                }
+    except Exception as e:
+        logger.warning(f"[DELTA] Direct ticker fetch note: {e}")
+
+    try:
         client = _get_client()
         t = client.get_ticker(symbol)
-        return {
-            "symbol":     symbol,
-            "product_id": t.get("product_id"),
-            "mark_price": float(t.get("mark_price", 0)),
-            "high_24h":   float(t.get("high", 0)),
-            "low_24h":    float(t.get("low", 0)),
-            "best_bid":   float(t.get("quotes", {}).get("best_bid", 0) or 0),
-            "best_ask":   float(t.get("quotes", {}).get("best_ask", 0) or 0),
-        }
+        if t and t.get("mark_price"):
+            return {
+                "symbol":     symbol,
+                "product_id": t.get("product_id"),
+                "mark_price": float(t.get("mark_price", 0)),
+                "high_24h":   float(t.get("high", 0)),
+                "low_24h":    float(t.get("low", 0)),
+                "best_bid":   float(t.get("quotes", {}).get("best_bid", 0) or 0),
+                "best_ask":   float(t.get("quotes", {}).get("best_ask", 0) or 0),
+            }
     except Exception as e:
         logger.error(f"[DELTA] get_ticker({asset}) error: {e}")
-        return {}
+
+    try:
+        from exchange import get_current_price
+        p = get_current_price(f"{asset}USDT")
+        if p and p > 0:
+            return {
+                "symbol": symbol,
+                "product_id": FUTURES_MAP.get(asset, {}).get("product_id"),
+                "mark_price": float(p),
+                "high_24h": float(p * 1.02),
+                "low_24h": float(p * 0.98),
+                "best_bid": float(p),
+                "best_ask": float(p)
+            }
+    except Exception:
+        pass
+
+    return {}
 
 
 def get_24h_range(asset: str) -> dict:
@@ -589,16 +678,31 @@ def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.12) -> dic
     }
 
 
-# ── Positions Overview ────────────────────────────────────────────────────────
-
 def get_all_positions() -> list:
     """Return all open positions (Futures + Options)."""
     try:
         client = _get_client()
         positions = []
+        raw = client.request("GET", "/v2/positions", auth=True)
+        if hasattr(raw, "json"):
+            pos_list = raw.json()
+            if isinstance(pos_list, list):
+                for p in pos_list:
+                    size = int(p.get("size", 0))
+                    if size != 0:
+                        positions.append({
+                            "product_id": p.get("product_id"),
+                            "symbol": p.get("product_symbol", ""),
+                            "size": size,
+                            "side": "long" if size > 0 else "short",
+                            "entry_price": float(p.get("entry_price") or 0),
+                        })
+                if positions:
+                    return positions
+
         for asset, info in FUTURES_MAP.items():
             pos = client.get_position(info["product_id"])
-            size = int(pos.get("size", 0))
+            size = int(pos.get("size", 0)) if isinstance(pos, dict) else 0
             if size != 0:
                 positions.append({
                     "type":        "futures",
@@ -613,6 +717,30 @@ def get_all_positions() -> list:
     except Exception as e:
         logger.error(f"[DELTA] get_all_positions error: {e}")
         return []
+
+
+def has_active_strangle(asset: str = "BTC") -> bool:
+    """Check if an option position for the given asset is already open."""
+    try:
+        from memory import get_open_trades
+        trades = get_open_trades()
+        for t in trades:
+            s = t.get("symbol", "")
+            if asset in s and ("STRANGLE" in s or "CALL" in s or "PUT" in s or t.get("strategy_id") == "dhurandhar_btc"):
+                if t.get("status") in ["open", "partial_tp"]:
+                    return True
+    except Exception:
+        pass
+
+    try:
+        open_pos = get_all_positions()
+        for p in open_pos:
+            sym = p.get("symbol", "")
+            if f"-{asset}-" in sym or sym.startswith(f"C-{asset}") or sym.startswith(f"P-{asset}"):
+                return True
+    except Exception:
+        pass
+    return False
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────
