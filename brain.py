@@ -124,11 +124,11 @@ def ask_brain(brain_input=None, symbol="BTCUSDT"):
 ## CURRENT MARKET & TECHNICAL DATA
 - Symbol: {context['symbol']}
 - Price: ${context['current_price']:,.2f}
-- Technical Signal: {sd['signal']} (Score: {sd['score']}/100, Confirmations: {sd['confirmations']})
-- Trend Direction: {sd.get('macro_trend', 'NEUTRAL')}
-- RSI Momentum: {sd.get('rsi', 50.0)}
-- ATR (Volatility): ${sd['atr']:.2f}
-- Key Technical Indicators: {', '.join(sd['reasons'])}
+- Technical Signal: {sd.get('signal', 'HOLD')} (Score: {sd.get('score', 50)}/100, Confirmations: {sd.get('confirmations', 0)})
+- Market State: {sd.get('macro_trend', 'RANGE_BOUND')}
+- 24H Range: High ${sd.get('high_24h', 0):,.2f} | Low ${sd.get('low_24h', 0):,.2f} (Span: ${sd.get('atr', 0):,.2f})
+- Options Strangle Profit Zone: {sd.get('profit_zone', 'N/A')}
+- Key Setup Context: {', '.join(sd.get('reasons', []))}
 
 ## TRADING PERFORMANCE & CAPITAL RISK
 - Total Trades: {context['stats']['total_trades']}
@@ -142,24 +142,22 @@ def ask_brain(brain_input=None, symbol="BTCUSDT"):
 ## PAST LEARNINGS
 {context['learnings']}
 
-## STRATEGY PLAYBOOK & EXECUTION RULES:
-The strategy evaluates Moving Average (MA) crossovers and RSI momentum:
+## STRATEGY PLAYBOOK & EXECUTION RULES (DHURANDHAR HYBRID):
+This strategy executes Delta Exchange 24-Hour Trend Hunter Futures Breakouts with Options Strangle Hedging:
 
-### BUY SETUP:
-- Fast EMA crosses or is aligned above Slow EMA.
-- RSI in healthy bullish momentum (above 45 and below 70, not overbought).
-- Macro trend aligned with upward momentum.
+### BUY SETUP (BULLISH BREAKOUT):
+- Price breaks above 24-Hour High (Bullish breakout).
+- Futures Long is triggered to capture upside momentum and hedge short Call options.
 - Output: "action": "BUY", "confidence": 7-9.
 
-### SELL SETUP:
-- Fast EMA crosses or is aligned below Slow EMA.
-- RSI in bearish momentum (below 55 and above 30, not oversold).
-- Macro trend aligned with downward momentum.
+### SELL SETUP (BEARISH BREAKDOWN):
+- Price breaks below 24-Hour Low (Bearish breakdown).
+- Futures Short is triggered to capture downward crash and hedge short Put options.
 - Output: "action": "SELL", "confidence": 7-9.
 
-### STRICT FILTERS:
-1. If market is in choppy consolidation with flat moving averages or extreme RSI, output "action": "HOLD", "confidence": 1-4.
-2. Ensure asymmetric Risk-to-Reward ratio before approving trades.
+### RANGE-BOUND / CONSOLIDATION:
+- When price is comfortably within the 24-Hour High and Low, options theta decay generates profit.
+- Output: "action": "HOLD", "confidence": 3-5.
 
 Output MUST be a JSON object with keys: "action" ("BUY", "SELL", or "HOLD"), "confidence" (1-10 integer), "reasoning" (string), "risk_level" ("LOW", "MEDIUM", or "HIGH").
 """

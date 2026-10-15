@@ -229,6 +229,10 @@ def get_enhanced_signal(symbol="BTCUSDT", interval="24h"):
         "tp1": tp1,
         "tp2": tp2,
         "structure_sl": structure_sl,
+        "atr": round(range_span, 2),
+        "rsi": 50.0,
+        "adx": 25.0,
+        "volume_ratio": 1.0,
         "macro_trend": macro_trend,
         "reasons": reasons
     }
