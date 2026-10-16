@@ -235,7 +235,7 @@ def repair_strangle_positions():
     if repaired:
         write_ledger(trades)
         recalc_stats_from_ledger()
-        print("[MEMORY] ✅ Restored active Delta Strangle positions and recalibrated ledger stats.")
+        print("[MEMORY] Restored active Delta Strangle positions and recalibrated ledger stats.")
 
 
 def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, take_profit=None,
