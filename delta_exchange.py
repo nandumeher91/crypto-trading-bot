@@ -603,6 +603,37 @@ def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.12) -> dic
     }
 
 
+def has_active_strangle(asset: str) -> bool:
+    """
+    Check if an active options strangle exists for asset (BTC or ETH).
+    Checks open trades ledger or active state file.
+    """
+    asset = asset.upper()
+    try:
+        # 1. Check dhurandhar_state.json if exists
+        state_file = os.path.join(BASE_DIR, "dhurandhar_state.json")
+        if os.path.exists(state_file):
+            with open(state_file, "r", encoding="utf-8") as f:
+                state = json.load(f)
+                opts = state.get("options", {})
+                if opts.get(f"{asset.lower()}_strangle_active"):
+                    return True
+
+        # 2. Check ledger.json for open strangle positions
+        ledger_file = os.path.join(BASE_DIR, "ledger.json")
+        if os.path.exists(ledger_file):
+            with open(ledger_file, "r", encoding="utf-8") as f:
+                ledger = json.load(f)
+                for t in ledger:
+                    if isinstance(t, dict) and t.get("status") == "open":
+                        sym = str(t.get("symbol", "")).upper()
+                        if f"{asset}-STRANGLE" in sym or (asset in sym and "STRANGLE" in sym):
+                            return True
+    except Exception as e:
+        logger.debug(f"[DELTA] has_active_strangle check error: {e}")
+    return False
+
+
 # ── Positions Overview ────────────────────────────────────────────────────────
 
 def get_all_positions() -> list:
