@@ -895,6 +895,9 @@ def generate_dashboard_html():
     active_strat_count = len(active_strats)
     total_strat_count = len(strategies_list)
 
+    # Open Trades definition
+    open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["open", "partial_tp"]]
+
     # Calculate Margin Used across all open trades
     total_used_margin = sum(safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)) for t in open_trades)
 
