@@ -1116,11 +1116,12 @@ def generate_dashboard_html():
             pnl_color = "#34d399" if t_pnl >= 0 else "#f87171"
             pnl_val_text = f"+${t_pnl:,.2f}" if t_pnl >= 0 else f"-${abs(t_pnl):,.2f}"
 
+            t_strat_name = t.get('strategy_name') or 'Dhurandhar Strategy'
             rows_html += f"""
             <tr style="border-bottom:1px solid #161a24; transition:background 0.15s;" onmouseover="this.style.background='#131722'" onmouseout="this.style.background='transparent'">
                 <td style="padding:12px 14px; font-weight:600; color:#ffffff; font-family:var(--font-mono);">#{t_id}</td>
                 <td style="padding:12px 14px; color:#64748b; font-family:var(--font-mono); font-size:11px;">{t_time}</td>
-                <td style="padding:12px 14px; color:#8e95a5; font-weight:600;">MA Crossover</td>
+                <td style="padding:12px 14px; color:#c084fc; font-weight:600;">{t_strat_name}</td>
                 <td style="padding:12px 14px; font-weight:600; color:#ffffff; font-family:var(--font-mono);">{t_sym}</td>
                 <td style="padding:12px 14px; font-weight:700; color:{'#34d399' if t_side=='BUY' else '#f87171'};">{t_side}</td>
                 <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">${t_entry:,.2f}</td>
