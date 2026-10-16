@@ -2702,7 +2702,7 @@ def main():
     print("\n" + "=" * 65)
     print("  🚀 NEXORA ALGO QUANTITATIVE TRADING ENGINE")
     print("  Binance Live Spot • Multi-Strategy Capital Isolation")
-    print("  Emergency Kill Switch & Daily Circuit Breaker: Active")
+    print("  Risk Protection & Daily Circuit Breaker: Armed")
     print("=" * 65)
 
     logger.info("=" * 50)
