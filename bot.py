@@ -9,13 +9,14 @@ if sys.platform == "win32":
 
 import json
 import time
+import re
 import datetime
 from datetime import datetime, timedelta
 from brain import ask_brain
 from exchange import place_test_order, get_current_price, test_api_connection, MIN_QTY
 from memory import (
     log_new_trade, close_trade, partial_close_trade, write_learning, get_open_trades,
-    get_stats, get_trade_by_id, update_trade_stop_loss
+    get_stats, get_trade_by_id, update_trade_stop_loss, repair_strangle_positions, read_ledger
 )
 from strategy import get_enhanced_signal, detect_early_reversal
 try:
@@ -895,11 +896,22 @@ def generate_dashboard_html():
     active_strat_count = len(active_strats)
     total_strat_count = len(strategies_list)
 
+    # Auto-repair any erroneously closed strangles so they display accurately
+    try:
+        repair_strangle_positions()
+        ledger = read_ledger()
+    except Exception:
+        pass
+
     # Open Trades definition
     open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["open", "partial_tp"]]
 
     # Calculate Margin Used across all open trades
-    total_used_margin = sum(safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)) for t in open_trades)
+    total_used_margin = sum(
+        safe_float(t.get("margin_usd")) if safe_float(t.get("margin_usd", 0)) > 0
+        else (50.0 if ("STRANGLE" in str(t.get("symbol", "")) or "USD" in str(t.get("symbol", ""))) else safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)))
+        for t in open_trades
+    )
 
     live_strat_rows = ""
     if not strategies_list:
@@ -922,7 +934,11 @@ def generate_dashboard_html():
             
             # Isolated margin for this strategy
             strat_trades = [t for t in open_trades if t.get("strategy_id") == s_id or "STRANGLE" in str(t.get("symbol", "")) or s_id == "strat_dhurandhar"]
-            s_margin_used = sum(safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)) for t in strat_trades)
+            s_margin_used = sum(
+                safe_float(t.get("margin_usd")) if safe_float(t.get("margin_usd", 0)) > 0
+                else (50.0 if ("STRANGLE" in str(t.get("symbol", "")) or "USD" in str(t.get("symbol", ""))) else safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)))
+                for t in strat_trades
+            )
             s_margin_str = f"${s_margin_used:,.2f}" if s_margin_used > 0 else "$0.00"
             s_margin_color = "#34d399" if s_margin_used > 0 else "#64748b"
 
@@ -987,95 +1003,261 @@ def generate_dashboard_html():
             initial_qty = safe_float(ot.get('initial_quantity', ot_qty))
             partial_pnl = safe_float(ot.get('partial_pnl', 0.0))
             is_runner = ot.get('status') == 'partial_tp'
-            
-            curr_p = safe_float(raw_price) if (sym_label == ot_sym and raw_price) else ot_entry
 
-            if ot_side == "BUY":
-                floating_pnl = (curr_p - ot_entry) * ot_qty + partial_pnl
-                if curr_p <= ot_entry:
-                    progress_pct = 0.0
-                elif curr_p >= ot_tp2:
-                    progress_pct = 100.0
-                elif curr_p < ot_tp1:
-                    progress_pct = min(60.0, ((curr_p - ot_entry) / max(0.001, (ot_tp1 - ot_entry))) * 60.0)
+            is_strangle = "STRANGLE" in ot_sym or ot.get("trade_type") == "strangle" or "STRANGLE" in str(ot.get("reason", ""))
+            is_dhurandhar_futures = (ot.get("strategy_id") == "strat_dhurandhar" or "USD" in ot_sym) and not is_strangle
+
+            if is_strangle:
+                # ── OPTIONS STRANGLE CARD (Pushkar Raj Thakur Theta Harvest) ──
+                reason_str = str(ot.get("reason", ""))
+                call_m = re.search(r"Call\s+\$?([\d,]+)", reason_str)
+                put_m = re.search(r"Put\s+\$?([\d,]+)", reason_str)
+                dte_m = re.search(r"\(?(\d+)\s*DTE\)?", reason_str)
+                c_strk = safe_float(ot.get("call_strike")) or (float(call_m.group(1).replace(",", "")) if call_m else 0)
+                p_strk = safe_float(ot.get("put_strike")) or (float(put_m.group(1).replace(",", "")) if put_m else 0)
+                dte_val = ot.get("dte") or (dte_m.group(1) if dte_m else "Monthly")
+
+                ot_margin = safe_float(ot.get("margin_usd", 50.0))
+                if ot_margin <= 0:
+                    ot_margin = 50.0
+
+                # Live underlying price
+                if "BTC" in ot_sym:
+                    try:
+                        curr_p = get_current_price("BTCUSDT")
+                    except Exception:
+                        curr_p = ot_entry
+                elif "ETH" in ot_sym:
+                    try:
+                        curr_p = get_current_price("ETHUSDT")
+                    except Exception:
+                        curr_p = ot_entry
                 else:
-                    progress_pct = 60.0 + min(40.0, ((curr_p - ot_tp1) / max(0.001, (ot_tp2 - ot_tp1))) * 40.0)
+                    curr_p = ot_entry
+
+                # Safe Range check
+                if curr_p > 0 and p_strk > 0 and c_strk > p_strk:
+                    range_pct = min(100.0, max(0.0, ((curr_p - p_strk) / (c_strk - p_strk)) * 100.0))
+                    if curr_p < p_strk:
+                        range_badge = '<span style="font-size:11px; font-weight:700; color:#f87171; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); padding:3px 10px; border-radius:6px;">⚠️ BELOW PUT STRIKE</span>'
+                    elif curr_p > c_strk:
+                        range_badge = '<span style="font-size:11px; font-weight:700; color:#f87171; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); padding:3px 10px; border-radius:6px;">⚠️ ABOVE CALL STRIKE</span>'
+                    else:
+                        range_badge = '<span style="font-size:11px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); padding:3px 10px; border-radius:6px;">🛡️ SAFE IN PROFIT ZONE (100% THETA DECAY)</span>'
+                else:
+                    range_pct = 50.0
+                    range_badge = '<span style="font-size:11px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); padding:3px 10px; border-radius:6px;">🛡️ STRANGLE ACTIVE</span>'
+
+                open_trade_html += f"""
+                <div class="clean-card" style="padding:22px; margin-bottom:24px; border:1px solid rgba(168,85,247,0.35); background:linear-gradient(180deg, rgba(168,85,247,0.06) 0%, rgba(9,11,16,0.98) 100%);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid #1a1e2a; padding-bottom:14px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); letter-spacing:-0.01em;">{ot_sym}</span>
+                            <span style="padding:3px 9px; border-radius:6px; font-size:11px; font-weight:700; background:rgba(192,132,252,0.15); color:#c084fc; border:1px solid rgba(192,132,252,0.3); font-family:var(--font-mono);">SELL STRANGLE #{ot_id}</span>
+                            {range_badge}
+                            <span style="font-size:11px; font-weight:600; color:#94a3b8; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); padding:3px 10px; border-radius:6px; font-family:var(--font-mono);">📅 {dte_val} DTE Expiry</span>
+                        </div>
+
+                        <button onclick="manualClosePosition({ot_id}, '{ot_sym}')" style="padding:7px 14px; border-radius:8px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); color:#f87171; font-weight:600; font-size:11px; cursor:pointer; transition:all 0.2s;">
+                            Close Strangle
+                        </button>
+                    </div>
+
+                    <div style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; background:#090b10; padding:14px 16px; border-radius:8px; border:1px solid #161a25;">
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Current Spot Price</div>
+                            <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${curr_p:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Put Strike (Lower Range)</div>
+                            <div style="font-size:15px; font-weight:600; color:#34d399; font-family:var(--font-mono); margin-top:2px;">${p_strk:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Call Strike (Upper Range)</div>
+                            <div style="font-size:15px; font-weight:600; color:#c084fc; font-family:var(--font-mono); margin-top:2px;">${c_strk:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Isolated Margin Used</div>
+                            <div style="font-size:15px; font-weight:700; color:#34d399; font-family:var(--font-mono); margin-top:2px;">${ot_margin:,.2f} USD</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Zero-Loss Profit Zone</div>
+                            <div style="font-size:15px; font-weight:700; color:#38bdf8; font-family:var(--font-mono); margin-top:2px;">${p_strk:,.0f} — ${c_strk:,.0f}</div>
+                        </div>
+                    </div>
+
+                    <!-- Range Bar (No TP targets - 100% Theta decay) -->
+                    <div style="margin-top:14px; background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
+                        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
+                            <span style="color:#34d399; font-weight:600;">Put Strike (${p_strk:,.0f})</span>
+                            <span style="color:#ffffff; font-weight:600; font-family:var(--font-mono);">Current Spot: ${curr_p:,.2f} (Zone Pos: {range_pct:.1f}%)</span>
+                            <span style="color:#c084fc; font-weight:600;">Call Strike (${c_strk:,.0f})</span>
+                        </div>
+                        <div style="height:8px; width:100%; background:rgba(255,255,255,0.06); border-radius:9999px; position:relative; overflow:hidden;">
+                            <div style="height:100%; width:{range_pct}%; background:linear-gradient(90deg, #34d399 0%, #38bdf8 50%, #c084fc 100%); border-radius:9999px; transition:width 0.4s ease;"></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#94a3b8; margin-top:8px;">
+                            <span>🎯 <b>No Take Profit Target:</b> 100% Theta premium collected as options decay to $0.00 at monthly expiry.</span>
+                            <span style="color:#a855f7; font-weight:600;">Auto-Roll on Expiry ⟳</span>
+                        </div>
+                    </div>
+                </div>
+                """
+
+            elif is_dhurandhar_futures:
+                # ── DHURANDHAR 24H TREND HUNTER FUTURES CARD ──
+                ot_margin = safe_float(ot.get("margin_usd", 50.0))
+                if ot_margin <= 0:
+                    ot_margin = 50.0
+
+                if "BTC" in ot_sym:
+                    try:
+                        curr_p = get_current_price("BTCUSDT")
+                    except Exception:
+                        curr_p = ot_entry
+                elif "ETH" in ot_sym:
+                    try:
+                        curr_p = get_current_price("ETHUSDT")
+                    except Exception:
+                        curr_p = ot_entry
+                else:
+                    curr_p = ot_entry
+
+                floating_pnl = (curr_p - ot_entry) * ot_qty if ot_side == "BUY" else (ot_entry - curr_p) * ot_qty
+                float_color = "#34d399" if floating_pnl >= 0 else "#f87171"
+                float_str = f"+${floating_pnl:,.2f}" if floating_pnl >= 0 else f"-${abs(floating_pnl):,.2f}"
+
+                open_trade_html += f"""
+                <div class="clean-card" style="padding:22px; margin-bottom:24px; border:1px solid rgba(56,189,248,0.25);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid #1a1e2a; padding-bottom:14px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); letter-spacing:-0.01em;">{ot_sym}</span>
+                            <span style="padding:3px 9px; border-radius:6px; font-size:11px; font-weight:700; background:{'rgba(52,211,153,0.12)' if ot_side=='BUY' else 'rgba(248,113,113,0.12)'}; color:{'#34d399' if ot_side=='BUY' else '#f87171'}; border:1px solid {'rgba(52,211,153,0.25)' if ot_side=='BUY' else 'rgba(248,113,113,0.25)'}; font-family:var(--font-mono);">{ot_side} FUTURES #{ot_id}</span>
+                            <span style="font-size:11px; font-weight:600; color:#38bdf8; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); padding:3px 10px; border-radius:6px;">📈 24H TREND HUNTER (TRAILING MODE)</span>
+                        </div>
+
+                        <button onclick="manualClosePosition({ot_id}, '{ot_sym}')" style="padding:7px 14px; border-radius:8px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); color:#f87171; font-weight:600; font-size:11px; cursor:pointer; transition:all 0.2s;">
+                            Close Position
+                        </button>
+                    </div>
+
+                    <div style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(135px, 1fr)); gap:10px; background:#090b10; padding:14px 16px; border-radius:8px; border:1px solid #161a25;">
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Entry Price</div>
+                            <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${ot_entry:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Current Price</div>
+                            <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${curr_p:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Floating P&L</div>
+                            <div style="font-size:15px; font-weight:700; color:{float_color}; font-family:var(--font-mono); margin-top:2px;">{float_str}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Isolated Margin</div>
+                            <div style="font-size:15px; font-weight:700; color:#34d399; font-family:var(--font-mono); margin-top:2px;">${ot_margin:,.2f} USD</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Trailing Stop Loss</div>
+                            <div style="font-size:15px; font-weight:600; color:#f87171; font-family:var(--font-mono); margin-top:2px;">${ot_sl:,.2f}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px; font-size:11px; color:#94a3b8; padding:8px 12px; background:rgba(255,255,255,0.03); border-radius:6px;">
+                        ℹ️ <b>No Fixed Take Profit Target:</b> This position rides the breakout until the 24H High/Low boundary reverses.
+                    </div>
+                </div>
+                """
+
             else:
-                floating_pnl = (ot_entry - curr_p) * ot_qty + partial_pnl
-                if curr_p >= ot_entry:
-                    progress_pct = 0.0
-                elif curr_p <= ot_tp2:
-                    progress_pct = 100.0
-                elif curr_p > ot_tp1:
-                    progress_pct = min(60.0, ((ot_entry - curr_p) / max(0.001, (ot_entry - ot_tp1))) * 60.0)
+                # ── LEGACY SPOT TRADES CARD (with TP1 / TP2) ──
+                curr_p = safe_float(raw_price) if (sym_label == ot_sym and raw_price) else ot_entry
+                if ot_side == "BUY":
+                    floating_pnl = (curr_p - ot_entry) * ot_qty + partial_pnl
+                    if curr_p <= ot_entry:
+                        progress_pct = 0.0
+                    elif curr_p >= ot_tp2:
+                        progress_pct = 100.0
+                    elif curr_p < ot_tp1:
+                        progress_pct = min(60.0, ((curr_p - ot_entry) / max(0.001, (ot_tp1 - ot_entry))) * 60.0)
+                    else:
+                        progress_pct = 60.0 + min(40.0, ((curr_p - ot_tp1) / max(0.001, (ot_tp2 - ot_tp1))) * 40.0)
                 else:
-                    progress_pct = 60.0 + min(40.0, ((ot_tp1 - curr_p) / max(0.001, (ot_tp1 - ot_tp2))) * 40.0)
+                    floating_pnl = (ot_entry - curr_p) * ot_qty + partial_pnl
+                    if curr_p >= ot_entry:
+                        progress_pct = 0.0
+                    elif curr_p <= ot_tp2:
+                        progress_pct = 100.0
+                    elif curr_p > ot_tp1:
+                        progress_pct = min(60.0, ((ot_entry - curr_p) / max(0.001, (ot_entry - ot_tp1))) * 60.0)
+                    else:
+                        progress_pct = 60.0 + min(40.0, ((ot_tp1 - curr_p) / max(0.001, (ot_tp1 - ot_tp2))) * 40.0)
 
-            floating_pct = (floating_pnl / (ot_entry * initial_qty)) * 100 if (ot_entry * initial_qty) > 0 else 0.0
-            float_color = "#34d399" if floating_pnl >= 0 else "#f87171"
-            float_str = f"+${floating_pnl:,.2f}" if floating_pnl >= 0 else f"-${abs(floating_pnl):,.2f}"
+                floating_pct = (floating_pnl / (ot_entry * initial_qty)) * 100 if (ot_entry * initial_qty) > 0 else 0.0
+                float_color = "#34d399" if floating_pnl >= 0 else "#f87171"
+                float_str = f"+${floating_pnl:,.2f}" if floating_pnl >= 0 else f"-${abs(floating_pnl):,.2f}"
 
-            card_badge_text = "🛡️ TP1 BOOKED • TRAILING STOP ACTIVE" if is_runner else "● ACTIVE POSITION"
-            sl_label = "Stop Loss (Trailing)" if is_runner else "Stop Loss"
-            sl_color = "#34d399" if is_runner else "#f87171"
+                card_badge_text = "🛡️ TP1 BOOKED • TRAILING STOP ACTIVE" if is_runner else "● ACTIVE POSITION"
+                sl_label = "Stop Loss (Trailing)" if is_runner else "Stop Loss"
+                sl_color = "#34d399" if is_runner else "#f87171"
 
-            open_trade_html += f"""
-            <div class="clean-card" style="padding:22px; margin-bottom:24px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid #1a1e2a; padding-bottom:14px;">
-                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <span style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); letter-spacing:-0.01em;">{ot_sym}</span>
-                        <span style="padding:3px 9px; border-radius:6px; font-size:11px; font-weight:700; background:{'rgba(52,211,153,0.12)' if ot_side=='BUY' else 'rgba(248,113,113,0.12)'}; color:{'#34d399' if ot_side=='BUY' else '#f87171'}; border:1px solid {'rgba(52,211,153,0.25)' if ot_side=='BUY' else 'rgba(248,113,113,0.25)'}; font-family:var(--font-mono);">{ot_side} #{ot_id}</span>
-                        <span style="font-size:11px; font-weight:600; color:#34d399; background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.2); padding:3px 10px; border-radius:6px;">{card_badge_text}</span>
+                open_trade_html += f"""
+                <div class="clean-card" style="padding:22px; margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid #1a1e2a; padding-bottom:14px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); letter-spacing:-0.01em;">{ot_sym}</span>
+                            <span style="padding:3px 9px; border-radius:6px; font-size:11px; font-weight:700; background:{'rgba(52,211,153,0.12)' if ot_side=='BUY' else 'rgba(248,113,113,0.12)'}; color:{'#34d399' if ot_side=='BUY' else '#f87171'}; border:1px solid {'rgba(52,211,153,0.25)' if ot_side=='BUY' else 'rgba(248,113,113,0.25)'}; font-family:var(--font-mono);">{ot_side} #{ot_id}</span>
+                            <span style="font-size:11px; font-weight:600; color:#34d399; background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.2); padding:3px 10px; border-radius:6px;">{card_badge_text}</span>
+                        </div>
+
+                        <button onclick="manualClosePosition({ot_id}, '{ot_sym}')" style="padding:7px 14px; border-radius:8px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); color:#f87171; font-weight:600; font-size:11px; cursor:pointer; transition:all 0.2s;">
+                            Close Position (Market)
+                        </button>
                     </div>
 
-                    <button onclick="manualClosePosition({ot_id}, '{ot_sym}')" style="padding:7px 14px; border-radius:8px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); color:#f87171; font-weight:600; font-size:11px; cursor:pointer; transition:all 0.2s;">
-                        Close Position (Market)
-                    </button>
+                    <div style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(135px, 1fr)); gap:10px; background:#090b10; padding:14px 16px; border-radius:8px; border:1px solid #161a25;">
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Entry Price</div>
+                            <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${ot_entry:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Current Price</div>
+                            <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${curr_p:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Live Floating P&L</div>
+                            <div style="font-size:15px; font-weight:700; color:{float_color}; font-family:var(--font-mono); margin-top:2px;">{float_str} <span style="font-size:11px; font-weight:normal;">({floating_pct:+.2f}%)</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">{sl_label}</div>
+                            <div style="font-size:15px; font-weight:600; color:{sl_color}; font-family:var(--font-mono); margin-top:2px;">${ot_sl:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Target 1 (TP1)</div>
+                            <div style="font-size:15px; font-weight:600; color:#34d399; font-family:var(--font-mono); margin-top:2px;">${ot_tp1:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Target 2 (TP2)</div>
+                            <div style="font-size:15px; font-weight:600; color:#c084fc; font-family:var(--font-mono); margin-top:2px;">${ot_tp2:,.2f}</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:14px;">
+                        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
+                            <span style="color:#8e95a5; font-weight:500;">Target Progress</span>
+                            <span style="color:#c084fc; font-family:var(--font-mono); font-weight:600;">{progress_pct:.1f}%</span>
+                        </div>
+                        <div style="height:6px; width:100%; background:rgba(168,85,247,0.15); border-radius:9999px; position:relative; overflow:hidden;">
+                            <div style="height:100%; width:{progress_pct}%; background:linear-gradient(90deg, #8b5cf6 0%, #d946ef 100%); border-radius:9999px; transition:width 0.4s ease; box-shadow:0 0 10px rgba(217,70,239,0.5);"></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; font-family:var(--font-mono); margin-top:5px;">
+                            <span>Entry (${ot_entry:,.2f})</span>
+                            <span style="color:#34d399;">TP1 (${ot_tp1:,.2f})</span>
+                            <span style="color:#c084fc;">TP2 (${ot_tp2:,.2f})</span>
+                        </div>
+                    </div>
                 </div>
-
-                <div style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(135px, 1fr)); gap:10px; background:#090b10; padding:14px 16px; border-radius:8px; border:1px solid #161a25;">
-                    <div>
-                        <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Entry Price</div>
-                        <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${ot_entry:,.2f}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Current Price</div>
-                        <div style="font-size:15px; font-weight:600; color:#ffffff; font-family:var(--font-mono); margin-top:2px;">${curr_p:,.2f}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Live Floating P&L</div>
-                        <div style="font-size:15px; font-weight:700; color:{float_color}; font-family:var(--font-mono); margin-top:2px;">{float_str} <span style="font-size:11px; font-weight:normal;">({floating_pct:+.2f}%)</span></div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">{sl_label}</div>
-                        <div style="font-size:15px; font-weight:600; color:{sl_color}; font-family:var(--font-mono); margin-top:2px;">${ot_sl:,.2f}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Target 1 (TP1)</div>
-                        <div style="font-size:15px; font-weight:600; color:#34d399; font-family:var(--font-mono); margin-top:2px;">${ot_tp1:,.2f}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Target 2 (TP2)</div>
-                        <div style="font-size:15px; font-weight:600; color:#c084fc; font-family:var(--font-mono); margin-top:2px;">${ot_tp2:,.2f}</div>
-                    </div>
-                </div>
-
-                <div style="margin-top:14px;">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
-                        <span style="color:#8e95a5; font-weight:500;">Target Progress</span>
-                        <span style="color:#c084fc; font-family:var(--font-mono); font-weight:600;">{progress_pct:.1f}%</span>
-                    </div>
-                    <div style="height:6px; width:100%; background:rgba(168,85,247,0.15); border-radius:9999px; position:relative; overflow:hidden;">
-                        <div style="height:100%; width:{progress_pct}%; background:linear-gradient(90deg, #8b5cf6 0%, #d946ef 100%); border-radius:9999px; transition:width 0.4s ease; box-shadow:0 0 10px rgba(217,70,239,0.5);"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; font-family:var(--font-mono); margin-top:5px;">
-                        <span>Entry (${ot_entry:,.2f})</span>
-                        <span style="color:#34d399;">TP1 (${ot_tp1:,.2f})</span>
-                        <span style="color:#c084fc;">TP2 (${ot_tp2:,.2f})</span>
-                    </div>
-                </div>
-            </div>
-            """
+                """
     elif weekend_active:
         open_trade_html = """
         <div class="clean-card" style="padding:16px 20px; margin-bottom:24px; color:#fbbf24; background:rgba(168,85,247,0.06); border:1px solid rgba(168,85,247,0.22); display:flex; align-items:center; gap:14px;">
@@ -1312,8 +1494,8 @@ def generate_dashboard_html():
           <div style="font-size:24px; font-weight:700; color:#ffffff; margin-top:14px; letter-spacing:-0.02em; font-family:var(--font-mono);">
             {len(open_trades)}
           </div>
-          <div style="margin-top:6px; font-size:11px; color:var(--text-secondary);">
-            {'BTCUSDT Active' if open_trades else '0 Active Positions'}
+          <div style="margin-top:6px; font-size:11px; color:{'#34d399' if open_trades else 'var(--text-secondary)'}; font-weight:600; font-family:var(--font-mono);">
+            {'Margin In Use: $' + f'{total_used_margin:,.2f}' if open_trades else '0 Active Positions'}
           </div>
         </div>
 
@@ -2287,6 +2469,11 @@ def manage_open_positions():
         t_sym = trade.get("symbol", PRIMARY_SYMBOL)
         status = trade.get("status", "open")
         tp1_hit = trade.get("tp1_hit", False)
+
+        # CRITICAL: Delta Exchange & Dhurandhar trades are managed exclusively by strategy_dhurandhar.py!
+        # Do NOT apply Binance spot TP1/TP2 or Stop Loss logic to them.
+        if "STRANGLE" in t_sym or trade.get("strategy_id") == "strat_dhurandhar" or trade.get("trade_type") in ["strangle", "dhurandhar_futures"]:
+            continue
 
         try:
             current_price = get_current_price(t_sym)

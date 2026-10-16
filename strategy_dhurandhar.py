@@ -37,10 +37,11 @@ from typing import Optional
 
 import delta_exchange as dx
 try:
-    from memory import log_new_trade, close_trade
+    from memory import log_new_trade, close_trade, get_open_trades
 except Exception:
     log_new_trade = None
     close_trade = None
+    get_open_trades = None
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -215,9 +216,11 @@ def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
                         quantity=order.get("size", 1),
                         reason=f"24H High Breakout LONG: ${current_price:,.2f}",
                         stop_loss=round(low_24h, 2),
-                        take_profit=round(current_price * 1.05, 2),
+                        take_profit=None,
                         strategy_name="Dhurandhar Strategy",
-                        strategy_id="strat_dhurandhar"
+                        strategy_id="strat_dhurandhar",
+                        trade_type="dhurandhar_futures",
+                        margin_usd=notional_usd
                     )
                 except Exception:
                     pass
@@ -266,9 +269,11 @@ def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
                         quantity=order.get("size", 1),
                         reason=f"24H Low Breakdown SHORT: ${current_price:,.2f}",
                         stop_loss=round(high_24h, 2),
-                        take_profit=round(current_price * 0.95, 2),
+                        take_profit=None,
                         strategy_name="Dhurandhar Strategy",
-                        strategy_id="strat_dhurandhar"
+                        strategy_id="strat_dhurandhar",
+                        trade_type="dhurandhar_futures",
+                        margin_usd=notional_usd
                     )
                 except Exception:
                     pass
@@ -322,6 +327,36 @@ def _run_option_selling(asset: str, config: dict, state: dict) -> dict:
     active_key = f"{asset_key}_strangle_active"
 
     if opts_state.get(active_key):
+        # Verify the active strangle is present in open trades ledger
+        if get_open_trades:
+            try:
+                op_trades = get_open_trades()
+                has_open = any(t.get("status") in ["open", "partial_tp"] and f"{asset}-STRANGLE" in str(t.get("symbol", "")) for t in op_trades)
+                if not has_open and log_new_trade:
+                    # Re-sync into ledger so it is always visible on dashboard
+                    c_strk = opts_state.get(f"{asset_key}_call_strike", 0)
+                    p_strk = opts_state.get(f"{asset_key}_put_strike", 0)
+                    dte_v = opts_state.get(f"{asset_key}_dte", 13)
+                    t_id = log_new_trade(
+                        symbol=f"{asset}-STRANGLE",
+                        side="SELL",
+                        entry_price=dx.get_ticker(asset).get("mark_price", 0) if dx else 0,
+                        quantity=contracts,
+                        reason=f"Strangle: Call ${c_strk:,.0f} + Put ${p_strk:,.0f} ({dte_v} DTE)",
+                        stop_loss=None,
+                        take_profit=None,
+                        strategy_name="Dhurandhar Strategy",
+                        strategy_id="strat_dhurandhar",
+                        trade_type="strangle",
+                        margin_usd=50.0,
+                        call_strike=c_strk,
+                        put_strike=p_strk,
+                        dte=dte_v
+                    )
+                    opts_state["trade_id"] = t_id
+            except Exception as e:
+                logger.warning(f"[DHURANDHAR] Strangle ledger check error: {e}")
+
         logger.info(f"[DHURANDHAR] {asset} Strangle already active: "
                     f"CALL={opts_state.get(call_key)} | PUT={opts_state.get(put_key)}")
         return opts_state
@@ -341,16 +376,23 @@ def _run_option_selling(asset: str, config: dict, state: dict) -> dict:
         t_id = None
         if log_new_trade:
             try:
+                # Option Selling has NO TARGETS: Premium decays to $0 at expiry
                 t_id = log_new_trade(
                     symbol=f"{asset}-STRANGLE",
                     side="SELL",
                     entry_price=strangle_info.get("current_price", 0),
                     quantity=contracts,
                     reason=f"Strangle: Call ${c_strk:,.0f} + Put ${p_strk:,.0f} ({dte} DTE)",
-                    stop_loss=c_strk,
-                    take_profit=p_strk,
+                    stop_loss=None,
+                    take_profit=None,
                     strategy_name="Dhurandhar Strategy",
-                    strategy_id="strat_dhurandhar"
+                    strategy_id="strat_dhurandhar",
+                    trade_type="strangle",
+                    margin_usd=50.0,
+                    call_strike=c_strk,
+                    put_strike=p_strk,
+                    expiry=strangle_info.get("expiry"),
+                    dte=dte
                 )
             except Exception:
                 pass
@@ -361,6 +403,11 @@ def _run_option_selling(asset: str, config: dict, state: dict) -> dict:
             put_key:    p_sym,
             time_key:   datetime.now(timezone.utc).isoformat(),
             "trade_id": t_id,
+            f"{asset_key}_call_strike": c_strk,
+            f"{asset_key}_put_strike":  p_strk,
+            f"{asset_key}_expiry":      strangle_info.get("expiry"),
+            f"{asset_key}_dte":         dte,
+            f"{asset_key}_margin_usd":  50.0,
         })
         state["total_trades"] = state.get("total_trades", 0) + 2  # Call + Put = 2 option orders
         logger.info(f"[DHURANDHAR] ✅ {asset} Strangle placed: "
