@@ -895,11 +895,14 @@ def generate_dashboard_html():
     active_strat_count = len(active_strats)
     total_strat_count = len(strategies_list)
 
+    # Calculate Margin Used across all open trades
+    total_used_margin = sum(safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)) for t in open_trades)
+
     live_strat_rows = ""
     if not strategies_list:
         live_strat_rows = """
         <tr>
-          <td colspan="4" style="text-align:center; padding:32px 10px; color:#9490b0;">
+          <td colspan="5" style="text-align:center; padding:32px 10px; color:#9490b0;">
             <div style="font-size:22px; margin-bottom:6px;">⚡</div>
             <div style="font-weight:600; color:#ffffff; font-size:13px;">No Custom Strategies Configured</div>
             <div style="font-size:11px; color:#64748b; margin-top:3px;">Click "+ Configure Strategy" above to add your first strategy.</div>
@@ -913,6 +916,13 @@ def generate_dashboard_html():
             s_sym = s.get("symbol", "BTCUSDT")
             s_cap = safe_float(s.get("capital_usd", 100.0))
             s_active = s.get("active", True)
+            
+            # Isolated margin for this strategy
+            strat_trades = [t for t in open_trades if t.get("strategy_id") == s_id or "STRANGLE" in str(t.get("symbol", "")) or s_id == "strat_dhurandhar"]
+            s_margin_used = sum(safe_float(t.get("quantity", 0)) * safe_float(t.get("entry_price", 0)) for t in strat_trades)
+            s_margin_str = f"${s_margin_used:,.2f}" if s_margin_used > 0 else "$0.00"
+            s_margin_color = "#34d399" if s_margin_used > 0 else "#64748b"
+
             status_badge = '<span style="font-size:10px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); padding:2px 8px; border-radius:9999px;">RUNNING</span>' if s_active else '<span style="font-size:10px; font-weight:700; color:#94a3b8; background:rgba(148,163,184,0.12); border:1px solid rgba(148,163,184,0.3); padding:2px 8px; border-radius:9999px;">PAUSED</span>'
             btn_toggle_text = "Pause" if s_active else "Resume"
             btn_toggle_color = "#fbbf24" if s_active else "#34d399"
@@ -925,6 +935,9 @@ def generate_dashboard_html():
               </td>
               <td style="padding:12px 10px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">
                 ${s_cap:,.2f} USD
+              </td>
+              <td style="padding:12px 10px; font-family:var(--font-mono); font-weight:700; color:{s_margin_color};">
+                {s_margin_str}
               </td>
               <td style="padding:12px 10px;">
                 {status_badge}
@@ -1089,16 +1102,17 @@ def generate_dashboard_html():
         </div>
         """
 
-    # Rows for Trade Execution History
+    # Rows for Trade Execution History (Show strictly CLOSED trades)
     rows_html = ""
-    recent_trades = list(reversed([t for t in ledger if isinstance(t, dict)][-10:]))
+    closed_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["closed", "closed_tp", "closed_sl", "closed_manual"]]
+    recent_trades = list(reversed(closed_trades[-10:]))
     if not recent_trades:
         rows_html = """
         <tr>
             <td colspan="9" style="text-align:center; padding:36px 14px; color:#9490b0; font-size:12px;">
                 <div style="font-size:24px; margin-bottom:8px;">📡</div>
                 <div style="font-weight:600; color:#ffffff; font-size:13px; margin-bottom:4px;">No Closed Trades Yet</div>
-                <div style="color:#64748b; font-size:11px;">Bot is monitoring market conditions. Executed trades and profit realizations will appear here.</div>
+                <div style="color:#64748b; font-size:11px;">Active positions are monitored live above. Closed trades and realized profit will appear here.</div>
             </td>
         </tr>
         """
@@ -1337,6 +1351,11 @@ def generate_dashboard_html():
         </div>
       </section>
 
+      <!-- Active Position Section (If Open) - Prominent Top Placement -->
+      <div id="sec-positions">
+        {open_trade_html}
+      </div>
+
       <!-- ============================================== -->
       <!-- MID SECTION: Portfolio Performance + Strategy Hub-->
       <!-- ============================================== -->
@@ -1488,11 +1507,6 @@ def generate_dashboard_html():
         </div>
       </section>
 
-      <!-- Active Position Section (If Open) -->
-      <div id="sec-positions">
-        {open_trade_html}
-      </div>
-
       <!-- ============================================== -->
       <!-- MID-LOWER: Active Strategy + Groq AI           -->
       <!-- ============================================== -->
@@ -1514,6 +1528,7 @@ def generate_dashboard_html():
                 <tr style="border-bottom:1px solid rgba(168,85,247,0.15); font-size:10px; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.04em;">
                   <th style="padding:10px 8px;">Strategy</th>
                   <th style="padding:10px 8px;">Allocated Limit</th>
+                  <th style="padding:10px 8px;">Margin In Use</th>
                   <th style="padding:10px 8px;">Status</th>
                   <th style="padding:10px 8px; text-align:right;">Actions</th>
                 </tr>
