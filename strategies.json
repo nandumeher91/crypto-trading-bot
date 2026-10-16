@@ -1,14 +1,15 @@
 [
   {
-    "id": "dhurandhar_btc",
-    "name": "Dhurandhar Strategy (Options Strangle + 24H Trend Hunter Futures)",
-    "symbol": "BTCUSDT",
+    "id": "strat_dhurandhar",
+    "name": "Dhurandhar Strategy (Options Strangle + 24H Futures)",
+    "symbol": "BTC / ETH (Delta Testnet)",
     "asset": "BTC",
+    "type": "24H Breakout & Theta Selling",
     "capital_usd": 100.0,
     "active": true,
     "strategy_type": "hybrid_options_futures",
     "target_strangle_otm_pct": 12.0,
-    "breakout_period": "24h",
-    "created_at": "2026-10-15 13:40:00 IST"
+    "platform": "Delta Exchange India Testnet",
+    "description": "24H High/Low Trend Hunter Futures + 12% OTM Call/Put Strangle Selling for continuous Theta decay."
   }
 ]

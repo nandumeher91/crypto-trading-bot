@@ -36,6 +36,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import delta_exchange as dx
+try:
+    from memory import log_new_trade, close_trade
+except Exception:
+    log_new_trade = None
+    close_trade = None
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -191,10 +196,32 @@ def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
         if current_position == "short":
             logger.info(f"[DHURANDHAR] {asset}: 24H High broken → Reversing SHORT → LONG")
             dx.close_futures_position(asset)
+            if close_trade and asset_state.get("trade_id"):
+                try:
+                    close_trade(asset_state["trade_id"], current_price, "24H High Breakout Reversal")
+                except Exception:
+                    pass
 
         # Open LONG
         order = dx.place_futures_order(asset, side="buy", notional_usd=notional_usd)
         if order.get("success"):
+            t_id = None
+            if log_new_trade:
+                try:
+                    t_id = log_new_trade(
+                        symbol=f"{asset}USD",
+                        side="BUY",
+                        entry_price=current_price,
+                        quantity=order.get("size", 1),
+                        reason=f"24H High Breakout LONG: ${current_price:,.2f}",
+                        stop_loss=round(low_24h, 2),
+                        take_profit=round(current_price * 1.05, 2),
+                        strategy_name="Dhurandhar Strategy",
+                        strategy_id="strat_dhurandhar"
+                    )
+                except Exception:
+                    pass
+
             asset_state.update({
                 "position":          "long",
                 "entry_price":       current_price,
@@ -202,6 +229,7 @@ def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
                 "contracts":         order.get("size", 1),
                 "high_24h_at_entry": high_24h,
                 "low_24h_at_entry":  low_24h,
+                "trade_id":          t_id,
             })
             state["total_trades"] = state.get("total_trades", 0) + 1
             logger.info(f"[DHURANDHAR] ✅ {asset} LONG entered @ ${current_price:,.2f} | "
@@ -219,10 +247,32 @@ def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
         if current_position == "long":
             logger.info(f"[DHURANDHAR] {asset}: 24H Low broken → Reversing LONG → SHORT")
             dx.close_futures_position(asset)
+            if close_trade and asset_state.get("trade_id"):
+                try:
+                    close_trade(asset_state["trade_id"], current_price, "24H Low Breakdown Reversal")
+                except Exception:
+                    pass
 
         # Open SHORT
         order = dx.place_futures_order(asset, side="sell", notional_usd=notional_usd)
         if order.get("success"):
+            t_id = None
+            if log_new_trade:
+                try:
+                    t_id = log_new_trade(
+                        symbol=f"{asset}USD",
+                        side="SELL",
+                        entry_price=current_price,
+                        quantity=order.get("size", 1),
+                        reason=f"24H Low Breakdown SHORT: ${current_price:,.2f}",
+                        stop_loss=round(high_24h, 2),
+                        take_profit=round(current_price * 0.95, 2),
+                        strategy_name="Dhurandhar Strategy",
+                        strategy_id="strat_dhurandhar"
+                    )
+                except Exception:
+                    pass
+
             asset_state.update({
                 "position":          "short",
                 "entry_price":       current_price,
@@ -230,6 +280,7 @@ def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
                 "contracts":         order.get("size", 1),
                 "high_24h_at_entry": high_24h,
                 "low_24h_at_entry":  low_24h,
+                "trade_id":          t_id,
             })
             state["total_trades"] = state.get("total_trades", 0) + 1
             logger.info(f"[DHURANDHAR] ✅ {asset} SHORT entered @ ${current_price:,.2f} | "
@@ -281,11 +332,35 @@ def _run_option_selling(asset: str, config: dict, state: dict) -> dict:
 
     if result.get("success"):
         strangle_info = result.get("strangle_info", {})
+        c_sym = result["call_order"].get("symbol", strangle_info.get("call", {}).get("symbol"))
+        p_sym = result["put_order"].get("symbol",  strangle_info.get("put", {}).get("symbol"))
+        c_strk = strangle_info.get("call", {}).get("strike", 0)
+        p_strk = strangle_info.get("put", {}).get("strike", 0)
+        dte = strangle_info.get("dte", "?")
+        
+        t_id = None
+        if log_new_trade:
+            try:
+                t_id = log_new_trade(
+                    symbol=f"{asset}-STRANGLE",
+                    side="SELL",
+                    entry_price=strangle_info.get("current_price", 0),
+                    quantity=contracts,
+                    reason=f"Strangle: Call ${c_strk:,.0f} + Put ${p_strk:,.0f} ({dte} DTE)",
+                    stop_loss=c_strk,
+                    take_profit=p_strk,
+                    strategy_name="Dhurandhar Strategy",
+                    strategy_id="strat_dhurandhar"
+                )
+            except Exception:
+                pass
+
         opts_state.update({
             active_key: True,
-            call_key:   result["call_order"].get("symbol", strangle_info.get("call", {}).get("symbol")),
-            put_key:    result["put_order"].get("symbol",  strangle_info.get("put", {}).get("symbol")),
+            call_key:   c_sym,
+            put_key:    p_sym,
             time_key:   datetime.now(timezone.utc).isoformat(),
+            "trade_id": t_id,
         })
         state["total_trades"] = state.get("total_trades", 0) + 2  # Call + Put = 2 option orders
         logger.info(f"[DHURANDHAR] ✅ {asset} Strangle placed: "

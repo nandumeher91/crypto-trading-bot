@@ -1845,19 +1845,15 @@ DEFAULT_DHURANDHAR_STRAT = {
 }
 
 def load_strategies():
-    if not os.path.exists(STRATEGIES_FILE):
-        return [DEFAULT_DHURANDHAR_STRAT]
-    try:
-        with open(STRATEGIES_FILE, "r") as f:
-            data = json.load(f)
-            if not isinstance(data, list) or len(data) == 0:
-                return [DEFAULT_DHURANDHAR_STRAT]
-            has_dhurandhar = any(s.get("id") == "strat_dhurandhar" for s in data)
-            if not has_dhurandhar:
-                data.insert(0, DEFAULT_DHURANDHAR_STRAT)
-            return data
-    except Exception:
-        return [DEFAULT_DHURANDHAR_STRAT]
+    if os.path.exists(STRATEGIES_FILE):
+        try:
+            with open(STRATEGIES_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+        except Exception:
+            pass
+    return [DEFAULT_DHURANDHAR_STRAT]
 
 def save_strategy_item(strat_dict):
     strats = load_strategies()
