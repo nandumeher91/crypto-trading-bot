@@ -18,6 +18,11 @@ from memory import (
     get_stats, get_trade_by_id, update_trade_stop_loss
 )
 from strategy import get_enhanced_signal, detect_early_reversal
+try:
+    from strategy_dhurandhar import run_dhurandhar_cycle, get_live_snapshot as get_dhurandhar_snapshot
+except Exception:
+    run_dhurandhar_cycle = None
+    get_dhurandhar_snapshot = None
 import logging
 import os
 import threading
@@ -1827,14 +1832,31 @@ def resume_bot_trading():
 BOT_AUTO_RUN = True
 STRATEGIES_FILE = os.path.join(BASE_DIR, "strategies.json")
 
+DEFAULT_DHURANDHAR_STRAT = {
+    "id": "strat_dhurandhar",
+    "name": "Dhurandhar Multi-Asset (Delta India)",
+    "symbol": "BTC / ETH (Futures + Options Strangle)",
+    "type": "Trend Breakout & Theta Selling",
+    "capital_usd": 100.0,
+    "active": True,
+    "platform": "Delta Exchange India Testnet",
+    "description": "24H High/Low Futures Trend + 12% OTM Strangle Selling for continuous Theta decay."
+}
+
 def load_strategies():
     if not os.path.exists(STRATEGIES_FILE):
-        return []
+        return [DEFAULT_DHURANDHAR_STRAT]
     try:
         with open(STRATEGIES_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            if not isinstance(data, list) or len(data) == 0:
+                return [DEFAULT_DHURANDHAR_STRAT]
+            has_dhurandhar = any(s.get("id") == "strat_dhurandhar" for s in data)
+            if not has_dhurandhar:
+                data.insert(0, DEFAULT_DHURANDHAR_STRAT)
+            return data
     except Exception:
-        return []
+        return [DEFAULT_DHURANDHAR_STRAT]
 
 def save_strategy_item(strat_dict):
     strats = load_strategies()
@@ -2470,9 +2492,18 @@ def run_bot_once():
         logger.info(f"Max open positions reached ({len(open_trades)}/{MAX_OPEN_POSITIONS}): {open_symbols}. Managing active positions.")
         return
 
-    active_strats = [s for s in load_strategies() if s.get("active", True)]
+    # 5. Delta Exchange: Dhurandhar Strategy Cycle (Futures Breakout + OTM Options Strangle)
+    if run_dhurandhar_cycle is not None:
+        dhurandhar_strat = next((s for s in load_strategies() if s.get("id") == "strat_dhurandhar"), None)
+        if dhurandhar_strat and dhurandhar_strat.get("active", True):
+            try:
+                run_dhurandhar_cycle()
+            except Exception as e:
+                logger.warning(f"[DHURANDHAR] Cycle execution error (handled): {e}")
+
+    active_strats = [s for s in load_strategies() if s.get("active", True) and s.get("id") != "strat_dhurandhar"]
     if not active_strats:
-        logger.info("⏸️ STRATEGY HUB: No active custom strategies configured. Automated entries on standby.")
+        logger.info("⏸️ STRATEGY HUB: Dhurandhar active. No additional custom Binance indicator strategies active.")
         return
 
     current_strat = active_strats[0]
