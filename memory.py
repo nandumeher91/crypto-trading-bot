@@ -218,7 +218,8 @@ def repair_strangle_positions():
             t["trade_type"] = "strangle"
             if not t.get("margin_usd") or float(t.get("margin_usd", 0)) <= 0:
                 t["margin_usd"] = 50.0
-            if not t.get("initial_premium") or float(t.get("initial_premium", 0)) <= 0:
+            cur_init = float(t.get("initial_premium") or 0)
+            if cur_init <= 0 or cur_init > 500.0:
                 t["initial_premium"] = 75.0 if "BTC" in sym else 45.0
                 repaired = True
 

@@ -596,7 +596,7 @@ def buy_to_close_option(product_id: int, symbol: str, contracts: int = 1) -> dic
 
 
 def get_option_premium(symbol: str) -> float:
-    """Fetch current market premium of an option contract."""
+    """Fetch current market premium of an option contract in USD."""
     if not symbol:
         return 0.0
     try:
@@ -604,7 +604,10 @@ def get_option_premium(symbol: str) -> float:
         ticker = client.get_ticker(symbol)
         quotes = ticker.get("quotes", {})
         price = float(ticker.get("mark_price") or quotes.get("best_bid") or quotes.get("best_ask") or 0.0)
-        return max(0.0, price)
+        c_val = float(ticker.get("contract_value") or (0.001 if "BTC" in symbol else 0.01))
+        # Actual contract premium in USD = mark price * contract multiplier
+        usd_prem = round(price * c_val, 2)
+        return max(0.0, usd_prem)
     except Exception:
         return 0.0
 

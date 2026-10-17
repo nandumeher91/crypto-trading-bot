@@ -1052,7 +1052,7 @@ def generate_dashboard_html():
                 # Real-Time Cash Flow & Funding Calculation
                 asset_key = "BTC" if "BTC" in ot_sym else ("ETH" if "ETH" in ot_sym else "BTC")
                 init_prem = safe_float(ot.get("initial_premium"))
-                if init_prem <= 0:
+                if init_prem <= 0 or init_prem > 500.0:
                     init_prem = 75.0 if asset_key == "BTC" else 45.0
 
                 c_sym = ot.get("call_symbol")
