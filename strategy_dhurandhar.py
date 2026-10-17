@@ -358,7 +358,10 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
                     call_strike=c_strk,
                     put_strike=p_strk,
                     expiry=strangle_info.get("expiry"),
-                    dte=dte
+                    dte=dte,
+                    initial_premium=init_prem,
+                    call_symbol=c_sym,
+                    put_symbol=p_sym
                 )
 
             opts_state.update({

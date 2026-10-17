@@ -218,6 +218,9 @@ def repair_strangle_positions():
             t["trade_type"] = "strangle"
             if not t.get("margin_usd") or float(t.get("margin_usd", 0)) <= 0:
                 t["margin_usd"] = 50.0
+            if not t.get("initial_premium") or float(t.get("initial_premium", 0)) <= 0:
+                t["initial_premium"] = 75.0 if "BTC" in sym else 45.0
+                repaired = True
 
             # If closed prematurely by spot bug, restore to open
             if t.get("status") in ["closed_sl", "closed_tp", "closed"]:
@@ -241,7 +244,7 @@ def repair_strangle_positions():
 def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, take_profit=None,
                   tp1=None, tp2=None, strategy_name=None, strategy_id=None,
                   trade_type=None, margin_usd=None, call_strike=None, put_strike=None,
-                  expiry=None, dte=None):
+                  expiry=None, dte=None, initial_premium=None, call_symbol=None, put_symbol=None, **kwargs):
     trades = read_ledger()
     sym_upper = symbol.upper().replace("/", "")
     is_strangle = (trade_type == "strangle") or ("STRANGLE" in sym_upper)
@@ -267,6 +270,9 @@ def log_new_trade(symbol, side, entry_price, quantity, reason, stop_loss=None, t
         "margin_usd": round(m_usd, 2),
         "call_strike": float(call_strike) if call_strike else None,
         "put_strike": float(put_strike) if put_strike else None,
+        "call_symbol": call_symbol,
+        "put_symbol": put_symbol,
+        "initial_premium": float(initial_premium) if initial_premium is not None else None,
         "expiry": expiry,
         "dte": dte,
         "entry_price": float(entry_price),

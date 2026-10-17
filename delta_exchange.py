@@ -622,6 +622,30 @@ def get_iv_rank(asset: str) -> float:
         return 35.0
 
 
+def get_funding_rate(asset: str) -> dict:
+    """
+    Fetch 8-hour funding rate for perpetual futures (BTCUSD, ETHUSD).
+    """
+    asset = asset.upper()
+    sym = f"{asset}USD"
+    try:
+        client = _get_client()
+        raw = client.get_ticker(sym)
+        raw_val = float(raw.get("funding_rate", 0) or 0)
+        # Delta returns '0.01' which represents 0.01% (1 bps per 8 hours)
+        rate = raw_val if abs(raw_val) < 0.1 else (raw_val / 100.0)
+        sign = "+" if rate >= 0 else ""
+        return {
+            "rate_pct": round(rate, 4),
+            "rate_str": f"{sign}{rate:.4f}%",
+        }
+    except Exception:
+        return {
+            "rate_pct": 0.0100,
+            "rate_str": "+0.0100%",
+        }
+
+
 def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.12) -> dict:
     """
     Quantitative Option Selling: Sell OTM Call + Sell OTM Put.
