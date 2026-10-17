@@ -1,31 +1,17 @@
 """
 strategy_dhurandhar.py
 ======================
-Dhurandhar Trading Strategy by Pushkar Raj Thakur
-(Video: https://youtu.be/oveeCcTxXsY)
+Delta Hedged Strangle V1 (Quantitative Institutional Engine)
+Based on Pushkar Raj Thakur's Dhurandhar Concept upgraded to:
+  - 15m Timeframe with 96-bar (24H) Rolling High/Low & ATR(14)
+  - 0.15 Delta OTM Strangle Selling (~12% OTM)
+  - 50% Profit Target on Combined Premium Decay
+  - Dynamic 15m Candle Close Breakout Hedge (Close > 24H High + 0.5 ATR / Close < 24H Low - 0.5 ATR)
+  - Max 2 Whipsaws Cap per 24H Window (False Breakout Trap Protection)
+  - 2.0% Global Capital Portfolio Drawdown Hard Stop
+  - 24/7/365 Non-Stop Execution (Continuous Weekend Theta Harvest)
 
-Strategy Overview:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  LEG 1 – TREND HUNTER (Futures Directional)
-    - Monitor BTC & ETH 24-Hour rolling High and Low
-    - 24H High breakout → Long Futures  (ride the bull trend)
-    - 24H Low  breakout → Short Futures (ride the bear trend)
-    - Pure price action, ZERO indicators (no RSI, no EMA)
-    - Whipsaw-free: only flips on confirmed 24H level breaks
-    - BTC : ETH lot ratio = 1 : 5
-
-  LEG 2 – OPTION SELLING (Strangle / Non-Directional)
-    - Sell deep OTM Call (≈12% above price) + OTM Put (≈12% below)
-    - Collect Theta decay premium when market stays in range
-    - Options leg auto-hedges the Futures leg:
-        * Market surges → Futures Long profit cancels Call loss
-        * Market crashes → Futures Short profit cancels Put loss
-        * Market sideways → Both options decay to zero (double profit!)
-
-Execution Platform:
-    Delta Exchange India Testnet (Paper Trading)
-    via delta_exchange.py (zero real funds at risk)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Platform: Delta Exchange India Testnet via delta_exchange.py
 """
 
 import os
@@ -43,43 +29,74 @@ except Exception:
     close_trade = None
     get_open_trades = None
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+try:
+    from exchange import get_klines_direct
+except Exception:
+    get_klines_direct = None
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Dhurandhar")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S"))
+    logger.addHandler(ch)
 
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-STATE_FILE  = os.path.join(BASE_DIR, "dhurandhar_state.json")
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+STATE_FILE = os.path.join(BASE_DIR, "dhurandhar_state.json")
 
-# ── Strategy Configuration ────────────────────────────────────────────────────
+# ── 1. System Parameters & Configuration (Bot Config) ─────────────────────────
 
 DHURANDHAR_CONFIG = {
-    # Trend Hunter settings
-    "assets":              ["BTC", "ETH"],    # Assets to trade
-    "btc_notional_usd":    50.0,              # USD notional per BTC futures trade
-    "eth_notional_usd":    50.0,              # USD notional per ETH futures trade
-    "breakout_buffer_pct": 0.001,             # 0.1% buffer above/below 24H H/L to avoid fake breakouts
+    "STRATEGY_NAME":            "Delta_Hedged_Strangle_V1",
+    "TIMEFRAME":                "15m",
+    "LOOKBACK_WINDOW":          96,       # 96 bars on 15m = 24 Hours
+    "INITIAL_DELTA":            0.15,     # OTM Strike selection (~0.15 Delta / ~12% OTM)
+    "IV_RANK_MIN":              25,       # Entry allowed only if IV Rank >= 25
+    "BREAKOUT_BUFFER_ATR_MULT": 0.5,      # Price > 24h High + (0.5 * ATR)
+    "CANDLE_CLOSE_CONFIRM":     True,     # Wick touch ignored; candle close required
+    "MAX_WHIPSAW_COUNT":        2,        # Max false breakout attempts before pausing
+    "TARGET_PROFIT_PCT":        50,       # Close when 50% combined premium melts
+    "GLOBAL_PORTFOLIO_SL_PCT":  2.0,      # Kill switch at 2% total capital drawdown
 
-    # Option Selling settings
-    "options_enabled":     True,              # Enable Option Selling leg
-    "otm_pct":             0.12,              # 12% OTM strike selection (Pushkar's setup)
-    "option_contracts":    1,                 # Contracts per option leg
-    "strangle_refresh_days": 7,               # Re-sell strangle after this many days (when premium exhausted)
-
-    # Safety
-    "max_loss_usd":        30.0,              # Stop all trading if today's loss exceeds this
-    "enabled":             True,              # Master switch
+    # Asset Settings
+    "assets":                   ["BTC", "ETH"],
+    "btc_notional_usd":         50.0,
+    "eth_notional_usd":         50.0,
+    "option_contracts":         1,
+    "enabled":                  True,
 }
 
 
-# ── State Persistence ─────────────────────────────────────────────────────────
+# ── 2. State Persistence ──────────────────────────────────────────────────────
 
 def _load_state() -> dict:
     """Load strategy state from disk."""
     default = {
-        "btc": {"position": "none", "entry_price": 0, "entry_time": None, "contracts": 0,
-                "high_24h_at_entry": 0, "low_24h_at_entry": 0},
-        "eth": {"position": "none", "entry_price": 0, "entry_time": None, "contracts": 0,
-                "high_24h_at_entry": 0, "low_24h_at_entry": 0},
+        "btc": {
+            "state": "STRANGLE_ACTIVE",
+            "whipsaw_count": 0,
+            "whipsaw_date": "",
+            "initial_total_premium": 80.0,
+            "hedge_entry_price": 0.0,
+            "hedge_sl": 0.0,
+            "trade_id": None,
+            "position": "none",
+            "entry_price": 0,
+            "contracts": 0,
+        },
+        "eth": {
+            "state": "STRANGLE_ACTIVE",
+            "whipsaw_count": 0,
+            "whipsaw_date": "",
+            "initial_total_premium": 80.0,
+            "hedge_entry_price": 0.0,
+            "hedge_sl": 0.0,
+            "trade_id": None,
+            "position": "none",
+            "entry_price": 0,
+            "contracts": 0,
+        },
         "options": {
             "btc_strangle_active": False,
             "btc_call_symbol": None,
@@ -90,17 +107,16 @@ def _load_state() -> dict:
             "eth_put_symbol": None,
             "eth_strangle_time": None,
         },
-        "today_pnl":     0.0,
-        "total_trades":  0,
-        "last_cycle":    None,
-        "is_halted":     False,
-        "halt_reason":   "",
+        "today_pnl":    0.0,
+        "total_trades": 0,
+        "last_cycle":   None,
+        "is_halted":    False,
+        "halt_reason":  "",
     }
     try:
         if os.path.exists(STATE_FILE):
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 saved = json.load(f)
-                # Merge to ensure new keys are present
                 for k, v in default.items():
                     if k not in saved:
                         saved[k] = v
@@ -125,263 +141,213 @@ def _save_state(state: dict):
 
 
 def get_state() -> dict:
-    """Public API: Return current Dhurandhar state (for dashboard)."""
     return _load_state()
 
 
 def reset_state():
-    """Reset all state (use when starting fresh)."""
-    default = _load_state()
-    _save_state({k: v for k, v in default.items() if k == "total_trades"} | {
-        "btc": {"position": "none", "entry_price": 0, "entry_time": None, "contracts": 0,
-                "high_24h_at_entry": 0, "low_24h_at_entry": 0},
-        "eth": {"position": "none", "entry_price": 0, "entry_time": None, "contracts": 0,
-                "high_24h_at_entry": 0, "low_24h_at_entry": 0},
-        "options": {
-            "btc_strangle_active": False, "btc_call_symbol": None, "btc_put_symbol": None, "btc_strangle_time": None,
-            "eth_strangle_active": False, "eth_call_symbol": None, "eth_put_symbol": None, "eth_strangle_time": None,
-        },
-        "today_pnl": 0.0, "total_trades": 0, "last_cycle": None, "is_halted": False, "halt_reason": "",
-    })
+    """Reset strategy state."""
+    state = _load_state()
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for asset in ["btc", "eth"]:
+        state[asset] = {
+            "state": "STRANGLE_ACTIVE",
+            "whipsaw_count": 0,
+            "whipsaw_date": today_str,
+            "initial_total_premium": 80.0,
+            "hedge_entry_price": 0.0,
+            "hedge_sl": 0.0,
+            "trade_id": None,
+            "position": "none",
+            "entry_price": 0,
+            "contracts": 0,
+        }
+    state["options"] = {
+        "btc_strangle_active": False, "btc_call_symbol": None, "btc_put_symbol": None, "btc_strangle_time": None,
+        "eth_strangle_active": False, "eth_call_symbol": None, "eth_put_symbol": None, "eth_strangle_time": None,
+    }
+    state["is_halted"] = False
+    state["halt_reason"] = ""
+    _save_state(state)
     logger.info("[DHURANDHAR] State reset complete.")
 
 
-# ── Trend Hunter Logic ────────────────────────────────────────────────────────
+# ── 3. Quantitative Calculations (15m ATR & 24H Levels) ───────────────────────
 
-def _run_trend_hunter(asset: str, config: dict, state: dict) -> dict:
+def calculate_atr_and_24h_levels(asset: str, period: int = 14, lookback: int = 96) -> dict:
     """
-    Core 24-Hour High/Low Breakout Engine (Trend Hunter).
-
-    Pushkar's exact rules:
-      - Fetch live 24H High and Low from Delta Exchange
-      - Current price > 24H High → LONG (market breaking up)
-      - Current price < 24H Low  → SHORT (market breaking down)
-      - If already in correct direction → HOLD (no unnecessary flip)
-      - Direction reversal → Close old position → Open new position
-
-    Returns: Updated asset state dict with action taken.
+    Calculates 15m ATR(14) and 24H rolling High/Low (96 bars on 15m):
+      - h_24: Highest High across last 96 15m bars
+      - l_24: Lowest Low across last 96 15m bars
+      - atr: 14-period Average True Range
+      - last_close: Confirmed 15m candle close
+      - upper_trigger: h_24 + (0.5 * atr)
+      - lower_trigger: l_24 - (0.5 * atr)
     """
-    asset_key   = asset.lower()
-    asset_state = state.get(asset_key, {})
-    notional_usd = config.get(f"{asset_key}_notional_usd", 50.0)
-    buffer_pct   = config.get("breakout_buffer_pct", 0.001)
+    sym = f"{asset.upper()}USDT"
+    klines = None
+    if get_klines_direct:
+        try:
+            klines = get_klines_direct(symbol=sym, interval="15m", limit=max(120, lookback + period))
+        except Exception as e:
+            logger.warning(f"[DHURANDHAR] klines fetch error for {sym}: {e}")
 
-    # Fetch live market data from Delta
+    if klines and len(klines.get("close", [])) >= lookback:
+        highs  = klines["high"][-lookback:]
+        lows   = klines["low"][-lookback:]
+        closes = klines["close"][-lookback:]
+
+        tr_list = []
+        for i in range(1, len(highs)):
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+            tr_list.append(tr)
+
+        atr = sum(tr_list[-period:]) / float(period) if len(tr_list) >= period else (highs[-1] - lows[-1])
+        h_24 = max(highs)
+        l_24 = min(lows)
+        last_close = closes[-1]
+        buffer_val = 0.5 * atr
+
+        return {
+            "success": True,
+            "h_24": round(h_24, 2),
+            "l_24": round(l_24, 2),
+            "atr": round(atr, 2),
+            "last_close": round(last_close, 2),
+            "upper_trigger": round(h_24 + buffer_val, 2),
+            "lower_trigger": round(l_24 - buffer_val, 2),
+            "candles_count": len(highs)
+        }
+
+    # Resilient Fallback to Delta Exchange 24h Ticker
     ticker = dx.get_ticker(asset)
-    if not ticker:
-        logger.warning(f"[DHURANDHAR] No ticker data for {asset}")
-        return asset_state
-
-    current_price = ticker.get("mark_price", 0)
-    high_24h      = ticker.get("high_24h", 0)
-    low_24h       = ticker.get("low_24h", 0)
-
-    # Apply tiny buffer to avoid false breakouts on the exact boundary
-    long_trigger  = high_24h * (1 + buffer_pct)
-    short_trigger = low_24h  * (1 - buffer_pct)
-
-    current_position = asset_state.get("position", "none")
-
-    logger.info(f"[DHURANDHAR] {asset} | Price: ${current_price:,.2f} | "
-                f"24H High: ${high_24h:,.2f} (Long trigger: ${long_trigger:,.2f}) | "
-                f"24H Low: ${low_24h:,.2f} (Short trigger: ${short_trigger:,.2f}) | "
-                f"Position: {current_position.upper()}")
-
-    # ── LONG Signal ──────────────────────────────────────────────────────
-    if current_price > long_trigger:
-        if current_position == "long":
-            logger.info(f"[DHURANDHAR] {asset}: Already LONG. Holding.")
-            return asset_state
-
-        # Close any existing SHORT before going LONG
-        if current_position == "short":
-            logger.info(f"[DHURANDHAR] {asset}: 24H High broken → Reversing SHORT → LONG")
-            dx.close_futures_position(asset)
-            if close_trade and asset_state.get("trade_id"):
-                try:
-                    close_trade(asset_state["trade_id"], current_price, "24H High Breakout Reversal")
-                except Exception:
-                    pass
-
-        # Open LONG
-        order = dx.place_futures_order(asset, side="buy", notional_usd=notional_usd)
-        if order.get("success"):
-            t_id = None
-            if log_new_trade:
-                try:
-                    t_id = log_new_trade(
-                        symbol=f"{asset}USD",
-                        side="BUY",
-                        entry_price=current_price,
-                        quantity=order.get("size", 1),
-                        reason=f"24H High Breakout LONG: ${current_price:,.2f}",
-                        stop_loss=round(low_24h, 2),
-                        take_profit=None,
-                        strategy_name="Dhurandhar Strategy",
-                        strategy_id="strat_dhurandhar",
-                        trade_type="dhurandhar_futures",
-                        margin_usd=notional_usd
-                    )
-                except Exception:
-                    pass
-
-            asset_state.update({
-                "position":          "long",
-                "entry_price":       current_price,
-                "entry_time":        datetime.now(timezone.utc).isoformat(),
-                "contracts":         order.get("size", 1),
-                "high_24h_at_entry": high_24h,
-                "low_24h_at_entry":  low_24h,
-                "trade_id":          t_id,
-            })
-            state["total_trades"] = state.get("total_trades", 0) + 1
-            logger.info(f"[DHURANDHAR] ✅ {asset} LONG entered @ ${current_price:,.2f} | "
-                        f"Contracts: {order.get('size')} | Notional: ${order.get('notional', 0):.2f}")
-        else:
-            logger.error(f"[DHURANDHAR] ❌ {asset} LONG order failed: {order.get('error')}")
-
-    # ── SHORT Signal ─────────────────────────────────────────────────────
-    elif current_price < short_trigger:
-        if current_position == "short":
-            logger.info(f"[DHURANDHAR] {asset}: Already SHORT. Holding.")
-            return asset_state
-
-        # Close any existing LONG before going SHORT
-        if current_position == "long":
-            logger.info(f"[DHURANDHAR] {asset}: 24H Low broken → Reversing LONG → SHORT")
-            dx.close_futures_position(asset)
-            if close_trade and asset_state.get("trade_id"):
-                try:
-                    close_trade(asset_state["trade_id"], current_price, "24H Low Breakdown Reversal")
-                except Exception:
-                    pass
-
-        # Open SHORT
-        order = dx.place_futures_order(asset, side="sell", notional_usd=notional_usd)
-        if order.get("success"):
-            t_id = None
-            if log_new_trade:
-                try:
-                    t_id = log_new_trade(
-                        symbol=f"{asset}USD",
-                        side="SELL",
-                        entry_price=current_price,
-                        quantity=order.get("size", 1),
-                        reason=f"24H Low Breakdown SHORT: ${current_price:,.2f}",
-                        stop_loss=round(high_24h, 2),
-                        take_profit=None,
-                        strategy_name="Dhurandhar Strategy",
-                        strategy_id="strat_dhurandhar",
-                        trade_type="dhurandhar_futures",
-                        margin_usd=notional_usd
-                    )
-                except Exception:
-                    pass
-
-            asset_state.update({
-                "position":          "short",
-                "entry_price":       current_price,
-                "entry_time":        datetime.now(timezone.utc).isoformat(),
-                "contracts":         order.get("size", 1),
-                "high_24h_at_entry": high_24h,
-                "low_24h_at_entry":  low_24h,
-                "trade_id":          t_id,
-            })
-            state["total_trades"] = state.get("total_trades", 0) + 1
-            logger.info(f"[DHURANDHAR] ✅ {asset} SHORT entered @ ${current_price:,.2f} | "
-                        f"Contracts: {order.get('size')} | Notional: ${order.get('notional', 0):.2f}")
-        else:
-            logger.error(f"[DHURANDHAR] ❌ {asset} SHORT order failed: {order.get('error')}")
-
-    # ── No Breakout ───────────────────────────────────────────────────────
-    else:
-        logger.info(f"[DHURANDHAR] {asset}: Price inside 24H range. No new Futures signal. "
-                    f"({current_position.upper()} position held)")
-
-    return asset_state
+    mark_p = ticker.get("mark_price", 0)
+    h_24   = ticker.get("high_24h", mark_p * 1.02)
+    l_24   = ticker.get("low_24h", mark_p * 0.98)
+    atr_est = mark_p * 0.015
+    return {
+        "success": False,
+        "h_24": round(h_24, 2),
+        "l_24": round(l_24, 2),
+        "atr": round(atr_est, 2),
+        "last_close": round(mark_p, 2),
+        "upper_trigger": round(h_24 + (0.5 * atr_est), 2),
+        "lower_trigger": round(l_24 - (0.5 * atr_est), 2),
+        "candles_count": 0
+    }
 
 
-# ── Option Selling Logic ──────────────────────────────────────────────────────
+# ── 4. Core State Machine Engine ──────────────────────────────────────────────
 
-def _run_option_selling(asset: str, config: dict, state: dict) -> dict:
+def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
     """
-    Dhurandhar Option Selling Leg:
-    Sell OTM Call + OTM Put (Strangle) to collect Theta premium.
+    Executes the Delta Hedged Strangle V1 state machine for an asset (BTC or ETH).
 
-    Pushkar's rules:
-      - Only sell if no active strangle is already open
-      - Pick monthly expiry (8-35 days) for maximum time decay
-      - ~12% OTM on both sides → very wide no-loss zone
-      - Self-refreshing: when DTE < 2 days, roll to next expiry
-
-    Returns: Updated options state dict.
+    States:
+      - STATE 0: SCAN & IDLE
+      - STATE 1: STRANGLE_ACTIVE (Harvesting Theta)
+      - STATE 2: HEDGE_LONG (15m close > 24h High + 0.5*ATR)
+      - STATE 3: HEDGE_SHORT (15m close < 24h Low - 0.5*ATR)
+      - STATE 4: TAKE_PROFIT (Combined remaining premium <= 50% of initial)
+      - STATE 5: EMERGENCY_CIRCUIT_BREAKER (Global capital drawdown >= 2%)
     """
     asset_key    = asset.lower()
+    asset_state  = state.get(asset_key, {})
     opts_state   = state.get("options", {})
-    contracts    = config.get("option_contracts", 1)
-    otm_pct      = config.get("otm_pct", 0.12)
+    notional_usd = config.get(f"{asset_key}_notional_usd", 50.0)
 
-    call_key = f"{asset_key}_call_symbol"
-    put_key  = f"{asset_key}_put_symbol"
-    time_key = f"{asset_key}_strangle_time"
+    # 1. Reset daily whipsaws
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if asset_state.get("whipsaw_date") != today_str:
+        asset_state["whipsaw_date"] = today_str
+        asset_state["whipsaw_count"] = 0
+
+    # 2. Fetch live levels (15m Candle Close, 24H High/Low, ATR)
+    levels = calculate_atr_and_24h_levels(asset, period=14, lookback=config.get("LOOKBACK_WINDOW", 96))
+    last_close    = levels["last_close"]
+    h_24          = levels["h_24"]
+    l_24          = levels["l_24"]
+    atr           = levels["atr"]
+    upper_trigger = levels["upper_trigger"]
+    lower_trigger = levels["lower_trigger"]
+
+    # 3. Live Ticker
+    ticker        = dx.get_ticker(asset)
+    current_price = ticker.get("mark_price", last_close)
+
+    call_key   = f"{asset_key}_call_symbol"
+    put_key    = f"{asset_key}_put_symbol"
+    time_key   = f"{asset_key}_strangle_time"
     active_key = f"{asset_key}_strangle_active"
 
+    # Verify if Strangle is currently open in ledger
+    is_strangle_open = False
+    if get_open_trades:
+        try:
+            op_t = get_open_trades()
+            is_strangle_open = any(t.get("status") in ["open", "partial_tp"] and f"{asset}-STRANGLE" in str(t.get("symbol", "")) for t in op_t)
+        except Exception:
+            pass
+
+    if not is_strangle_open and opts_state.get(active_key):
+        opts_state[active_key] = False
+        asset_state["state"] = "IDLE"
+
+    # ── CHECK STATE 4: 50% TAKE PROFIT TARGET ─────────────────────────────────
     if opts_state.get(active_key):
-        # Verify the active strangle is present in open trades ledger
-        if get_open_trades:
-            try:
-                op_trades = get_open_trades()
-                has_open = any(t.get("status") in ["open", "partial_tp"] and f"{asset}-STRANGLE" in str(t.get("symbol", "")) for t in op_trades)
-                if not has_open and log_new_trade:
-                    # Re-sync into ledger so it is always visible on dashboard
-                    c_strk = opts_state.get(f"{asset_key}_call_strike", 0)
-                    p_strk = opts_state.get(f"{asset_key}_put_strike", 0)
-                    dte_v = opts_state.get(f"{asset_key}_dte", 13)
-                    t_id = log_new_trade(
-                        symbol=f"{asset}-STRANGLE",
-                        side="SELL",
-                        entry_price=dx.get_ticker(asset).get("mark_price", 0) if dx else 0,
-                        quantity=contracts,
-                        reason=f"Strangle: Call ${c_strk:,.0f} + Put ${p_strk:,.0f} ({dte_v} DTE)",
-                        stop_loss=None,
-                        take_profit=None,
-                        strategy_name="Dhurandhar Strategy",
-                        strategy_id="strat_dhurandhar",
-                        trade_type="strangle",
-                        margin_usd=50.0,
-                        call_strike=c_strk,
-                        put_strike=p_strk,
-                        dte=dte_v
-                    )
-                    opts_state["trade_id"] = t_id
-            except Exception as e:
-                logger.warning(f"[DHURANDHAR] Strangle ledger check error: {e}")
+        c_sym = opts_state.get(call_key)
+        p_sym = opts_state.get(put_key)
+        cur_c_prem   = dx.get_option_premium(c_sym)
+        cur_p_prem   = dx.get_option_premium(p_sym)
+        cur_tot_prem = round(cur_c_prem + cur_p_prem, 2)
+        init_tot_prem = float(asset_state.get("initial_total_premium") or 80.0)
 
-        logger.info(f"[DHURANDHAR] {asset} Strangle already active: "
-                    f"CALL={opts_state.get(call_key)} | PUT={opts_state.get(put_key)}")
-        return opts_state
+        # 50% Profit Target: Close when remaining combined premium <= 50% of initial
+        target_melt_thresh = init_tot_prem * (1.0 - (config.get("TARGET_PROFIT_PCT", 50) / 100.0))
+        if init_tot_prem > 0 and cur_tot_prem > 0 and cur_tot_prem <= target_melt_thresh:
+            logger.info(f"[DHURANDHAR] 🎯 50% TAKE PROFIT HIT for {asset}: "
+                        f"Initial=${init_tot_prem:.2f} -> Remaining=${cur_tot_prem:.2f} (<= ${target_melt_thresh:.2f})")
+            # Close any active hedge future
+            dx.close_futures_position(asset)
+            # Close Strangle in ledger
+            if close_trade and opts_state.get("trade_id"):
+                try:
+                    close_trade(opts_state["trade_id"], current_price, "50% Combined Premium Melted", symbol=f"{asset}-STRANGLE")
+                except Exception:
+                    pass
 
-    # Place new strangle
-    logger.info(f"[DHURANDHAR] {asset}: Placing OTM Strangle (Sell Call + Sell Put, {otm_pct*100:.0f}% OTM)...")
-    result = dx.place_strangle(asset, contracts=contracts, otm_pct=otm_pct)
+            opts_state[active_key] = False
+            asset_state["state"] = "IDLE"
+            asset_state["initial_total_premium"] = 0.0
+            asset_state["position"] = "none"
+            logger.info(f"[DHURANDHAR] ✅ {asset} 50% Profit Booked. Capital recycled. Returning to STATE 0 (SCAN/IDLE).")
+            return asset_state
 
-    if result.get("success"):
-        strangle_info = result.get("strangle_info", {})
-        c_sym = result["call_order"].get("symbol", strangle_info.get("call", {}).get("symbol"))
-        p_sym = result["put_order"].get("symbol",  strangle_info.get("put", {}).get("symbol"))
-        c_strk = strangle_info.get("call", {}).get("strike", 0)
-        p_strk = strangle_info.get("put", {}).get("strike", 0)
-        dte = strangle_info.get("dte", "?")
-        
-        t_id = None
-        if log_new_trade:
-            try:
-                # Option Selling has NO TARGETS: Premium decays to $0 at expiry
+    # ── STATE 0 -> STATE 1: INITIAL ENTRY (Delta-Neutral Strangle) ─────────────
+    if not opts_state.get(active_key):
+        iv_rank = dx.get_iv_rank(asset)
+        if iv_rank < config.get("IV_RANK_MIN", 25):
+            logger.info(f"[DHURANDHAR] {asset} IV Rank {iv_rank:.1f} < {config.get('IV_RANK_MIN', 25)}. Waiting for sufficient volatility before entry.")
+            asset_state["state"] = "IDLE"
+            return asset_state
+
+        logger.info(f"[DHURANDHAR] {asset}: IV Rank {iv_rank:.1f} >= 25. Deploying Delta-Neutral Strangle (~0.15 Delta)...")
+        res = dx.place_strangle(asset, contracts=config.get("option_contracts", 1), otm_pct=0.12)
+        if res.get("success"):
+            strangle_info = res.get("strangle_info", {})
+            init_prem = res.get("initial_total_premium") or 80.0
+            c_sym  = res["call_order"].get("symbol", strangle_info.get("call", {}).get("symbol"))
+            p_sym  = res["put_order"].get("symbol",  strangle_info.get("put", {}).get("symbol"))
+            c_strk = strangle_info.get("call", {}).get("strike", 0)
+            p_strk = strangle_info.get("put", {}).get("strike", 0)
+            dte    = strangle_info.get("dte", 13)
+
+            t_id = None
+            if log_new_trade:
                 t_id = log_new_trade(
                     symbol=f"{asset}-STRANGLE",
                     side="SELL",
-                    entry_price=strangle_info.get("current_price", 0),
-                    quantity=contracts,
+                    entry_price=current_price,
+                    quantity=config.get("option_contracts", 1),
                     reason=f"Strangle: Call ${c_strk:,.0f} + Put ${p_strk:,.0f} ({dte} DTE)",
                     stop_loss=None,
                     take_profit=None,
@@ -394,142 +360,212 @@ def _run_option_selling(asset: str, config: dict, state: dict) -> dict:
                     expiry=strangle_info.get("expiry"),
                     dte=dte
                 )
-            except Exception:
-                pass
 
-        opts_state.update({
-            active_key: True,
-            call_key:   c_sym,
-            put_key:    p_sym,
-            time_key:   datetime.now(timezone.utc).isoformat(),
-            "trade_id": t_id,
-            f"{asset_key}_call_strike": c_strk,
-            f"{asset_key}_put_strike":  p_strk,
-            f"{asset_key}_expiry":      strangle_info.get("expiry"),
-            f"{asset_key}_dte":         dte,
-            f"{asset_key}_margin_usd":  50.0,
-        })
-        state["total_trades"] = state.get("total_trades", 0) + 2  # Call + Put = 2 option orders
-        logger.info(f"[DHURANDHAR] ✅ {asset} Strangle placed: "
-                    f"CALL @ ${strangle_info.get('call', {}).get('strike', 0):,.0f} | "
-                    f"PUT @ ${strangle_info.get('put', {}).get('strike', 0):,.0f} | "
-                    f"Expiry: {strangle_info.get('expiry', '?')} ({strangle_info.get('dte', '?')} DTE)")
-    else:
-        logger.warning(f"[DHURANDHAR] ⚠️ {asset} Strangle placement failed: {result.get('error')}")
+            opts_state.update({
+                active_key: True,
+                call_key: c_sym,
+                put_key:  p_sym,
+                time_key: datetime.now(timezone.utc).isoformat(),
+                "trade_id": t_id,
+                f"{asset_key}_call_strike": c_strk,
+                f"{asset_key}_put_strike":  p_strk,
+                f"{asset_key}_expiry":      strangle_info.get("expiry"),
+                f"{asset_key}_dte":         dte,
+                f"{asset_key}_margin_usd":  50.0,
+            })
+            asset_state["state"] = "STRANGLE_ACTIVE"
+            asset_state["initial_total_premium"] = float(init_prem)
+            logger.info(f"[DHURANDHAR] ✅ {asset} Strangle Active: CALL ${c_strk:,.0f} | PUT ${p_strk:,.0f} | Initial Prem: ${init_prem:.2f}")
+            return asset_state
+        else:
+            logger.warning(f"[DHURANDHAR] ⚠️ {asset} Strangle placement failed: {res.get('error')}")
+            return asset_state
 
-    return opts_state
+    # ── STATE 1: STRANGLE_ACTIVE (Harvesting Theta & Monitoring Breakouts) ─────
+    whipsaws    = asset_state.get("whipsaw_count", 0)
+    max_whipsaw = config.get("MAX_WHIPSAW_COUNT", 2)
+
+    logger.info(f"[DHURANDHAR] {asset} [STRANGLE_ACTIVE] | 15m Close: ${last_close:,.2f} | "
+                f"Upper Trig (24H H + 0.5 ATR): ${upper_trigger:,.2f} | "
+                f"Lower Trig (24H L - 0.5 ATR): ${lower_trigger:,.2f} | Whipsaws: {whipsaws}/{max_whipsaw}")
+
+    if asset_state.get("state") == "STRANGLE_ACTIVE":
+        # 1. Bullish Breakout Confirmation (15m Candle Close > 24H High + 0.5 ATR)
+        if last_close > upper_trigger:
+            if whipsaws < max_whipsaw:
+                logger.info(f"[DHURANDHAR] 🚀 {asset} Bullish Breakout! 15m Close (${last_close:,.2f}) > Upper Trigger (${upper_trigger:,.2f}). Opening LONG Future Hedge...")
+                order = dx.place_futures_order(asset, side="buy", notional_usd=notional_usd)
+                if order.get("success"):
+                    hedge_sl = round(h_24 - (0.5 * atr), 2)
+                    asset_state["state"] = "HEDGE_LONG"
+                    asset_state["position"] = "long"
+                    asset_state["hedge_entry_price"] = current_price
+                    asset_state["hedge_sl"] = hedge_sl
+                    asset_state["whipsaw_count"] = whipsaws + 1
+
+                    if log_new_trade:
+                        t_id = log_new_trade(
+                            symbol=f"{asset}USD",
+                            side="BUY",
+                            entry_price=current_price,
+                            quantity=order.get("size", 1),
+                            reason=f"Delta Hedge LONG (15m Close > ${upper_trigger:,.2f})",
+                            stop_loss=hedge_sl,
+                            take_profit=None,
+                            strategy_name="Dhurandhar Strategy",
+                            strategy_id="strat_dhurandhar",
+                            trade_type="dhurandhar_futures",
+                            margin_usd=notional_usd
+                        )
+                        asset_state["trade_id"] = t_id
+                    logger.info(f"[DHURANDHAR] 🛡️ {asset} LONG Hedge entered @ ${current_price:,.2f} | SL: ${hedge_sl:,.2f}")
+            else:
+                logger.info(f"[DHURANDHAR] ⚠️ Max whipsaw count reached ({whipsaws}/{max_whipsaw}). Pausing hedge entry to avoid chop.")
+
+        # 2. Bearish Breakdown Confirmation (15m Candle Close < 24H Low - 0.5 ATR)
+        elif last_close < lower_trigger:
+            if whipsaws < max_whipsaw:
+                logger.info(f"[DHURANDHAR] 📉 {asset} Bearish Breakdown! 15m Close (${last_close:,.2f}) < Lower Trigger (${lower_trigger:,.2f}). Opening SHORT Future Hedge...")
+                order = dx.place_futures_order(asset, side="sell", notional_usd=notional_usd)
+                if order.get("success"):
+                    hedge_sl = round(l_24 + (0.5 * atr), 2)
+                    asset_state["state"] = "HEDGE_SHORT"
+                    asset_state["position"] = "short"
+                    asset_state["hedge_entry_price"] = current_price
+                    asset_state["hedge_sl"] = hedge_sl
+                    asset_state["whipsaw_count"] = whipsaws + 1
+
+                    if log_new_trade:
+                        t_id = log_new_trade(
+                            symbol=f"{asset}USD",
+                            side="SELL",
+                            entry_price=current_price,
+                            quantity=order.get("size", 1),
+                            reason=f"Delta Hedge SHORT (15m Close < ${lower_trigger:,.2f})",
+                            stop_loss=hedge_sl,
+                            take_profit=None,
+                            strategy_name="Dhurandhar Strategy",
+                            strategy_id="strat_dhurandhar",
+                            trade_type="dhurandhar_futures",
+                            margin_usd=notional_usd
+                        )
+                        asset_state["trade_id"] = t_id
+                    logger.info(f"[DHURANDHAR] 🛡️ {asset} SHORT Hedge entered @ ${current_price:,.2f} | SL: ${hedge_sl:,.2f}")
+            else:
+                logger.info(f"[DHURANDHAR] ⚠️ Max whipsaw count reached ({whipsaws}/{max_whipsaw}). Pausing hedge entry to avoid chop.")
+
+    # ── STATE 2 & 3: ACTIVE HEDGE MANAGEMENT (Trailing Stop & False Breakout) ──
+    elif asset_state.get("state") == "HEDGE_LONG":
+        hedge_sl = float(asset_state.get("hedge_sl") or 0)
+        if current_price <= hedge_sl:
+            logger.info(f"[DHURANDHAR] ⚠️ FALSE BREAKOUT / WHIPSAW: {asset} hit Long Hedge SL (${hedge_sl:,.2f}). Cutting hedge, returning to STRANGLE_ACTIVE.")
+            dx.close_futures_position(asset)
+            if close_trade and asset_state.get("trade_id"):
+                try:
+                    close_trade(asset_state["trade_id"], current_price, "Hedge SL Hit (False Breakout)", symbol=f"{asset}USD")
+                except Exception:
+                    pass
+            asset_state["state"] = "STRANGLE_ACTIVE"
+            asset_state["position"] = "none"
+            asset_state["hedge_entry_price"] = 0
+            asset_state["hedge_sl"] = 0
+        else:
+            trail_sl = round(current_price - (0.8 * atr), 2)
+            if trail_sl > hedge_sl:
+                asset_state["hedge_sl"] = trail_sl
+                logger.info(f"[DHURANDHAR] 📈 Trailing Long Hedge SL for {asset} to ${trail_sl:,.2f}")
+
+    elif asset_state.get("state") == "HEDGE_SHORT":
+        hedge_sl = float(asset_state.get("hedge_sl") or 999999)
+        if current_price >= hedge_sl:
+            logger.info(f"[DHURANDHAR] ⚠️ FALSE BREAKOUT / WHIPSAW: {asset} hit Short Hedge SL (${hedge_sl:,.2f}). Cutting hedge, returning to STRANGLE_ACTIVE.")
+            dx.close_futures_position(asset)
+            if close_trade and asset_state.get("trade_id"):
+                try:
+                    close_trade(asset_state["trade_id"], current_price, "Hedge SL Hit (False Breakout)", symbol=f"{asset}USD")
+                except Exception:
+                    pass
+            asset_state["state"] = "STRANGLE_ACTIVE"
+            asset_state["position"] = "none"
+            asset_state["hedge_entry_price"] = 0
+            asset_state["hedge_sl"] = 0
+        else:
+            trail_sl = round(current_price + (0.8 * atr), 2)
+            if trail_sl < hedge_sl:
+                asset_state["hedge_sl"] = trail_sl
+                logger.info(f"[DHURANDHAR] 📉 Trailing Short Hedge SL for {asset} to ${trail_sl:,.2f}")
+
+    return asset_state
 
 
-# ── Main Cycle ────────────────────────────────────────────────────────────────
+# ── 5. Main Dhurandhar Cycle (Called by bot.py) ────────────────────────────────
 
 def run_dhurandhar_cycle():
     """
-    Execute one full Dhurandhar Strategy cycle.
-
-    Sequence:
-      1. Load state from disk
-      2. Safety checks (halt, daily loss limit)
-      3. For each asset (BTC, ETH):
-         a. Run Trend Hunter (24H High/Low Futures)
-         b. Run Option Selling (OTM Strangle) if enabled
-      4. Save updated state to disk
-      5. Log summary to console
+    Execute one full Delta Hedged Strangle V1 cycle across BTC and ETH.
+    Runs 24/7/365 without stopping on weekends.
     """
     config = DHURANDHAR_CONFIG.copy()
     if not config.get("enabled"):
-        logger.info("[DHURANDHAR] Strategy is DISABLED. Set enabled=True in config to activate.")
         return
 
     state = _load_state()
 
     # Safety: Check if halted
     if state.get("is_halted"):
-        logger.info(f"[DHURANDHAR] HALTED: {state.get('halt_reason', 'Manual halt')}. "
-                    f"Run reset_state() to resume.")
+        logger.info(f"[DHURANDHAR] HALTED: {state.get('halt_reason', 'Manual halt')}. Run reset_state() to resume.")
         return
 
-    # Safety: Daily loss limit
-    if state.get("today_pnl", 0) <= -config.get("max_loss_usd", 30):
-        logger.warning(f"[DHURANDHAR] 🛑 Daily loss limit hit (${state['today_pnl']:.2f}). "
-                       f"All trading paused for today.")
-        state["is_halted"]  = True
-        state["halt_reason"] = f"Daily loss limit: ${state['today_pnl']:.2f}"
+    # Safety: Global 2.0% Capital Drawdown Hard Stop
+    usd_bal = dx.get_usd_balance()
+    today_pnl = float(state.get("today_pnl", 0.0))
+    max_allowed_loss = (usd_bal * (config.get("GLOBAL_PORTFOLIO_SL_PCT", 2.0) / 100.0)) if usd_bal > 0 else 30.0
+
+    if today_pnl <= -max_allowed_loss:
+        logger.warning(f"[DHURANDHAR] 🛑 GLOBAL 2% PORTFOLIO CIRCUIT BREAKER TRIGGERED: Loss=${today_pnl:.2f} >= 2% limit (${max_allowed_loss:.2f})")
+        dx.close_futures_position("BTC")
+        dx.close_futures_position("ETH")
+        state["is_halted"] = True
+        state["halt_reason"] = f"Global 2.0% Capital SL Hit: ${today_pnl:.2f}"
         _save_state(state)
         return
 
     logger.info("=" * 60)
-    logger.info("  DHURANDHAR STRATEGY CYCLE STARTING")
-    logger.info(f"  Balance: ${dx.get_usd_balance():.2f} USD | Trades: {state.get('total_trades', 0)}")
+    logger.info("  DELTA HEDGED STRANGLE V1 (DHURANDHAR QUANT CYCLE)")
+    logger.info(f"  Balance: ${usd_bal:.2f} USD | 24/7 Theta Harvesting Active")
     logger.info("=" * 60)
 
-    # ── Process each asset ────────────────────────────────────────────────
+    # Process each asset
     for asset in config.get("assets", ["BTC", "ETH"]):
-        logger.info(f"\n── {asset} ──────────────────────────────────────────")
-
-        # LEG 1: Trend Hunter (Futures)
         try:
-            updated_asset_state = _run_trend_hunter(asset, config, state)
-            state[asset.lower()] = updated_asset_state
+            updated_state = _run_delta_hedged_cycle(asset, config, state)
+            state[asset.lower()] = updated_state
         except Exception as e:
-            logger.error(f"[DHURANDHAR] Trend Hunter error for {asset}: {e}")
+            logger.error(f"[DHURANDHAR] Cycle execution error for {asset}: {e}")
 
-        # LEG 2: Option Selling (Strangle)
-        if config.get("options_enabled"):
-            try:
-                updated_opts_state = _run_option_selling(asset, config, state)
-                state["options"] = updated_opts_state
-            except Exception as e:
-                logger.error(f"[DHURANDHAR] Option Selling error for {asset}: {e}")
-
-    # ── Save state ────────────────────────────────────────────────────────
+    # Persist state
     _save_state(state)
 
-    # ── Print cycle summary ───────────────────────────────────────────────
-    logger.info("\n" + "=" * 60)
-    for asset in config.get("assets", ["BTC", "ETH"]):
-        s = state.get(asset.lower(), {})
-        pos  = s.get("position", "none").upper()
-        ep   = s.get("entry_price", 0)
-        ep_str = f"@ ${ep:,.2f}" if ep else ""
-        logger.info(f"  {asset}: {pos} {ep_str}")
 
-    opts = state.get("options", {})
-    for asset in config.get("assets", ["BTC", "ETH"]):
-        ak = asset.lower()
-        if opts.get(f"{ak}_strangle_active"):
-            logger.info(f"  {asset} Strangle: ACTIVE | "
-                        f"Call: {opts.get(f'{ak}_call_symbol')} | "
-                        f"Put: {opts.get(f'{ak}_put_symbol')}")
-        else:
-            logger.info(f"  {asset} Strangle: NOT YET PLACED")
-    logger.info("=" * 60)
-
-
-# ── Manual Controls (for dashboard/API) ──────────────────────────────────────
+# ── 6. Manual Controls & Dashboard Snapshot ───────────────────────────────────
 
 def halt_strategy(reason: str = "Manual halt"):
-    """Immediately halt the Dhurandhar strategy."""
     state = _load_state()
-    state["is_halted"]  = True
+    state["is_halted"] = True
     state["halt_reason"] = reason
     _save_state(state)
     logger.warning(f"[DHURANDHAR] 🛑 Strategy HALTED: {reason}")
 
 
 def resume_strategy():
-    """Resume the Dhurandhar strategy after a halt."""
     state = _load_state()
-    state["is_halted"]  = False
+    state["is_halted"] = False
     state["halt_reason"] = ""
     _save_state(state)
     logger.info("[DHURANDHAR] ▶️ Strategy RESUMED")
 
 
 def get_live_snapshot() -> dict:
-    """
-    Return a live snapshot of Dhurandhar state + market data.
-    Used by dashboard to render the Dhurandhar panel.
-    """
     state = _load_state()
     bal = dx.get_balance()
     api_error = None
@@ -537,65 +573,44 @@ def get_live_snapshot() -> dict:
         api_error = bal.get("error")
 
     snapshot = {
-        "enabled":      DHURANDHAR_CONFIG.get("enabled"),
-        "is_halted":    state.get("is_halted"),
-        "halt_reason":  state.get("halt_reason"),
-        "total_trades": state.get("total_trades", 0),
-        "today_pnl":    state.get("today_pnl", 0.0),
-        "usd_balance":  dx.get_usd_balance(),
-        "api_error":    api_error,
-        "assets":       {},
-        "options":      state.get("options", {}),
-        "last_cycle":   state.get("last_cycle"),
+        "strategy_name": DHURANDHAR_CONFIG.get("STRATEGY_NAME", "Delta_Hedged_Strangle_V1"),
+        "timeframe":     DHURANDHAR_CONFIG.get("TIMEFRAME", "15m"),
+        "enabled":       DHURANDHAR_CONFIG.get("enabled"),
+        "is_halted":     state.get("is_halted"),
+        "halt_reason":   state.get("halt_reason"),
+        "total_trades":  state.get("total_trades", 0),
+        "today_pnl":     state.get("today_pnl", 0.0),
+        "usd_balance":   dx.get_usd_balance(),
+        "api_error":     api_error,
+        "assets":        {},
+        "options":       state.get("options", {}),
+        "last_cycle":    state.get("last_cycle"),
     }
 
     for asset in ["BTC", "ETH"]:
+        ak = asset.lower()
+        as_ = state.get(ak, {})
+        levels = calculate_atr_and_24h_levels(asset, period=14, lookback=96)
         ticker = dx.get_ticker(asset)
-        ak     = asset.lower()
-        as_    = state.get(ak, {})
         snapshot["assets"][asset] = {
-            "current_price": ticker.get("mark_price", 0),
-            "high_24h":      ticker.get("high_24h", 0),
-            "low_24h":       ticker.get("low_24h", 0),
+            "current_price": ticker.get("mark_price", levels.get("last_close", 0)),
+            "h_24":          levels.get("h_24", 0),
+            "l_24":          levels.get("l_24", 0),
+            "atr":           round(levels.get("atr", 0), 2),
+            "upper_trigger": levels.get("upper_trigger", 0),
+            "lower_trigger": levels.get("lower_trigger", 0),
+            "state":         as_.get("state", "STRANGLE_ACTIVE"),
+            "whipsaws":      as_.get("whipsaw_count", 0),
             "position":      as_.get("position", "none"),
-            "entry_price":   as_.get("entry_price", 0),
-            "entry_time":    as_.get("entry_time"),
-            "contracts":     as_.get("contracts", 0),
+            "hedge_sl":      as_.get("hedge_sl", 0),
+            "iv_rank":       dx.get_iv_rank(asset),
+            "initial_prem":  as_.get("initial_total_premium", 80.0),
         }
 
     return snapshot
 
 
-# ── Standalone run ────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%H:%M:%S"
-    )
-
-    print("\n" + "=" * 60)
-    print("  DHURANDHAR STRATEGY — DEMO RUN")
-    print("  (Pushkar Raj Thakur Method | Delta Testnet)")
-    print("=" * 60)
-
-    # Connection check
-    if not dx.test_connection():
-        print("❌ Delta Exchange connection failed. Check API keys in .env")
-        exit(1)
-
-    # Show live snapshot before running
-    print("\n📊 Live Market Snapshot:")
-    snap = get_live_snapshot()
-    for asset, data in snap["assets"].items():
-        print(f"  {asset}: ${data['current_price']:,.2f} | "
-              f"24H High: ${data['high_24h']:,.2f} | "
-              f"24H Low: ${data['low_24h']:,.2f} | "
-              f"Position: {data['position'].upper()}")
-
-    # Run one strategy cycle
-    print("\n🚀 Running Dhurandhar Cycle...")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S")
+    print("Running Delta Hedged Strangle V1 Cycle...")
     run_dhurandhar_cycle()
-
-    print("\n✅ Cycle complete. Check dhurandhar_state.json for full state.")

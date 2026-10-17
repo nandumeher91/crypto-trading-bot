@@ -2,7 +2,7 @@
   "total_trades": 0,
   "winning_trades": 0,
   "losing_trades": 0,
-  "total_pnl": 0.0,
+  "total_pnl": 0,
   "win_rate": 0.0,
   "largest_win": 0.0,
   "largest_loss": 0.0,

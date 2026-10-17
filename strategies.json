@@ -1,15 +1,15 @@
 [
   {
     "id": "strat_dhurandhar",
-    "name": "Dhurandhar Strategy (Options Strangle + 24H Futures)",
+    "name": "Dhurandhar Strategy (Delta Hedged Strangle V1)",
     "symbol": "BTC / ETH (Delta Testnet)",
     "asset": "BTC",
-    "type": "24H Breakout & Theta Selling",
+    "type": "15m ATR Breakout Hedge + 0.15 Delta Strangle",
     "capital_usd": 100.0,
     "active": true,
-    "strategy_type": "hybrid_options_futures",
+    "strategy_type": "delta_hedged_strangle_v1",
     "target_strangle_otm_pct": 12.0,
     "platform": "Delta Exchange India Testnet",
-    "description": "24H High/Low Trend Hunter Futures + 12% OTM Call/Put Strangle Selling for continuous Theta decay."
+    "description": "Delta Hedged Strangle V1: 24H 15m ATR Candle-Close Hedge + 0.15 Delta Strangle (50% Decay Target & 2% Capital SL). 24/7 Weekend Theta Harvesting."
   }
 ]

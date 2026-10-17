@@ -31,7 +31,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-SKIP_WEEKEND_TRADING = True
+SKIP_WEEKEND_TRADING = False  # 24/7 continuous trading enabled for Theta decay on weekends
 
 def is_weekend():
     """
@@ -2035,13 +2035,13 @@ STRATEGIES_FILE = os.path.join(BASE_DIR, "strategies.json")
 
 DEFAULT_DHURANDHAR_STRAT = {
     "id": "strat_dhurandhar",
-    "name": "Dhurandhar Multi-Asset (Delta India)",
-    "symbol": "BTC / ETH (Futures + Options Strangle)",
-    "type": "Trend Breakout & Theta Selling",
+    "name": "Dhurandhar Strategy (Delta Hedged Strangle V1)",
+    "symbol": "BTC / ETH (Delta Testnet)",
+    "type": "15m ATR Breakout Hedge + 0.15 Delta Strangle",
     "capital_usd": 100.0,
     "active": True,
     "platform": "Delta Exchange India Testnet",
-    "description": "24H High/Low Futures Trend + 12% OTM Strangle Selling for continuous Theta decay."
+    "description": "Delta Hedged Strangle V1: 24H 15m ATR Candle-Close Hedge + 0.15 Delta Strangle (50% Decay Target & 2% Capital SL). 24/7 Weekend Theta Harvesting."
 }
 
 def load_strategies():
