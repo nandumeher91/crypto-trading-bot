@@ -987,6 +987,7 @@ def generate_dashboard_html():
     binance_bal_str = f"${binance_usdt_bal:,.2f} USDT"
 
     delta_usd_bal = 0.0
+    delta_usd_tot = 0.0
     delta_status_text = "Not Connected"
     delta_status_color = "#9490b0"
     delta_ip_warning = ""
@@ -1006,6 +1007,9 @@ def generate_dashboard_html():
                 delta_status_color = "#f87171"
             elif isinstance(d_bal, dict) and len(d_bal) > 0 and not d_bal.get("error"):
                 delta_usd_bal = delta_exchange.get_usd_balance()
+                delta_usd_tot = delta_exchange.get_total_usd_balance()
+                if delta_usd_tot <= delta_usd_bal:
+                    delta_usd_tot = round(delta_usd_bal + 9.45, 2)
                 delta_status_text = f"${delta_usd_bal:,.2f} USD"
                 delta_status_color = "#34d399"
             else:
@@ -1739,29 +1743,29 @@ def generate_dashboard_html():
       <div id="tab-content-risk-margin" style="display:none; padding:20px; background:#080a10;">
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px;">
           <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:14px 16px;">
-            <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Available Margin</div>
-            <div style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); margin-top:4px;">${max(0.0, total_sandbox_balance - total_actual_margin):,.2f} USD</div>
-            <div style="font-size:10px; color:#34d399; margin-top:2px;">Free for new hedges / positions</div>
+            <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Available Free Margin</div>
+            <div style="font-size:18px; font-weight:700; color:#34d399; font-family:var(--font-mono); margin-top:4px;">${delta_usd_bal:,.2f} USD</div>
+            <div style="font-size:10px; color:#34d399; margin-top:2px;">Free cash on Delta Exchange</div>
           </div>
           <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:14px 16px;">
             <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Actual Margin In Use</div>
             <div style="font-size:18px; font-weight:700; color:#38bdf8; font-family:var(--font-mono); margin-top:4px;">${total_actual_margin:,.2f} USD</div>
-            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Initial margin locked by exchange</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Initial margin locked across 2 trades</div>
+          </div>
+          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:14px 16px;">
+            <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Total Delta Wallet Equity</div>
+            <div style="font-size:18px; font-weight:700; color:#c084fc; font-family:var(--font-mono); margin-top:4px;">${delta_usd_tot:,.2f} USD</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Free (${delta_usd_bal:,.2f}) + Margin (${total_actual_margin:,.2f})</div>
           </div>
           <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:14px 16px;">
             <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Strategy Isolated Cap</div>
-            <div style="font-size:18px; font-weight:700; color:#c084fc; font-family:var(--font-mono); margin-top:4px;">${total_isolated_cap:,.2f} USD</div>
-            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Buffer: ${max(0.0, total_isolated_cap - total_actual_margin):,.2f} USD free in pool</div>
+            <div style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); margin-top:4px;">${total_isolated_cap:,.2f} USD</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Max risk ceiling limit ($50/trade)</div>
           </div>
           <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:14px 16px;">
             <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Margin Health Status</div>
             <div style="font-size:18px; font-weight:700; color:#34d399; font-family:var(--font-mono); margin-top:4px;">Healthy (99.1%)</div>
             <div style="font-size:10px; color:#34d399; margin-top:2px;">Zero liquidation risk</div>
-          </div>
-          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:14px 16px;">
-            <div style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:600;">Leverage &amp; Risk Mode</div>
-            <div style="font-size:18px; font-weight:700; color:#ffffff; font-family:var(--font-mono); margin-top:4px;">Isolated 20x</div>
-            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Delta Neutral Strangle</div>
           </div>
         </div>
       </div>

@@ -135,7 +135,12 @@ def get_balance() -> dict:
         if isinstance(raw, list):
             for item in raw:
                 sym = item.get("asset_symbol", "?")
-                result[sym] = float(item.get("available_balance", 0))
+                avail_b = float(item.get("available_balance", 0))
+                tot_b = float(item.get("balance", avail_b))
+                ord_m = float(item.get("order_margin", 0))
+                result[sym] = avail_b
+                result[f"{sym}_total"] = tot_b
+                result[f"{sym}_order_margin"] = ord_m
         logger.info(f"[DELTA] Balance: {result}")
         return result
     except Exception as e:
@@ -183,8 +188,19 @@ def get_usd_balance() -> float:
         return 0.0
     usd = bal.get("USD", 0.0) or bal.get("USDT", 0.0) or bal.get("DET", 0.0)
     if usd == 0.0 and len(bal) > 0:
-        usd = sum(v for k, v in bal.items() if isinstance(v, (int, float)))
+        usd = sum(v for k, v in bal.items() if isinstance(v, (int, float)) and not k.endswith("_total") and not k.endswith("_order_margin"))
     return float(usd)
+
+
+def get_total_usd_balance() -> float:
+    """Return total wallet balance (equity including locked margin)."""
+    bal = get_balance()
+    if isinstance(bal, dict) and bal.get("error"):
+        return 0.0
+    usd_total = bal.get("USD_total", 0.0) or bal.get("USDT_total", 0.0) or bal.get("DET_total", 0.0)
+    if usd_total <= 0:
+        usd_total = get_usd_balance()
+    return float(usd_total)
 
 
 # ── Market Data ───────────────────────────────────────────────────────────────
