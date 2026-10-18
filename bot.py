@@ -646,6 +646,11 @@ function switchTradingTab(tabName) {
   const activeContent = document.getElementById('tab-content-' + tabName);
   if (activeBtn) activeBtn.classList.add('active');
   if (activeContent) activeContent.style.display = 'block';
+
+  const filterBar = document.getElementById('trading-filter-bar');
+  if (filterBar) {
+    filterBar.style.display = (tabName === 'risk-margin') ? 'none' : 'flex';
+  }
 }
 
 function filterTradingTable(category) {
@@ -682,7 +687,7 @@ function searchTradingTable(query) {
 }
 
 function closeAllPositions() {
-  if (!confirm('⚠️ CONFIRM CLOSE ALL POSITIONS:\n\nAre you sure you want to close ALL active positions at market price?')) return;
+  if (!confirm('CONFIRM CLOSE ALL POSITIONS:\\n\\nAre you sure you want to close ALL active positions at market price?')) return;
   fetch('/api/kill_switch', { method: 'GET' })
     .then(r => r.json())
     .then(d => {
@@ -703,7 +708,7 @@ function downloadHistoryCSV() {
     cols.forEach(c => rowData.push('"' + c.innerText.replace(/"/g, '""').trim() + '"'));
     csv.push(rowData.join(','));
   });
-  const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([csv.join('\\n')], { type: 'text/csv;charset=utf-8;' });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -1602,7 +1607,7 @@ def generate_dashboard_html():
       </div>
 
       <!-- Sub Filter Pill Row (Matching Delta Exchange) -->
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#080a11; padding:8px 16px; border-bottom:1px solid #161a25; flex-wrap:wrap; gap:8px;">
+      <div id="trading-filter-bar" style="display:flex; justify-content:space-between; align-items:center; background:#080a11; padding:8px 16px; border-bottom:1px solid #161a25; flex-wrap:wrap; gap:8px;">
         <div style="display:flex; align-items:center; gap:6px;">
           <button id="filter-pill-all" class="trading-filter-pill active" onclick="filterTradingTable('all')">All</button>
           <button id="filter-pill-current" class="trading-filter-pill" onclick="filterTradingTable('current')">Current Contract</button>
@@ -1802,7 +1807,7 @@ def generate_dashboard_html():
     </div>
     """
 
-    open_trade_html = trading_console_html
+    open_trade_html = ""
 
     # Rows for Trade Execution History (Show strictly CLOSED trades)
     rows_html = ""
@@ -2288,40 +2293,10 @@ def generate_dashboard_html():
       </section>
 
       <!-- ============================================== -->
-      <!-- BOTTOM: Trade Execution History Table          -->
+      <!-- BOTTOM: Delta Exchange Trading Console & History -->
       <!-- ============================================== -->
-      <section id="sec-history" class="clean-card" style="padding:22px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1a1e2a; padding-bottom:12px; flex-wrap:wrap; gap:10px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e95a5" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <h3 style="font-size:14px; font-weight:600; color:#ffffff;">Trade Execution History</h3>
-          </div>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <input type="text" oninput="filterLedgerTable(this.value)" placeholder="🔍 Filter by Symbol or Side..." style="background:var(--bg-inset); border:1px solid var(--border-subtle); border-radius:6px; color:#ffffff; font-size:11px; padding:5px 12px; outline:none; width:200px;">
-            <span style="font-size:11px; color:#64748b; font-family:var(--font-mono);">Binance Spot Testnet</span>
-          </div>
-        </div>
-
-        <div style="overflow-x:auto; margin-top:8px;">
-          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
-            <thead>
-              <tr style="border-bottom:1px solid #161a24; font-size:10px; text-transform:uppercase; color:#64748b; letter-spacing:0.04em;">
-                <th style="padding:10px 14px;">Trade ID</th>
-                <th style="padding:10px 14px;">Timestamp</th>
-                <th style="padding:10px 14px;">Strategy</th>
-                <th style="padding:10px 14px;">Symbol</th>
-                <th style="padding:10px 14px;">Side</th>
-                <th style="padding:10px 14px;">Entry Price</th>
-                <th style="padding:10px 14px;">Exit Price</th>
-                <th style="padding:10px 14px;">Result / Reason</th>
-                <th style="padding:10px 14px; text-align:right;">Realized Profit</th>
-              </tr>
-            </thead>
-            <tbody id="ledger-table-body" style="color:#cbd5e1;">
-              {rows_html}
-            </tbody>
-          </table>
-        </div>
+      <section id="sec-history" style="margin-bottom:24px;">
+        {trading_console_html}
       </section>
 
     </div> <!-- END VIEW-TESTNET -->
