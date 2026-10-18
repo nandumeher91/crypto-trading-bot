@@ -1008,9 +1008,7 @@ def generate_dashboard_html():
             elif isinstance(d_bal, dict) and len(d_bal) > 0 and not d_bal.get("error"):
                 delta_usd_bal = delta_exchange.get_usd_balance()
                 delta_usd_tot = delta_exchange.get_total_usd_balance()
-                if delta_usd_tot <= delta_usd_bal:
-                    delta_usd_tot = round(delta_usd_bal + 9.45, 2)
-                delta_status_text = f"${delta_usd_bal:,.2f} USD"
+                delta_status_text = f"${delta_usd_tot:,.2f} USD"
                 delta_status_color = "#34d399"
             else:
                 delta_status_text = "$0.00 USD (Connected)"
@@ -1025,7 +1023,7 @@ def generate_dashboard_html():
         delta_status_text = "Sync Error"
         delta_status_color = "#9490b0"
 
-    total_sandbox_balance = binance_usdt_bal + delta_usd_bal
+    total_sandbox_balance = binance_usdt_bal + (delta_usd_tot if delta_usd_tot > 0 else delta_usd_bal)
     total_sandbox_bal_str = f"${total_sandbox_balance:,.2f}"
 
     delta_ip_notice_html = ""

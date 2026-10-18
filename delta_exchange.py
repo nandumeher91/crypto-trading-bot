@@ -132,6 +132,7 @@ def get_balance() -> dict:
         client = _get_client()
         raw = client.get_all_wallet_balances()
         result = {}
+        total_equity = 0.0
         if isinstance(raw, list):
             for item in raw:
                 sym = item.get("asset_symbol", "?")
@@ -141,6 +142,9 @@ def get_balance() -> dict:
                 result[sym] = avail_b
                 result[f"{sym}_total"] = tot_b
                 result[f"{sym}_order_margin"] = ord_m
+                if sym in ["USD", "USDT", "USDC", "DET"]:
+                    total_equity += tot_b
+        result["total_equity_usd"] = round(total_equity, 2)
         logger.info(f"[DELTA] Balance: {result}")
         return result
     except Exception as e:
@@ -182,25 +186,28 @@ def get_balance() -> dict:
 
 
 def get_usd_balance() -> float:
-    """Return available USD/USDT/DET balance for margin."""
+    """Return available balance across all USD/USDT stablecoins matching Delta Exchange."""
     bal = get_balance()
     if isinstance(bal, dict) and bal.get("error"):
         return 0.0
-    usd = bal.get("USD", 0.0) or bal.get("USDT", 0.0) or bal.get("DET", 0.0)
-    if usd == 0.0 and len(bal) > 0:
-        usd = sum(v for k, v in bal.items() if isinstance(v, (int, float)) and not k.endswith("_total") and not k.endswith("_order_margin"))
-    return float(usd)
+    stable_keys = ["USD", "USDT", "USDC", "DET"]
+    avail_sum = sum(float(bal.get(k, 0.0)) for k in stable_keys if k in bal)
+    if avail_sum > 0:
+        return round(avail_sum, 2)
+    return round(float(bal.get("USD", 0.0) or bal.get("USDT", 0.0)), 2)
 
 
 def get_total_usd_balance() -> float:
-    """Return total wallet balance (equity including locked margin)."""
+    """Return total wallet equity across all assets matching the $95.37 header badge on Delta Exchange."""
     bal = get_balance()
     if isinstance(bal, dict) and bal.get("error"):
         return 0.0
-    usd_total = bal.get("USD_total", 0.0) or bal.get("USDT_total", 0.0) or bal.get("DET_total", 0.0)
-    if usd_total <= 0:
-        usd_total = get_usd_balance()
-    return float(usd_total)
+    tot_equity = float(bal.get("total_equity_usd", 0.0))
+    if tot_equity > 0:
+        return round(tot_equity, 2)
+    stable_keys = ["USD", "USDT", "USDC", "DET"]
+    tot_sum = sum(float(bal.get(f"{k}_total", bal.get(k, 0.0))) for k in stable_keys if k in bal or f"{k}_total" in bal)
+    return round(tot_sum, 2) if tot_sum > 0 else get_usd_balance()
 
 
 # ── Market Data ───────────────────────────────────────────────────────────────
