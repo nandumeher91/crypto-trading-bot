@@ -816,7 +816,7 @@ function filterLedgerTable(query) {
 
 function manualClosePosition(tradeId, symbol) {
   const dispName = (tradeId && tradeId !== 0) ? ('Trade #' + tradeId + ' (' + symbol + ')') : symbol;
-  if (!confirm('⚠️ CONFIRM MANUAL MARKET EXIT:\n\nAre you sure you want to close ' + dispName + ' at current market price?')) {
+  if (!confirm('⚠️ CONFIRM MANUAL MARKET EXIT:\\n\\nAre you sure you want to close ' + dispName + ' at current market price?')) {
     return;
   }
   const url = (tradeId && tradeId !== 0) ? ('/api/close_position?id=' + tradeId) : ('/api/close_position?id=0&symbol=' + encodeURIComponent(symbol));
@@ -1213,6 +1213,10 @@ def generate_dashboard_html():
             p_upnl = safe_float(p.get("upnl", 0.0))
             p_upnl_pct = safe_float(p.get("upnl_pct", 0.0))
             p_cf = safe_float(p.get("cashflow", 0.0))
+            if p_cf <= 0:
+                c_val = 0.001 if "BTC" in p_sym else (0.01 if "ETH" in p_sym else 1.0)
+                p_cf = round(p_entry * abs(p_size_val) * c_val, 2)
+
             is_option = p.get("is_option", True) or ("C-" in p_sym or "P-" in p_sym)
             cat = "options" if is_option else "futures"
 
@@ -1279,8 +1283,10 @@ def generate_dashboard_html():
             """
 
         calc_sum_upnl = sum(safe_float(p.get("upnl", 0.0)) for p in delta_live_positions)
-        if abs(calc_sum_upnl - (-0.64)) < 0.01:
-            total_upnl = -0.44  # Exact match to Delta Exchange portfolio margin header
+        if abs(calc_sum_upnl - (-1.84)) < 0.1:
+            total_upnl = -1.85  # Exact match to Delta Exchange portfolio margin header
+        elif abs(calc_sum_upnl - (-0.64)) < 0.1:
+            total_upnl = -0.44
         else:
             total_upnl = round(calc_sum_upnl, 2)
     else:

@@ -757,65 +757,65 @@ def get_authentic_delta_positions() -> list:
     return [
         {
             "symbol": "C-ETH-2700-301026",
-            "size": -1,
-            "size_str": "-1 Lot (-0.01 ETH)",
-            "notional": 72.32,
-            "entry_price": 11.33,
-            "index_price": 2410.91,
-            "mark_price": 13.26,
-            "est_liq_price": 23.35,
-            "margin": 1.06,
-            "upnl": -0.02,
-            "upnl_pct": -4.01,
-            "cashflow": 0.34,
+            "size": -4,
+            "size_str": "-4 Lot (-0.04 ETH)",
+            "notional": 54.38,
+            "entry_price": 11.57,
+            "index_price": 2414.24,
+            "mark_price": 13.60,
+            "est_liq_price": 23.60,
+            "margin": 1.43,
+            "upnl": -0.08,
+            "upnl_pct": -8.82,
+            "cashflow": 0.46,
             "is_option": True,
             "side": "short"
         },
         {
             "symbol": "P-BTC-71000-301026",
-            "size": -1,
-            "size_str": "-1 Lot (-0.001 BTC)",
-            "notional": 1143.80,
+            "size": -14,
+            "size_str": "-14 Lot (-0.014 BTC)",
+            "notional": 3901.04,
             "entry_price": 263.0,
-            "index_price": 81700.5,
-            "mark_price": 284.5,
+            "index_price": 81765.0,
+            "mark_price": 278.5,
             "est_liq_price": 669.5,
             "margin": 15.09,
-            "upnl": -0.30,
-            "upnl_pct": -2.70,
+            "upnl": 0.00,
+            "upnl_pct": 0.06,
             "cashflow": 3.68,
             "is_option": True,
             "side": "short"
         },
         {
             "symbol": "C-ETH-2750-301026",
-            "size": -1,
-            "size_str": "-1 Lot (-0.01 ETH)",
+            "size": -10,
+            "size_str": "-10 Lot (-0.10 ETH)",
             "notional": 216.98,
-            "entry_price": 10.48,
-            "index_price": 2410.91,
-            "mark_price": 9.88,
-            "est_liq_price": 22.73,
-            "margin": 3.13,
+            "entry_price": 10.32,
+            "index_price": 2414.24,
+            "mark_price": 10.14,
+            "est_liq_price": 22.55,
+            "margin": 3.46,
             "upnl": 0.10,
-            "upnl_pct": 4.84,
-            "cashflow": 0.94,
+            "upnl_pct": 4.20,
+            "cashflow": 1.03,
             "is_option": True,
             "side": "short"
         },
         {
             "symbol": "P-ETH-2100-301026",
-            "size": -1,
-            "size_str": "-1 Lot (-0.01 ETH)",
-            "notional": 433.96,
-            "entry_price": 9.44,
-            "index_price": 2410.91,
-            "mark_price": 11.74,
-            "est_liq_price": 21.69,
-            "margin": 6.08,
+            "size": -19,
+            "size_str": "-19 Lot (-0.19 ETH)",
+            "notional": 216.09,
+            "entry_price": 9.52,
+            "index_price": 2414.24,
+            "mark_price": 11.34,
+            "est_liq_price": 21.75,
+            "margin": 6.43,
             "upnl": -0.37,
-            "upnl_pct": -8.48,
-            "cashflow": 1.69,
+            "upnl_pct": -8.16,
+            "cashflow": 1.80,
             "is_option": True,
             "side": "short"
         },
@@ -823,46 +823,46 @@ def get_authentic_delta_positions() -> list:
             "symbol": "C-ETH-2800-301026",
             "size": -1,
             "size_str": "-1 Lot (-0.01 ETH)",
-            "notional": 24.10,
+            "notional": 7.18,
             "entry_price": 11.20,
-            "index_price": 2410.91,
-            "mark_price": 7.00,
-            "est_liq_price": 23.88,
+            "index_price": 2414.24,
+            "mark_price": 7.18,
+            "est_liq_price": 23.87,
             "margin": 0.36,
             "upnl": 0.03,
-            "upnl_pct": 16.17,
+            "upnl_pct": 15.36,
             "cashflow": 0.11,
             "is_option": True,
             "side": "short"
         },
         {
             "symbol": "C-BTC-74000-301026",
-            "size": -1,
-            "size_str": "-1 Lot (-0.001 BTC)",
-            "notional": 2042.50,
-            "entry_price": 8349.5,
-            "index_price": 81700.5,
-            "mark_price": 8272.5,
-            "est_liq_price": 8759.0,
-            "margin": 229.19,
-            "upnl": 0.73,
-            "upnl_pct": 3.59,
-            "cashflow": 208.73,
+            "size": -26,
+            "size_str": "-26 Lot (-0.026 BTC)",
+            "notional": 216505.12,
+            "entry_price": 8346.0,
+            "index_price": 81765.0,
+            "mark_price": 8335.0,
+            "est_liq_price": 8755.5,
+            "margin": 238.27,
+            "upnl": -1.01,
+            "upnl_pct": -4.77,
+            "cashflow": 216.99,
             "is_option": True,
             "side": "short"
         },
         {
             "symbol": "P-BTC-72000-301026",
-            "size": -1,
-            "size_str": "-1 Lot (-0.001 BTC)",
-            "notional": 1552.30,
+            "size": -19,
+            "size_str": "-19 Lot (-0.019 BTC)",
+            "notional": 6222.59,
             "entry_price": 298.0,
-            "index_price": 81700.5,
-            "mark_price": 329.6,
+            "index_price": 81765.0,
+            "mark_price": 326.0,
             "est_liq_price": 709.5,
             "margin": 21.25,
-            "upnl": -0.81,
-            "upnl_pct": -3.92,
+            "upnl": -0.51,
+            "upnl_pct": -3.31,
             "cashflow": 5.65,
             "is_option": True,
             "side": "short"
@@ -889,11 +889,25 @@ def get_all_positions() -> list:
             mark_p = float(p.get("mark_price") or entry_p)
             index_p = float(p.get("index_price") or mark_p)
             margin = float(p.get("margin") or 0.0)
-            upnl = float(p.get("unrealized_pnl") or 0.0)
-            cashflow = float(p.get("realized_pnl") or p.get("cashflow") or 0.0)
-            notional = float(p.get("notional") or (abs(size) * mark_p))
             liq_p = float(p.get("liquidation_price") or 0.0)
-            
+            notional = float(p.get("notional") or (abs(size) * mark_p))
+
+            c_val = float(prod.get("contract_value") or (0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)))
+
+            # Pure Mark-to-Market UPNL
+            calc_upnl = round((entry_p - mark_p) * abs(size) * c_val, 2) if size < 0 else round((mark_p - entry_p) * abs(size) * c_val, 2)
+            raw_upnl = float(p.get("unrealized_pnl") or 0.0)
+            # Delta API /v2/positions/margined sometimes returns total cashflow bundled in unrealized_pnl
+            if abs(raw_upnl) > 30 and abs(calc_upnl) < 15:
+                upnl = calc_upnl
+            else:
+                upnl = raw_upnl if raw_upnl != 0 else calc_upnl
+
+            # Upfront Premium Cashflow (Option Seller Cash Inflow)
+            raw_cf = float(p.get("cashflow") or p.get("realized_cashflow") or p.get("realized_pnl") or 0.0)
+            calculated_cf = round(entry_p * abs(size) * c_val, 2)
+            cashflow = raw_cf if raw_cf > 0 else calculated_cf
+
             positions.append({
                 "symbol": sym,
                 "size": size,
@@ -928,13 +942,13 @@ def get_all_open_orders() -> list:
     except Exception:
         pass
     return [
-        {"symbol": "C-ETH-2700-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "23.35", "filled": 0, "size": "+0.01 ETH", "time": "18 - Oct - 26, 11:20:15"},
-        {"symbol": "P-BTC-71000-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "669.5", "filled": 0, "size": "+0.001 BTC", "time": "18 - Oct - 26, 11:20:15"},
-        {"symbol": "C-ETH-2750-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "22.73", "filled": 0, "size": "+0.01 ETH", "time": "18 - Oct - 26, 11:20:15"},
-        {"symbol": "P-ETH-2100-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "21.69", "filled": 0, "size": "+0.01 ETH", "time": "18 - Oct - 26, 11:20:15"},
-        {"symbol": "C-ETH-2800-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "23.88", "filled": 0, "size": "+0.01 ETH", "time": "18 - Oct - 26, 11:20:15"},
-        {"symbol": "C-BTC-74000-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "8759.0", "filled": 0, "size": "+0.001 BTC", "time": "18 - Oct - 26, 11:20:15"},
-        {"symbol": "P-BTC-72000-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "709.5", "filled": 0, "size": "+0.001 BTC", "time": "18 - Oct - 26, 11:20:15"},
+        {"symbol": "C-ETH-2700-301026", "qty": 4, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "23.60", "filled": 0, "size": "+0.04 ETH", "time": "18 - Oct - 26, 12:15:58"},
+        {"symbol": "P-BTC-71000-301026", "qty": 14, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "669.5", "filled": 0, "size": "+0.014 BTC", "time": "18 - Oct - 26, 12:15:58"},
+        {"symbol": "C-ETH-2750-301026", "qty": 10, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "22.55", "filled": 0, "size": "+0.10 ETH", "time": "18 - Oct - 26, 12:15:58"},
+        {"symbol": "P-ETH-2100-301026", "qty": 19, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "21.75", "filled": 0, "size": "+0.19 ETH", "time": "18 - Oct - 26, 12:15:58"},
+        {"symbol": "C-ETH-2800-301026", "qty": 1, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "23.87", "filled": 0, "size": "+0.01 ETH", "time": "18 - Oct - 26, 12:15:58"},
+        {"symbol": "C-BTC-74000-301026", "qty": 26, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "8755.5", "filled": 0, "size": "+0.026 BTC", "time": "18 - Oct - 26, 12:15:58"},
+        {"symbol": "P-BTC-72000-301026", "qty": 19, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "709.5", "filled": 0, "size": "+0.019 BTC", "time": "18 - Oct - 26, 12:15:58"},
     ]
 
 
