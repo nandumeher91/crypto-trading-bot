@@ -28,6 +28,10 @@ import logging
 import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+try:
+    from http.server import ThreadingHTTPServer
+except ImportError:
+    ThreadingHTTPServer = HTTPServer
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -2892,17 +2896,25 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                 return
 
         # Regular Dashboard GET
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-        self.send_header('Pragma', 'no-cache')
-        self.send_header('Expires', '0')
-        self.end_headers()
         try:
             dashboard_content = generate_dashboard_html()
-            self.wfile.write(dashboard_content.encode('utf-8'))
+            encoded_content = dashboard_content.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(encoded_content)))
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            self.end_headers()
+            self.wfile.write(encoded_content)
         except Exception as e:
-            self.wfile.write(f"OK - Bot Active (Dashboard error: {e})".encode('utf-8'))
+            logger.error(f"[DASHBOARD] Render error: {e}")
+            err_msg = f"OK - Bot Active (Dashboard error: {e})".encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain; charset=utf-8')
+            self.send_header('Content-Length', str(len(err_msg)))
+            self.end_headers()
+            self.wfile.write(err_msg)
 
     def do_POST(self):
         from urllib.parse import urlparse
@@ -2976,7 +2988,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 def start_health_server():
     try:
         port = int(os.environ.get("PORT", 10000))
-        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        server = ThreadingHTTPServer(('0.0.0.0', port), HealthCheckHandler)
         print(f"[HEALTH] HTTP Health Check Server running on port {port}")
         server.serve_forever()
     except Exception as e:
