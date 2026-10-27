@@ -984,24 +984,25 @@ def get_all_positions() -> list:
                 "is_option": "C-" in sym or "P-" in sym,
                 "side": "long" if size > 0 else "short"
             })
-        if len(positions) > 0:
-            return positions
+        return positions
     except Exception as e:
         logger.warning(f"[DELTA] Live positions fetch failed: {e}")
-
-    return get_authentic_delta_positions()
+        if not DELTA_API_KEY:
+            return get_authentic_delta_positions()
+        return []
 
 
 def get_all_open_orders() -> list:
-    """Return all 7 resting open orders matching Delta Exchange."""
+    """Return live resting open orders from Delta Exchange."""
     try:
         client = _get_client()
         res = client.get_live_orders()
-        if isinstance(res, list) and len(res) > 0:
+        if isinstance(res, list):
             return res
     except Exception:
         pass
-    return [
+    if not DELTA_API_KEY:
+        return [
         {"symbol": "C-ETH-2700-301026", "qty": 4, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "23.60", "filled": 0, "size": "+0.04 ETH", "time": "18 - Oct - 26, 12:15:58"},
         {"symbol": "P-BTC-71000-301026", "qty": 14, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "669.5", "filled": 0, "size": "+0.014 BTC", "time": "18 - Oct - 26, 12:15:58"},
         {"symbol": "C-ETH-2750-301026", "qty": 10, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "22.55", "filled": 0, "size": "+0.10 ETH", "time": "18 - Oct - 26, 12:15:58"},
@@ -1010,6 +1011,7 @@ def get_all_open_orders() -> list:
         {"symbol": "C-BTC-74000-301026", "qty": 26, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "8755.5", "filled": 0, "size": "+0.026 BTC", "time": "18 - Oct - 26, 12:15:58"},
         {"symbol": "P-BTC-72000-301026", "qty": 19, "side": "Buy", "type": "Bracket - SL", "limit": "-", "trigger": "709.5", "filled": 0, "size": "+0.019 BTC", "time": "18 - Oct - 26, 12:15:58"},
     ]
+    return []
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────
