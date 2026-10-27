@@ -24,6 +24,10 @@ try:
 except Exception:
     run_dhurandhar_cycle = None
     get_dhurandhar_snapshot = None
+try:
+    import delta_exchange
+except Exception:
+    delta_exchange = None
 import logging
 import os
 import threading
@@ -2585,6 +2589,20 @@ def emergency_kill_switch():
             closed_count += 1
         else:
             errors.append(f"Trade #{t_id} ({t_sym}) failed to close")
+
+    # Also market close ALL active Delta Exchange positions
+    if delta_exchange:
+        try:
+            d_positions = delta_exchange.get_all_positions()
+            for dp in d_positions:
+                d_sym = dp.get("symbol")
+                d_pid = dp.get("product_id")
+                d_sz = abs(int(dp.get("size", 1)))
+                if d_sz > 0:
+                    delta_exchange.close_any_position(d_sym, d_pid, d_sz)
+                    closed_count += 1
+        except Exception as e:
+            logger.warning(f"[KILL_SWITCH] Error closing Delta positions: {e}")
 
     logger.critical(f"🛑 EMERGENCY KILL SWITCH ACTIVATED! Closed {closed_count} open trades. All trading HALTED.")
     write_learning(f"EMERGENCY KILL SWITCH ACTIVATED: Closed {closed_count} positions. Bot halted.", category="kill_switch")
