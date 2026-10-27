@@ -651,6 +651,8 @@ function switchTradingTab(tabName) {
   if (filterBar) {
     filterBar.style.display = (tabName === 'risk-margin') ? 'none' : 'flex';
   }
+  // Ensure all rows are visible when switching tabs so filters don't hide data
+  filterTradingTable('all');
 }
 
 function filterTradingTable(category) {
@@ -892,6 +894,41 @@ function fetchLiveStatus() {
 }
 setInterval(fetchLiveStatus, 5000);
 """
+
+def parse_option_symbol(sym: str) -> dict:
+    parts = sym.split("-")
+    if len(parts) >= 4:
+        o_type = "CALL" if parts[0] == "C" else "PUT"
+        asset = parts[1]
+        strike = parts[2]
+        exp_raw = parts[3]
+        if len(exp_raw) == 6:
+            d = exp_raw[:2]
+            m_num = exp_raw[2:4]
+            y = exp_raw[4:6]
+            months = {"01":"Jan","02":"Feb","03":"Mar","04":"Apr","05":"May","06":"Jun","07":"Jul","08":"Aug","09":"Sep","10":"Oct","11":"Nov","12":"Dec"}
+            m_str = months.get(m_num, m_num)
+            expiry_str = f"{d}-{m_str}-20{y}"
+        else:
+            expiry_str = exp_raw
+        try:
+            st_val = f"{float(strike):,.0f}" if float(strike).is_integer() else f"{float(strike):,.2f}"
+        except Exception:
+            st_val = strike
+        return {
+            "type": o_type,
+            "asset": asset,
+            "strike": st_val,
+            "expiry": expiry_str,
+            "is_option": True
+        }
+    return {
+        "type": "FUTURES",
+        "asset": sym,
+        "strike": "-",
+        "expiry": "Perpetual",
+        "is_option": False
+    }
 
 def generate_dashboard_html():
     state_file = os.path.join(BASE_DIR, "market_state.json")
@@ -1181,12 +1218,16 @@ def generate_dashboard_html():
     open_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["open", "partial_tp"]]
     weekend_active = is_weekend()
 
+    total_upfront_cf = 0.0
+    total_true_profit = 0.0
+    total_pos_margin = 0.0
+    tp_met_count = 0
     total_live_theta_cf = 0.0
     total_upnl = 0.0
     positions_rows_html = ""
     strangle_cards_html = ""
 
-    # Live fetch directly from Delta Exchange (7 Option Positions & 7 Resting Orders)
+    # Live fetch directly from Delta Exchange (Positions & Resting Orders)
     try:
         delta_live_positions = delta_exchange.get_all_positions()
     except Exception as e:
@@ -1202,97 +1243,128 @@ def generate_dashboard_html():
     if delta_live_positions:
         for p in delta_live_positions:
             p_sym = str(p.get("symbol", "-"))
+            p_prod_id = p.get("product_id") or ""
             p_size_val = p.get("size", -1)
-            p_size_str = p.get("size_str", f"{p_size_val} Lot")
+            p_size_str = p.get("size_str", f"{int(p_size_val)} Lot")
             p_notional = safe_float(p.get("notional", 0.0))
             p_entry = safe_float(p.get("entry_price", 0.0))
             p_index = safe_float(p.get("index_price", 0.0))
             p_mark = safe_float(p.get("mark_price", 0.0))
             p_liq = safe_float(p.get("est_liq_price", 0.0))
             p_margin = safe_float(p.get("margin", 0.0))
-            p_upnl = safe_float(p.get("upnl", 0.0))
-            p_upnl_pct = safe_float(p.get("upnl_pct", 0.0))
-            p_cf = safe_float(p.get("cashflow", 0.0))
+
+            c_val = 0.001 if "BTC" in p_sym else (0.01 if "ETH" in p_sym else 1.0)
+            coin_unit = "BTC" if "BTC" in p_sym else ("ETH" if "ETH" in p_sym else "")
+
+            # 1. Upfront Cashflow Collected (Initial Sold Premium)
+            p_cf = safe_float(p.get("upfront_cf", 0.0))
             if p_cf <= 0:
-                c_val = 0.001 if "BTC" in p_sym else (0.01 if "ETH" in p_sym else 1.0)
+                p_cf = safe_float(p.get("cashflow", 0.0))
+            if p_cf <= 0:
                 p_cf = round(p_entry * abs(p_size_val) * c_val, 2)
 
-            is_option = p.get("is_option", True) or ("C-" in p_sym or "P-" in p_sym)
+            # 2. Current Buyback Cost
+            p_cur_cost = safe_float(p.get("current_cost", 0.0))
+            if p_cur_cost <= 0:
+                p_cur_cost = round(p_mark * abs(p_size_val) * c_val, 2)
+
+            # 3. True Net Theta Profit (from inception)
+            if p_size_val < 0:
+                p_net_profit = round(p_cf - p_cur_cost, 2)
+                p_melt_pct = round(((p_entry - p_mark) / p_entry) * 100.0, 1) if p_entry > 0 else 0.0
+            else:
+                p_net_profit = round(p_cur_cost - p_cf, 2)
+                p_melt_pct = round(((p_mark - p_entry) / p_entry) * 100.0, 1) if p_entry > 0 else 0.0
+
+            total_upfront_cf += p_cf
+            total_true_profit += p_net_profit
+            total_pos_margin += p_margin
+
+            is_tp_met = (p_melt_pct >= 50.0)
+            if is_tp_met:
+                tp_met_count += 1
+
+            parsed_opt = parse_option_symbol(p_sym)
+            if parsed_opt.get("type") == "PUT":
+                type_badge = '<span style="background:rgba(239,68,68,0.18); color:#f87171; border:1px solid rgba(239,68,68,0.35); padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px;">PUT</span>'
+            elif parsed_opt.get("type") == "CALL":
+                type_badge = '<span style="background:rgba(52,211,153,0.18); color:#34d399; border:1px solid rgba(52,211,153,0.35); padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px;">CALL</span>'
+            else:
+                type_badge = '<span style="background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.35); padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px;">FUTURES</span>'
+
+            # 50% TP Status pill
+            if is_tp_met:
+                tp_pill_html = f"""
+                <span style="color:#34d399; background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.35); padding:3px 8px; border-radius:6px; font-weight:700; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
+                  🎯 50% TP HIT ({p_melt_pct:.1f}%)
+                </span>
+                """
+            else:
+                progress_bar_w = max(0.0, min(100.0, (p_melt_pct / 50.0) * 100.0))
+                tp_pill_html = f"""
+                <div style="font-size:11px; font-family:var(--font-mono); color:#fbbf24; font-weight:600;">
+                  ⏳ {p_melt_pct:.1f}% / 50%
+                </div>
+                <div style="height:4px; width:70px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-top:3px;">
+                  <div style="height:100%; width:{progress_bar_w}%; background:#fbbf24; border-radius:4px;"></div>
+                </div>
+                """
+
+            is_option = parsed_opt.get("is_option", True)
             cat = "options" if is_option else "futures"
-
-            total_live_theta_cf += p_cf
-
-            upnl_col = "#34d399" if p_upnl >= 0 else "#f87171"
-            upnl_disp = f"+${p_upnl:,.2f}" if p_upnl >= 0 else f"-${abs(p_upnl):,.2f}"
-            upnl_pct_disp = f"+{p_upnl_pct:.2f}%" if p_upnl_pct >= 0 else f"{p_upnl_pct:.2f}%"
-
-            # IV% underneath mark price matching Delta Exchange
             iv_val = "52.7%" if "BTC" in p_sym else ("53.5%" if "ETH" in p_sym else "50.0%")
-            iv_display = f'<div style="font-size:10px; color:#64748b; margin-top:2px;">{iv_val}</div>'
-
-            # TP/SL display
-            tp_sl_html = f"""
-            <div style="display:flex; align-items:center; gap:4px; font-size:11px;">
-              <span style="color:#64748b;">TP :</span>
-              <span style="color:#34d399; font-weight:600;">0.00</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:4px; font-size:11px; margin-top:2px;">
-              <span style="color:#64748b;">SL :</span>
-              <span style="color:#f87171; font-weight:600;">{p_liq:,.2f}</span>
-              <span style="color:#64748b; font-size:10px; cursor:pointer;" title="Adjust TP/SL">✏️</span>
-              <span style="color:#64748b; font-size:10px;" title="Strategy Protected">🔒</span>
-            </div>
-            """
+            iv_display = f'<div style="font-size:10px; color:#64748b; margin-top:2px;">{iv_val} IV</div>'
+            profit_col = "#34d399" if p_net_profit >= 0 else "#f87171"
 
             positions_rows_html += f"""
             <tr class="trading-table-row" data-category="{cat}" style="border-bottom:1px solid #161a25; transition:background 0.15s;">
-              <td style="padding:12px; width:36px;"><input type="checkbox" checked style="accent-color:#ff7a00; cursor:pointer;"></td>
-              <td style="padding:12px 14px; border-left:3px solid #f87171; position:relative;">
-                <div style="font-size:9px; color:#64748b; font-weight:600; text-transform:uppercase;">Current</div>
-                <div style="font-weight:700; color:#ffffff; font-family:var(--font-mono); font-size:13px; display:flex; align-items:center; gap:6px;">
-                  {p_sym}
+              <td style="padding:12px 10px; width:32px;"><input type="checkbox" checked style="accent-color:#ff7a00; cursor:pointer;"></td>
+              <td style="padding:12px 14px; border-left:3px solid {'#f87171' if 'P-' in p_sym else '#34d399'};">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  {type_badge}
+                  <span style="font-weight:700; color:#ffffff; font-family:var(--font-mono); font-size:13px;">{parsed_opt.get('asset')} ${parsed_opt.get('strike')}</span>
                 </div>
+                <div style="font-size:10px; color:#64748b; margin-top:3px; font-family:var(--font-mono);">{p_sym} • Exp: {parsed_opt.get('expiry')}</div>
               </td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:700; color:#f87171;">{p_size_str}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1; font-weight:600;">{p_notional:,.2f} USD</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{p_entry:,.2f}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); font-size:11px;">{tp_sl_html}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{p_index:,.2f}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">
-                <div>{p_mark:,.2f}</div>
+              <td style="padding:12px 12px; font-family:var(--font-mono);">
+                <div style="font-weight:700; color:#f87171;">{p_size_str}</div>
+                <div style="font-size:10px; color:#64748b;">({abs(p_size_val) * c_val:.3f} {coin_unit})</div>
+              </td>
+              <td style="padding:12px 12px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">${p_entry:,.2f}</td>
+              <td style="padding:12px 12px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">
+                <div>${p_mark:,.2f}</div>
                 {iv_display}
               </td>
               <td style="padding:12px 14px; font-family:var(--font-mono);">
-                <div style="font-weight:700; color:#38bdf8; font-size:12px;">${p_margin:,.2f} USD</div>
-                <div style="font-size:10px; color:#64748b; margin-top:2px;">Isolated</div>
+                <div style="font-weight:700; color:#38bdf8; font-size:13px;">+${p_cf:,.2f} USD</div>
+                <div style="font-size:10px; color:#64748b;">Upfront Credited</div>
+              </td>
+              <td style="padding:12px 12px; font-family:var(--font-mono);">
+                <div style="font-weight:600; color:#cbd5e1;">${p_cur_cost:,.2f} USD</div>
+                <div style="font-size:10px; color:#64748b;">To Buy Back</div>
               </td>
               <td style="padding:12px 14px; font-family:var(--font-mono);">
-                <div style="font-weight:700; color:{upnl_col};">{upnl_disp} USD</div>
-                <div style="font-size:10px; color:{upnl_col}; font-weight:600;">{upnl_pct_disp}</div>
+                <div style="font-weight:800; color:{profit_col}; font-size:14px;">{f'+${p_net_profit:,.2f}' if p_net_profit >= 0 else f'-${abs(p_net_profit):,.2f}'} USD</div>
+                <div style="font-size:10px; color:{profit_col}; font-weight:700;">{f'+{p_melt_pct:.1f}% Melted' if p_net_profit >= 0 else f'{p_melt_pct:.1f}%'}</div>
               </td>
-              <td style="padding:12px; text-align:center;">
-                <button onclick="alert('P&amp;L Card for {p_sym} copied!')" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:13px;" title="Share P&amp;L">↗</button>
+              <td style="padding:12px 14px;">
+                {tp_pill_html}
               </td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:700; color:#34d399;">
-                +{p_cf:,.2f} USD
+              <td style="padding:12px 12px; font-family:var(--font-mono);">
+                <div style="font-weight:700; color:#c084fc; font-size:12px;">${p_margin:,.2f} USD</div>
+                <div style="font-size:10px; color:#64748b;">Isolated</div>
               </td>
-              <td style="padding:12px 14px; text-align:center;">
-                <button onclick="manualClosePosition(0, '{p_sym}')" style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); color:#f87171; border-radius:4px; padding:3px 8px; cursor:pointer; font-size:11px; font-weight:700;" title="Close Position">✕</button>
+              <td style="padding:12px 12px; text-align:center;">
+                <button onclick="manualClosePosition(0, '{p_sym}', '{p_prod_id}', '{abs(p_size_val)}')" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.35); color:#f87171; border-radius:6px; padding:5px 11px; cursor:pointer; font-size:11px; font-weight:700; transition:all 0.15s;" title="Close position & lock in profit">✕ Close</button>
               </td>
             </tr>
             """
 
-        calc_sum_upnl = sum(safe_float(p.get("upnl", 0.0)) for p in delta_live_positions)
-        if abs(calc_sum_upnl - (-1.84)) < 0.1:
-            total_upnl = -1.85  # Exact match to Delta Exchange portfolio margin header
-        elif abs(calc_sum_upnl - (-0.64)) < 0.1:
-            total_upnl = -0.44
-        else:
-            total_upnl = round(calc_sum_upnl, 2)
+        total_upnl = round(total_true_profit, 2)
     else:
         positions_rows_html = """
         <tr>
-          <td colspan="13" style="text-align:center; padding:36px; color:#64748b; font-size:12px;">
+          <td colspan="11" style="text-align:center; padding:36px; color:#64748b; font-size:12px;">
             <div style="font-size:22px; margin-bottom:6px;">📡</div>
             <div style="font-weight:600; color:#ffffff; font-size:13px;">No Open Positions Active</div>
             <div style="font-size:11px; color:#64748b; margin-top:2px;">Bot is scanning market for high-probability setups...</div>
@@ -1598,24 +1670,58 @@ def generate_dashboard_html():
         </div>
       </div>
 
-      <!-- TAB 1: POSITIONS (Screenshot 1 Match) -->
+      <!-- TAB 1: POSITIONS & LIVE CASHFLOW (Upgraded Ultra Clear View) -->
       <div id="tab-content-positions" style="display:block; overflow-x:auto;">
+        <!-- HERO METRICS OVERVIEW BANNER -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; padding:16px; background:#07090e; border-bottom:1px solid #161a25;">
+          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
+            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">💰 Upfront Cashflow Collected</div>
+            <div style="font-size:18px; font-weight:800; color:#38bdf8; font-family:var(--font-mono); margin-top:3px;">+${total_upfront_cf:,.2f} USD</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Initial premium received into wallet</div>
+          </div>
+          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
+            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">📈 Net Theta Profit Captured</div>
+            <div style="font-size:18px; font-weight:800; color:{'#34d399' if total_true_profit >= 0 else '#f87171'}; font-family:var(--font-mono); margin-top:3px;">{f'+${total_true_profit:,.2f}' if total_true_profit >= 0 else f'-${abs(total_true_profit):,.2f}'} USD</div>
+            <div style="font-size:10px; color:{'#34d399' if total_true_profit >= 0 else '#f87171'}; margin-top:2px;">True profit from premium decay</div>
+          </div>
+          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
+            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">🎯 50% Profit Target Status</div>
+            <div style="font-size:18px; font-weight:800; color:#34d399; font-family:var(--font-mono); margin-top:3px;">{tp_met_count} of {len(delta_live_positions)} Target Met</div>
+            <div style="font-size:10px; color:#34d399; margin-top:2px;">Ready to recycle capital</div>
+          </div>
+          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
+            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">🛡️ Collateral Margin Locked</div>
+            <div style="font-size:18px; font-weight:800; color:#c084fc; font-family:var(--font-mono); margin-top:3px;">${total_pos_margin:,.2f} USD</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Collateral locked across active trades</div>
+          </div>
+        </div>
+
+        {f'''
+        <!-- QUICK TAKE PROFIT ACTION BAR -->
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#0a0d14; padding:10px 16px; border-bottom:1px solid #161a25; flex-wrap:wrap; gap:8px;">
+          <div style="font-size:12px; color:#34d399; display:flex; align-items:center; gap:6px;">
+            <span>🎯</span> <b>{tp_met_count} trades have achieved 50%+ profit melt!</b> You can lock in profit now.
+          </div>
+          <button onclick="closeAllTargetMetPositions()" style="background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.35); color:#34d399; padding:5px 14px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">
+            ⚡ Auto-Take Profit on {tp_met_count} Target Met Trades
+          </button>
+        </div>
+        ''' if tp_met_count > 0 else ''}
+
         <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
           <thead>
             <tr style="border-bottom:1px solid #161a25; background:#080a10; font-size:11px; color:#64748b; font-weight:600;">
-              <th style="padding:10px 12px; width:36px;"><input type="checkbox" checked style="accent-color:#ff7a00; cursor:pointer;"></th>
-              <th style="padding:10px 14px;">Symbol</th>
-              <th style="padding:10px 14px;">Size</th>
-              <th style="padding:10px 14px;">Notional</th>
-              <th style="padding:10px 14px;">Entry Price</th>
-              <th style="padding:10px 14px;">TP / SL</th>
-              <th style="padding:10px 14px;">Index Price</th>
-              <th style="padding:10px 14px;">Mark Price</th>
-              <th style="padding:10px 14px;">Margin</th>
-              <th style="padding:10px 14px;">UPNL</th>
-              <th style="padding:10px 12px; text-align:center;">Share</th>
-              <th style="padding:10px 14px;">Cashflows</th>
-              <th style="padding:10px 14px; text-align:center;">Action</th>
+              <th style="padding:10px 10px; width:32px;"><input type="checkbox" checked style="accent-color:#ff7a00; cursor:pointer;"></th>
+              <th style="padding:10px 14px;">Contract &amp; Strike</th>
+              <th style="padding:10px 12px;">Size</th>
+              <th style="padding:10px 12px;">Entry Price</th>
+              <th style="padding:10px 12px;">Mark Price</th>
+              <th style="padding:10px 14px;">Upfront Cashflow</th>
+              <th style="padding:10px 12px;">Current Value</th>
+              <th style="padding:10px 14px;">Net Theta Profit</th>
+              <th style="padding:10px 14px;">50% TP Target</th>
+              <th style="padding:10px 12px;">Margin</th>
+              <th style="padding:10px 12px; text-align:center;">Action</th>
             </tr>
           </thead>
           <tbody id="positions-table-body">
@@ -2729,22 +2835,61 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         # API: Close position manually via GET
         if parsed.path == "/api/close_position":
             qs = parse_qs(parsed.query)
+            sym = qs.get("symbol", [""])[0]
+            prod_id = qs.get("product_id", [""])[0]
+            size_param = qs.get("size", [""])[0]
             t_ids = qs.get("id", [])
-            if t_ids:
-                try:
-                    t_id = int(t_ids[0])
-                    success, msg = manual_close_trade_by_id(t_id)
-                    self.send_response(200)
-                    self.send_header('Content-type', 'application/json; charset=utf-8')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"success": success, "message": msg}).encode('utf-8'))
-                    return
-                except Exception as e:
-                    self.send_response(500)
-                    self.send_header('Content-type', 'application/json; charset=utf-8')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
-                    return
+            t_id = int(t_ids[0]) if (t_ids and t_ids[0].isdigit()) else 0
+
+            if sym and ("C-" in sym or "P-" in sym or "USD" in sym):
+                success, msg = delta_exchange.close_any_position(
+                    sym,
+                    int(prod_id) if (prod_id and prod_id.isdigit()) else None,
+                    int(size_param) if (size_param and size_param.isdigit()) else None
+                )
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": success, "message": msg}).encode('utf-8'))
+                return
+            elif t_id > 0:
+                success, msg = manual_close_trade_by_id(t_id)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": success, "message": msg}).encode('utf-8'))
+                return
+            else:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "message": "Missing trade identifier"}).encode('utf-8'))
+                return
+
+        # API: Close all 50% target met positions
+        if parsed.path == "/api/close_target_met":
+            try:
+                positions = delta_exchange.get_all_positions()
+                closed_count = 0
+                for p in positions:
+                    m_pct = float(p.get("upnl_pct", 0.0))
+                    if m_pct >= 50.0:
+                        s_sym = p.get("symbol")
+                        p_id = p.get("product_id")
+                        s_size = abs(int(p.get("size", 1)))
+                        delta_exchange.close_any_position(s_sym, p_id, s_size)
+                        closed_count += 1
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "message": f"Successfully took profit on {closed_count} target-met trades!"}).encode('utf-8'))
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+                return
 
         # Regular Dashboard GET
         self.send_response(200)

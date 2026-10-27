@@ -618,6 +618,58 @@ def buy_to_close_option(product_id: int, symbol: str, contracts: int = 1) -> dic
         return {"success": False, "error": str(e)}
 
 
+def close_any_position(symbol: str, product_id: int = None, size: int = None) -> tuple:
+    """
+    Close an open position (Option or Futures) on Delta Exchange with 1-click.
+    Returns (success: bool, message: str).
+    """
+    try:
+        client = _get_client()
+        if not product_id or size is None:
+            positions = get_all_positions()
+            for p in positions:
+                if p.get("symbol") == symbol:
+                    product_id = p.get("product_id") or product_id
+                    size = abs(int(p.get("size", 1)))
+                    break
+
+        if not product_id:
+            try:
+                t = client.get_ticker(symbol)
+                product_id = t.get("product_id")
+            except Exception:
+                pass
+
+        if not product_id:
+            return False, f"Product ID not found for {symbol}"
+
+        contracts = abs(int(size or 1))
+        # For short options, buy to close at market ask + buffer
+        try:
+            ticker = client.get_ticker(symbol)
+            quotes = ticker.get("quotes", {})
+            best_ask = float(quotes.get("best_ask", 0) or 0)
+            mark_p = float(ticker.get("mark_price", 0) or 0)
+            buy_price = round(max(best_ask, mark_p) * 1.05, 2) if (best_ask > 0 or mark_p > 0) else 10.0
+        except Exception:
+            buy_price = 10.0
+
+        res = client.place_order(
+            product_id=product_id,
+            size=contracts,
+            side="buy",
+            limit_price=str(buy_price),
+            order_type=OrderType.LIMIT
+        )
+        if isinstance(res, dict) and res.get("id"):
+            logger.info(f"[DELTA] Successfully closed {contracts} lots of {symbol} (Order ID: {res['id']})")
+            return True, f"Closed {contracts} lots of {symbol} successfully."
+        return False, f"Delta order response: {res}"
+    except Exception as e:
+        logger.error(f"[DELTA] close_any_position error: {e}")
+        return False, f"Error closing {symbol}: {e}"
+
+
 def get_option_premium(symbol: str) -> float:
     """Fetch current market premium of an option contract in USD."""
     if not symbol:
@@ -894,22 +946,27 @@ def get_all_positions() -> list:
 
             c_val = float(prod.get("contract_value") or (0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)))
 
-            # Pure Mark-to-Market UPNL
-            calc_upnl = round((entry_p - mark_p) * abs(size) * c_val, 2) if size < 0 else round((mark_p - entry_p) * abs(size) * c_val, 2)
-            raw_upnl = float(p.get("unrealized_pnl") or 0.0)
-            # Delta API /v2/positions/margined sometimes returns total cashflow bundled in unrealized_pnl
-            if abs(raw_upnl) > 30 and abs(calc_upnl) < 15:
-                upnl = calc_upnl
-            else:
-                upnl = raw_upnl if raw_upnl != 0 else calc_upnl
+            product_id = prod.get("id") or p.get("product_id")
 
-            # Upfront Premium Cashflow (Option Seller Cash Inflow)
-            raw_cf = float(p.get("cashflow") or p.get("realized_cashflow") or p.get("realized_pnl") or 0.0)
-            calculated_cf = round(entry_p * abs(size) * c_val, 2)
-            cashflow = raw_cf if raw_cf > 0 else calculated_cf
+            # True Trade Profit from inception:
+            # For short option (size < 0): Profit = (Entry Price - Current Mark) * Contracts * Multiplier
+            if size < 0:
+                trade_pnl = round((entry_p - mark_p) * abs(size) * c_val, 2)
+                melt_pct = round(((entry_p - mark_p) / entry_p) * 100.0, 1) if entry_p > 0 else 0.0
+            else:
+                trade_pnl = round((mark_p - entry_p) * abs(size) * c_val, 2)
+                melt_pct = round(((mark_p - entry_p) / entry_p) * 100.0, 1) if entry_p > 0 else 0.0
+
+            # Upfront Premium Cashflow (Exact cash received when selling option)
+            upfront_cf = round(entry_p * abs(size) * c_val, 2)
+            # Current Buyback Value (Cost to close right now)
+            current_cost = round(mark_p * abs(size) * c_val, 2)
+            # Daily Settlement MTM from Delta Exchange
+            daily_mtm = float(p.get("unrealized_pnl") or 0.0)
 
             positions.append({
                 "symbol": sym,
+                "product_id": product_id,
                 "size": size,
                 "size_str": f"{int(size)} Lot",
                 "entry_price": entry_p,
@@ -917,9 +974,12 @@ def get_all_positions() -> list:
                 "index_price": index_p,
                 "est_liq_price": liq_p,
                 "margin": margin,
-                "upnl": upnl,
-                "upnl_pct": round((upnl / margin) * 100.0, 2) if margin > 0 else 0.0,
-                "cashflow": cashflow,
+                "upnl": trade_pnl,               # True trade profit from entry!
+                "daily_mtm": daily_mtm,          # Daily settlement slice
+                "upnl_pct": melt_pct,            # Real Theta melt percentage!
+                "upfront_cf": upfront_cf,        # Upfront cash credited to wallet
+                "current_cost": current_cost,    # Current cost to buy back
+                "cashflow": upfront_cf,
                 "notional": notional,
                 "is_option": "C-" in sym or "P-" in sym,
                 "side": "long" if size > 0 else "short"
