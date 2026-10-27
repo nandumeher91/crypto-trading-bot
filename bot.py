@@ -1753,12 +1753,20 @@ def generate_dashboard_html():
         </div>
         <div style="background:#07090e; border:1px solid #161a25; border-radius:8px; padding:16px; font-family:var(--font-mono); font-size:12px; color:#cbd5e1; line-height:1.7;">
           <div style="display:flex; justify-content:space-between; border-bottom:1px solid #161a25; padding-bottom:8px;">
+            <span>Strike Selection & Prob:</span>
+            <span style="color:#a78bfa; font-weight:700;">Deep OTM (~18% Buffer / 0.08 Delta, 92% Win Prob)</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-bottom:1px solid #161a25; padding:8px 0;">
             <span>Max Theoretical Profit:</span>
             <span style="color:#34d399; font-weight:700;">100% Upfront Premium ($8.42 USD)</span>
           </div>
           <div style="display:flex; justify-content:space-between; border-bottom:1px solid #161a25; padding:8px 0;">
             <span>Target Take Profit (50% Melt):</span>
-            <span style="color:#38bdf8; font-weight:700;">+$4.21 USD (Recycle Capital)</span>
+            <span style="color:#38bdf8; font-weight:700;">+$4.21 USD (Auto Recycle Capital)</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-bottom:1px solid #161a25; padding:8px 0;">
+            <span>Hard Stop-Loss Guard:</span>
+            <span style="color:#f87171; font-weight:700;">2.2x Sold Premium Hard Cap (Risk Strictly Limited)</span>
           </div>
           <div style="display:flex; justify-content:space-between; border-bottom:1px solid #161a25; padding:8px 0;">
             <span>Upper Breakeven / Hedge Trigger:</span>

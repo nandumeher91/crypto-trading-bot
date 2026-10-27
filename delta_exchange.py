@@ -416,7 +416,7 @@ def _round_to_nearest(value: float, step: float) -> float:
     return math.floor(value / step) * step
 
 
-def get_options_for_strangle(asset: str, otm_pct: float = 0.12, prefer_monthly: bool = True) -> dict:
+def get_options_for_strangle(asset: str, otm_pct: float = 0.18, prefer_monthly: bool = True) -> dict:
     """
     Find the best OTM Call and Put to sell for a Strangle.
 
@@ -672,7 +672,7 @@ def get_funding_rate(asset: str) -> dict:
         }
 
 
-def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.12) -> dict:
+def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.18) -> dict:
     """
     Quantitative Option Selling: Sell OTM Call + Sell OTM Put.
 

@@ -51,19 +51,21 @@ DHURANDHAR_CONFIG = {
     "STRATEGY_NAME":            "Delta_Hedged_Strangle_V1",
     "TIMEFRAME":                "15m",
     "LOOKBACK_WINDOW":          96,       # 96 bars on 15m = 24 Hours
-    "INITIAL_DELTA":            0.15,     # OTM Strike selection (~0.15 Delta / ~12% OTM)
+    "INITIAL_DELTA":            0.08,     # Deep OTM (~0.08 Delta / ~18% OTM distance, 92% Win Prob)
+    "OTM_PCT":                  0.18,     # 18% buffer from spot price (Deeper Safe Zone)
     "IV_RANK_MIN":              25,       # Entry allowed only if IV Rank >= 25
     "BREAKOUT_BUFFER_ATR_MULT": 0.5,      # Price > 24h High + (0.5 * ATR)
     "CANDLE_CLOSE_CONFIRM":     True,     # Wick touch ignored; candle close required
     "MAX_WHIPSAW_COUNT":        2,        # Max false breakout attempts before pausing
-    "TARGET_PROFIT_PCT":        50,       # Close when 50% combined premium melts
+    "TARGET_PROFIT_PCT":        50,       # Rule-Based Exit: Close when 50% combined premium melts
+    "STOP_LOSS_MULT":           2.2,      # Hard Stop-Loss: Exit if combined premium reaches 2.2x of sold premium
     "GLOBAL_PORTFOLIO_SL_PCT":  2.0,      # Kill switch at 2% total capital drawdown
 
     # Asset Settings
     "assets":                   ["BTC", "ETH"],
     "btc_notional_usd":         50.0,
     "eth_notional_usd":         50.0,
-    "option_contracts":         1,
+    "option_contracts":         1,        # Conservative 1 Lot per leg (Max 5-8% Margin)
     "enabled":                  True,
 }
 
@@ -292,7 +294,7 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
         opts_state[active_key] = False
         asset_state["state"] = "IDLE"
 
-    # ── CHECK STATE 4: 50% TAKE PROFIT TARGET ─────────────────────────────────
+    # ── CHECK STATE 4: 50% TAKE PROFIT TARGET OR 2.2x HARD STOP-LOSS ──────────
     if opts_state.get(active_key):
         c_sym = opts_state.get(call_key)
         p_sym = opts_state.get(put_key)
@@ -301,7 +303,7 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
         cur_tot_prem = round(cur_c_prem + cur_p_prem, 2)
         init_tot_prem = float(asset_state.get("initial_total_premium") or 80.0)
 
-        # 50% Profit Target: Close when remaining combined premium <= 50% of initial
+        # 1. 50% Profit Target: Close when remaining combined premium <= 50% of initial
         target_melt_thresh = init_tot_prem * (1.0 - (config.get("TARGET_PROFIT_PCT", 50) / 100.0))
         if init_tot_prem > 0 and cur_tot_prem > 0 and cur_tot_prem <= target_melt_thresh:
             logger.info(f"[DHURANDHAR] 🎯 50% TAKE PROFIT HIT for {asset}: "
@@ -322,7 +324,27 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
             logger.info(f"[DHURANDHAR] ✅ {asset} 50% Profit Booked. Capital recycled. Returning to STATE 0 (SCAN/IDLE).")
             return asset_state
 
-    # ── STATE 0 -> STATE 1: INITIAL ENTRY (Delta-Neutral Strangle) ─────────────
+        # 2. Strict 2.2x Hard Stop-Loss: Exit if remaining combined premium >= 2.2x initial
+        sl_mult = config.get("STOP_LOSS_MULT", 2.2)
+        hard_sl_thresh = round(init_tot_prem * sl_mult, 2)
+        if init_tot_prem > 0 and cur_tot_prem >= hard_sl_thresh:
+            logger.warning(f"[DHURANDHAR] 🛑 2.2x HARD STOP-LOSS HIT for {asset}: "
+                           f"Current=${cur_tot_prem:.2f} >= ${hard_sl_thresh:.2f} (2.2x Initial). Closing to cap risk.")
+            dx.close_futures_position(asset)
+            if close_trade and opts_state.get("trade_id"):
+                try:
+                    close_trade(opts_state["trade_id"], current_price, f"Hard 2.2x SL Hit (${cur_tot_prem:.2f})", symbol=f"{asset}-STRANGLE")
+                except Exception:
+                    pass
+
+            opts_state[active_key] = False
+            asset_state["state"] = "IDLE"
+            asset_state["initial_total_premium"] = 0.0
+            asset_state["position"] = "none"
+            logger.info(f"[DHURANDHAR] ⚠️ {asset} 2.2x Stop-Loss executed. Loss capped. Returning to STATE 0.")
+            return asset_state
+
+    # ── STATE 0 -> STATE 1: INITIAL ENTRY (Deep OTM Delta-Neutral Strangle) ───
     if not opts_state.get(active_key):
         iv_rank = dx.get_iv_rank(asset)
         if iv_rank < config.get("IV_RANK_MIN", 25):
@@ -330,8 +352,9 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
             asset_state["state"] = "IDLE"
             return asset_state
 
-        logger.info(f"[DHURANDHAR] {asset}: IV Rank {iv_rank:.1f} >= 25. Deploying Delta-Neutral Strangle (~0.15 Delta)...")
-        res = dx.place_strangle(asset, contracts=config.get("option_contracts", 1), otm_pct=0.12)
+        otm_pct = config.get("OTM_PCT", 0.18)
+        logger.info(f"[DHURANDHAR] {asset}: IV Rank {iv_rank:.1f} >= 25. Deploying Deep OTM Strangle (~0.08 Delta / {otm_pct*100:.0f}% OTM, 92% Win Prob)...")
+        res = dx.place_strangle(asset, contracts=config.get("option_contracts", 1), otm_pct=otm_pct)
         if res.get("success"):
             strangle_info = res.get("strangle_info", {})
             init_prem = res.get("initial_total_premium") or 80.0
