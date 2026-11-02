@@ -1542,81 +1542,83 @@ def generate_dashboard_html():
     </tr>
     """
 
-    # ── TAB 5: ORDER HISTORY BUILDER (Screenshot 2 Match) ──
+    # ── TAB 5: ORDER HISTORY BUILDER (Direct Live Mirror to Delta Exchange) ──
     order_history_rows_html = ""
     history_count = 0
-    closed_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["closed", "closed_tp", "closed_sl", "closed_manual"]]
+    delta_orders_history = []
+    try:
+        if delta_exchange and hasattr(delta_exchange, "get_order_history"):
+            delta_orders_history = delta_exchange.get_order_history(page_size=50)
+    except Exception as e:
+        logger.warning(f"[DASHBOARD] Fetch delta_orders_history failed: {e}")
+        delta_orders_history = []
 
-    # Actual closed trades from ledger
-    for t in reversed(closed_trades):
-        history_count += 1
-        t_sym = str(t.get('symbol', 'ETHUSD')).replace('-STRANGLE', 'USD')
-        t_qty = safe_float(t.get('quantity', 10))
-        t_qty_lot = int(t_qty) if t_qty >= 1 else 1
-        t_side = str(t.get('side', 'BUY')).upper()
-        t_status = str(t.get('status', 'closed')).lower()
-        t_entry = safe_float(t.get('entry_price', 0))
-        t_exit = safe_float(t.get('exit_price', t_entry))
-        t_sl = safe_float(t.get('stop_loss', 0))
-        t_tp = safe_float(t.get('take_profit', 0))
-        t_time = str(t.get('exit_timestamp', t.get('timestamp', '')))
+    if delta_orders_history:
+        for h in delta_orders_history:
+            history_count += 1
+            h_side = str(h.get("side", "Open Sell"))
+            h_side_col = "#34d399" if "Buy" in h_side else "#f87171"
+            h_stripe_col = "#34d399" if "Buy" in h_side else "#f87171"
+            h_status = str(h.get("status", "Filled"))
+            h_status_col = h.get("status_col") or ("#34d399" if h_status.lower() == "filled" else "#f87171")
+            h_cat = h.get("cat", "options")
 
-        is_tp = 'tp' in t_status
-        is_sl = 'sl' in t_status
-        order_type_str = "Bracket - TP" if is_tp else ("Bracket - SL" if is_sl else "Limit")
-        side_text = "Close Buy" if (t_side == 'BUY' and (is_tp or is_sl)) else ("Open Sell" if t_side == 'SELL' else "Open Buy")
-        side_color = "#34d399" if "Buy" in side_text else "#f87171"
-        stripe_color = "#34d399" if "Buy" in side_text else "#f87171"
-        trigger_p_str = f"{t_tp:,.2f}" if is_tp else (f"{t_sl:,.2f}" if is_sl else "-")
-        size_prefix = "+" if "Buy" in side_text else "-"
-        size_str = f"{size_prefix}{t_qty_lot * 0.01:.2f} {t_sym[:3]}"
+            order_history_rows_html += f"""
+            <tr class="trading-table-row" data-category="{h_cat}" style="border-bottom:1px solid #161a25; transition:background 0.15s;">
+              <td style="padding:12px 14px; border-left:3px solid {h_stripe_col}; font-weight:700; color:#ffffff; font-family:var(--font-mono);">{h.get('sym', '-')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#34d399; font-weight:600;">{h.get('qty', 1)}</td>
+              <td style="padding:12px 14px; font-weight:600; color:{h_side_col};">{h_side}</td>
+              <td style="padding:12px 14px; font-weight:600; color:{h_status_col};">{h_status}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h.get('filled', 1)}</td>
+              <td style="padding:12px 14px; color:#cbd5e1; font-weight:500;">{h.get('type', 'Limit')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h.get('limit', '-')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h.get('trigger', '-')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{h.get('exec', '-')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:600; color:{h_side_col};">{h.get('size', '-')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#64748b; font-size:11px;">{h.get('time', '-')}</td>
+            </tr>
+            """
+    else:
+        # Fallback to closed trades from local ledger
+        closed_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["closed", "closed_tp", "closed_sl", "closed_manual"]]
+        for t in reversed(closed_trades):
+            history_count += 1
+            t_sym = str(t.get('symbol', 'BTCUSD')).replace('-STRANGLE', 'USD')
+            t_qty = safe_float(t.get('quantity', 1))
+            t_qty_lot = int(t_qty) if t_qty >= 1 else 1
+            t_side = str(t.get('side', 'BUY')).upper()
+            t_status = str(t.get('status', 'closed')).lower()
+            t_entry = safe_float(t.get('entry_price', 0))
+            t_exit = safe_float(t.get('exit_price', t_entry))
+            t_sl = safe_float(t.get('stop_loss', 0))
+            t_tp = safe_float(t.get('take_profit', 0))
+            t_time = str(t.get('exit_timestamp', t.get('timestamp', '')))
 
-        order_history_rows_html += f"""
-        <tr class="trading-table-row" data-category="futures" style="border-bottom:1px solid #161a25; transition:background 0.15s;">
-          <td style="padding:12px 14px; border-left:3px solid {stripe_color}; font-weight:700; color:#ffffff; font-family:var(--font-mono);">{t_sym}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#34d399; font-weight:600;">{t_qty_lot}</td>
-          <td style="padding:12px 14px; font-weight:600; color:{side_color};">{side_text}</td>
-          <td style="padding:12px 14px; font-weight:600; color:#34d399;">Filled</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{t_qty_lot}</td>
-          <td style="padding:12px 14px; color:#cbd5e1; font-weight:500;">{order_type_str}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{t_entry:,.2f}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{trigger_p_str}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{t_exit:,.2f}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:600; color:{side_color};">{size_str}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#64748b; font-size:11px;">{t_time}</td>
-        </tr>
-        """
+            is_tp = 'tp' in t_status
+            is_sl = 'sl' in t_status
+            order_type_str = "Bracket - TP" if is_tp else ("Bracket - SL" if is_sl else "Limit")
+            side_text = "Close Buy" if (t_side == 'BUY' and (is_tp or is_sl)) else ("Open Sell" if t_side == 'SELL' else "Open Buy")
+            side_color = "#34d399" if "Buy" in side_text else "#f87171"
+            stripe_color = "#34d399" if "Buy" in side_text else "#f87171"
+            trigger_p_str = f"{t_tp:,.2f}" if is_tp else (f"{t_sl:,.2f}" if is_sl else "-")
+            size_prefix = "+" if "Buy" in side_text else "-"
+            size_str = f"{size_prefix}{t_qty_lot * 0.001:.3f} {t_sym[:3]}"
 
-    # Authentic Delta Exchange records matching Screenshot 2
-    default_history_records = [
-        {"sym": "ETHUSD", "qty": 10, "side": "Open Buy", "status": "Cancelled ⓘ", "status_col": "#f87171", "filled": 0, "type": "Bracket - TP", "limit": "-", "trigger": "2396.35", "exec": "-", "size": "+0.1 ETH", "time": "17 - Oct - 26, 10:39:34 PM", "cat": "futures"},
-        {"sym": "ETHUSD", "qty": 10, "side": "Close Buy", "status": "Filled", "status_col": "#34d399", "filled": 10, "type": "Bracket - SL", "limit": "-", "trigger": "2404.90", "exec": "2405.20", "size": "+0.1 ETH", "time": "17 - Oct - 26, 10:39:34 PM", "cat": "futures"},
-        {"sym": "ETHUSD", "qty": 10, "side": "Open Sell", "status": "Filled", "status_col": "#34d399", "filled": 10, "type": "Limit", "limit": "2400.75", "trigger": "-", "exec": "2401.15", "size": "-0.1 ETH", "time": "17 - Oct - 26, 10:35:13 PM", "cat": "futures"},
-        {"sym": "ETHUSD", "qty": 5, "side": "Open Buy", "status": "Cancelled ⓘ", "status_col": "#f87171", "filled": 0, "type": "Bracket - TP", "limit": "-", "trigger": "2392.65", "exec": "-", "size": "+0.05 ETH", "time": "17 - Oct - 26, 10:29:30 PM", "cat": "futures"},
-        {"sym": "ETHUSD", "qty": 5, "side": "Close Buy", "status": "Filled", "status_col": "#34d399", "filled": 5, "type": "Bracket - SL", "limit": "-", "trigger": "2403.25", "exec": "2403.55", "size": "+0.05 ETH", "time": "17 - Oct - 26, 10:29:30 PM", "cat": "futures"},
-        {"sym": "ETHUSD", "qty": 5, "side": "Open Sell", "status": "Filled", "status_col": "#34d399", "filled": 5, "type": "Limit", "limit": "2400.10", "trigger": "-", "exec": "2400.25", "size": "-0.05 ETH", "time": "17 - Oct - 26, 10:26:58 PM", "cat": "futures"},
-        {"sym": "ETHUSD", "qty": 5, "side": "Open Sell", "status": "Cancelled ⓘ", "status_col": "#f87171", "filled": 0, "type": "Bracket - TP", "limit": "-", "trigger": "2452.20", "exec": "-", "size": "-0.05 ETH", "time": "15 - Oct - 26, 9:56:31 PM", "cat": "futures"}
-    ]
-
-    for h in default_history_records:
-        history_count += 1
-        h_side_col = "#34d399" if "Buy" in h["side"] else "#f87171"
-        h_stripe_col = "#34d399" if "Buy" in h["side"] else "#f87171"
-        order_history_rows_html += f"""
-        <tr class="trading-table-row" data-category="{h['cat']}" style="border-bottom:1px solid #161a25; transition:background 0.15s;">
-          <td style="padding:12px 14px; border-left:3px solid {h_stripe_col}; font-weight:700; color:#ffffff; font-family:var(--font-mono);">{h['sym']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#34d399; font-weight:600;">{h['qty']}</td>
-          <td style="padding:12px 14px; font-weight:600; color:{h_side_col};">{h['side']}</td>
-          <td style="padding:12px 14px; font-weight:600; color:{h['status_col']};">{h['status']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h['filled']}</td>
-          <td style="padding:12px 14px; color:#cbd5e1; font-weight:500;">{h['type']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h['limit']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h['trigger']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{h['exec']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:600; color:{h_side_col};">{h['size']}</td>
-          <td style="padding:12px 14px; font-family:var(--font-mono); color:#64748b; font-size:11px;">{h['time']}</td>
-        </tr>
-        """
+            order_history_rows_html += f"""
+            <tr class="trading-table-row" data-category="options" style="border-bottom:1px solid #161a25; transition:background 0.15s;">
+              <td style="padding:12px 14px; border-left:3px solid {stripe_color}; font-weight:700; color:#ffffff; font-family:var(--font-mono);">{t_sym}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#34d399; font-weight:600;">{t_qty_lot}</td>
+              <td style="padding:12px 14px; font-weight:600; color:{side_color};">{side_text}</td>
+              <td style="padding:12px 14px; font-weight:600; color:#34d399;">Filled</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{t_qty_lot}</td>
+              <td style="padding:12px 14px; color:#cbd5e1; font-weight:500;">{order_type_str}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{t_entry:,.2f}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{trigger_p_str}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{t_exit:,.2f}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:600; color:{side_color};">{size_str}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#64748b; font-size:11px;">{t_time}</td>
+            </tr>
+            """
 
     # ── UNIFIED DELTA EXCHANGE TRADING CONSOLE ──
     trading_console_html = f"""
