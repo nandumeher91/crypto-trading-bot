@@ -462,6 +462,53 @@ body {
   background: #10141f !important;
 }
 
+/* ── HISTORY PAGINATION & SCROLL CONTROL ── */
+.page-btn {
+  background: #121620;
+  border: 1px solid #1e2433;
+  color: #94a3b8;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-mono);
+}
+.page-btn:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: #3b4252;
+}
+.page-btn.active {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: #c084fc;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+}
+.page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.page-size-btn {
+  background: #121620;
+  border: 1px solid #1e2433;
+  color: #94a3b8;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  transition: all 0.15s ease;
+}
+.page-size-btn:hover {
+  color: #ffffff;
+}
+.page-size-btn.active {
+  background: rgba(168, 85, 247, 0.22);
+  border-color: #c084fc;
+  color: #c084fc;
+}
+
 /* ── RESPONSIVE WIDESCREEN & MOBILE ADAPTATION ── */
 @media (max-width: 1280px) {
   .dashboard-grid-4col {
@@ -697,7 +744,94 @@ function switchTradingTab(tabName) {
   filterTradingTable('all');
 }
 
+let historyCurrentPage = 1;
+let historyPageSize = 10;
+let currentSearchQuery = '';
+let currentFilterCategory = 'all';
+
+function renderHistoryPagination() {
+  const tbody = document.getElementById('order-history-table-body');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr.trading-table-row'));
+
+  const matchingRows = rows.filter(r => {
+    const rCat = (r.dataset.category || 'all').toLowerCase();
+    let catMatch = true;
+    if (currentFilterCategory === 'all' || currentFilterCategory === 'current') {
+      catMatch = true;
+    } else if (currentFilterCategory === 'options' && (rCat === 'options' || rCat.includes('strangle'))) {
+      catMatch = true;
+    } else if (currentFilterCategory === 'futures' && (rCat === 'futures' || rCat.includes('usd') || rCat.includes('future'))) {
+      catMatch = true;
+    } else {
+      catMatch = false;
+    }
+
+    let searchMatch = true;
+    if (currentSearchQuery) {
+      searchMatch = r.innerText.toLowerCase().includes(currentSearchQuery);
+    }
+    return catMatch && searchMatch;
+  });
+
+  const total = matchingRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / historyPageSize));
+
+  if (historyCurrentPage > totalPages) historyCurrentPage = totalPages;
+  if (historyCurrentPage < 1) historyCurrentPage = 1;
+
+  const startIdx = (historyCurrentPage - 1) * historyPageSize;
+  const endIdx = startIdx + historyPageSize;
+
+  rows.forEach(r => r.style.display = 'none');
+  matchingRows.slice(startIdx, endIdx).forEach(r => r.style.display = '');
+
+  const infoEl = document.getElementById('history-pagination-info');
+  if (infoEl) {
+    if (total === 0) {
+      infoEl.innerText = 'No matching orders found';
+    } else {
+      infoEl.innerText = 'Showing ' + (startIdx + 1) + '–' + Math.min(endIdx, total) + ' of ' + total + ' orders';
+    }
+  }
+
+  const pagesCont = document.getElementById('history-pagination-pages');
+  if (pagesCont) {
+    let btns = '';
+    for (let p = 1; p <= totalPages; p++) {
+      const activeClass = (p === historyCurrentPage) ? 'active' : '';
+      btns += '<button type="button" class="page-btn ' + activeClass + '" onclick="goToHistoryPage(' + p + ')">' + p + '</button>';
+    }
+    pagesCont.innerHTML = btns;
+  }
+
+  const prevBtn = document.getElementById('history-prev-btn');
+  const nextBtn = document.getElementById('history-next-btn');
+  if (prevBtn) prevBtn.disabled = (historyCurrentPage <= 1);
+  if (nextBtn) nextBtn.disabled = (historyCurrentPage >= totalPages);
+}
+
+function changeHistoryPage(delta) {
+  historyCurrentPage += delta;
+  renderHistoryPagination();
+}
+
+function goToHistoryPage(page) {
+  historyCurrentPage = page;
+  renderHistoryPagination();
+}
+
+function setHistoryPageSize(sz) {
+  historyPageSize = sz;
+  historyCurrentPage = 1;
+  document.querySelectorAll('.page-size-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('page-size-' + sz);
+  if (btn) btn.classList.add('active');
+  renderHistoryPagination();
+}
+
 function filterTradingTable(category) {
+  currentFilterCategory = category;
   const pills = ['all', 'current', 'options', 'futures'];
   pills.forEach(p => {
     const el = document.getElementById('filter-pill-' + p);
@@ -706,8 +840,8 @@ function filterTradingTable(category) {
   const activePill = document.getElementById('filter-pill-' + category);
   if (activePill) activePill.classList.add('active');
 
-  const rows = document.querySelectorAll('.trading-table-row');
-  rows.forEach(r => {
+  const otherRows = document.querySelectorAll('#tab-content-positions .trading-table-row, #tab-content-open-orders .trading-table-row, #tab-content-stop-orders .trading-table-row');
+  otherRows.forEach(r => {
     const rCat = (r.dataset.category || 'all').toLowerCase();
     if (category === 'all' || category === 'current') {
       r.style.display = '';
@@ -719,15 +853,21 @@ function filterTradingTable(category) {
       r.style.display = 'none';
     }
   });
+
+  historyCurrentPage = 1;
+  renderHistoryPagination();
 }
 
 function searchTradingTable(query) {
-  query = (query || '').toLowerCase().trim();
-  const rows = document.querySelectorAll('.trading-table-row');
-  rows.forEach(r => {
+  currentSearchQuery = (query || '').toLowerCase().trim();
+  const otherRows = document.querySelectorAll('#tab-content-positions .trading-table-row, #tab-content-open-orders .trading-table-row, #tab-content-stop-orders .trading-table-row');
+  otherRows.forEach(r => {
     const text = r.innerText.toLowerCase();
-    r.style.display = text.includes(query) ? '' : 'none';
+    r.style.display = text.includes(currentSearchQuery) ? '' : 'none';
   });
+
+  historyCurrentPage = 1;
+  renderHistoryPagination();
 }
 
 function closeAllPositions() {
@@ -946,6 +1086,11 @@ function fetchLiveStatus() {
     .catch(() => {});
 }
 setInterval(fetchLiveStatus, 5000);
+
+document.addEventListener('DOMContentLoaded', function() {
+  renderHistoryPagination();
+});
+setTimeout(renderHistoryPagination, 100);
 """
 
 def parse_option_symbol(sym: str) -> dict:
@@ -2068,27 +2213,48 @@ def generate_dashboard_html():
         </div>
       </div>
 
-      <!-- TAB 5: ORDER HISTORY (Direct Delta Exchange Mirror) -->
-      <div id="tab-content-order-history" style="display:none; overflow-x:auto;">
-        <table id="table-order-history" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
-          <thead>
-            <tr style="border-bottom:1px solid #161a25; background:#080a10; font-size:11px; color:#64748b; font-weight:600;">
-              <th style="padding:10px 14px;">Symbol</th>
-              <th style="padding:10px 14px;">Trigger Price</th>
-              <th style="padding:10px 14px;">Execution Price</th>
-              <th style="padding:10px 14px;">Size</th>
-              <th style="padding:10px 14px;">Cashflow</th>
-              <th style="padding:10px 14px;">Realized PnL</th>
-              <th style="padding:10px 14px;">Trading Fees</th>
-              <th style="padding:10px 14px;">Net PnL (USD)</th>
-              <th style="padding:10px 14px;">Order ID</th>
-              <th style="padding:10px 14px;">Time</th>
-            </tr>
-          </thead>
-          <tbody id="order-history-table-body">
-            {order_history_rows_html}
-          </tbody>
-        </table>
+      <!-- TAB 5: ORDER HISTORY (Controlled Height & Pagination) -->
+      <div id="tab-content-order-history" style="display:none;">
+        <div style="max-height:460px; overflow-y:auto; overflow-x:auto;">
+          <table id="table-order-history" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
+            <thead style="position:sticky; top:0; z-index:10; background:#080a10;">
+              <tr style="border-bottom:1px solid #161a25; background:#080a10; font-size:11px; color:#64748b; font-weight:600;">
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Symbol</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Trigger Price</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Execution Price</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Size</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Cashflow</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Realized PnL</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Trading Fees</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Net PnL (USD)</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Order ID</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Time</th>
+              </tr>
+            </thead>
+            <tbody id="order-history-table-body">
+              {order_history_rows_html}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls Footer -->
+        <div id="history-pagination-bar" style="display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:#07090e; border-top:1px solid #161a25; font-size:11px; color:#94a3b8; font-family:var(--font-mono); flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span id="history-pagination-info">Showing 1–10 of {history_count} orders</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="color:#64748b;">Show:</span>
+              <button type="button" onclick="setHistoryPageSize(10)" id="page-size-10" class="page-size-btn active">10</button>
+              <button type="button" onclick="setHistoryPageSize(25)" id="page-size-25" class="page-size-btn">25</button>
+              <button type="button" onclick="setHistoryPageSize(999)" id="page-size-999" class="page-size-btn">All</button>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button type="button" id="history-prev-btn" class="page-btn" onclick="changeHistoryPage(-1)" disabled>&larr; Prev</button>
+            <div id="history-pagination-pages" style="display:flex; gap:4px;"></div>
+            <button type="button" id="history-next-btn" class="page-btn" onclick="changeHistoryPage(1)">Next &rarr;</button>
+          </div>
+        </div>
       </div>
 
     </div>
