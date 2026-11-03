@@ -1098,15 +1098,15 @@ def get_order_history(page_size: int = 50) -> list:
         except Exception as e:
             logger.warning(f"[DELTA] Read ORDER_HISTORY_FILE error: {e}")
 
-    # 2. Query live Delta Exchange API
+    # 2. Query live Delta Exchange API with proper query dict for HMAC signing
     try:
         client = _get_client()
-        res = client.request("GET", f"/v2/orders/history?page_size={page_size}", auth=True)
+        res = client.request("GET", "/v2/orders/history", query={"page_size": page_size}, auth=True)
         raw = res.json() if hasattr(res, 'json') else (res if isinstance(res, dict) else {})
         raw_list = raw.get("result", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
 
         if not raw_list:
-            res_f = client.request("GET", f"/v2/fills?page_size={page_size}", auth=True)
+            res_f = client.request("GET", "/v2/fills", query={"page_size": page_size}, auth=True)
             raw_f = res_f.json() if hasattr(res_f, 'json') else {}
             raw_list = raw_f.get("result", []) if isinstance(raw_f, dict) else []
 
@@ -1154,7 +1154,7 @@ def get_order_history(page_size: int = 50) -> list:
             trading_fees = safe_float(o.get("trading_fee") or o.get("commission") or 0.0)
             net_pnl = safe_float(o.get("net_pnl") or (realized_pnl - trading_fees))
 
-            combined_orders.append({
+            new_entry = {
                 "sym": sym,
                 "qty": int(size_val) if size_val.is_integer() else size_val,
                 "side": f"{'Close' if side_raw == 'buy' else 'Open'} {'Sell' if side_raw == 'sell' else 'Buy'}",
@@ -1173,7 +1173,9 @@ def get_order_history(page_size: int = 50) -> list:
                 "order_id": order_id,
                 "time": time_disp,
                 "cat": "options" if ("C-" in sym or "P-" in sym) else "futures"
-            })
+            }
+            combined_orders.append(new_entry)
+            record_delta_order(new_entry)
     except Exception as e:
         logger.warning(f"[DELTA] Live order history fetch notice: {e}")
 
@@ -1183,6 +1185,12 @@ def get_order_history(page_size: int = 50) -> list:
         if f_oid and f_oid not in seen_ids:
             seen_ids.add(f_oid)
             combined_orders.append(fb)
+
+    # 4. Sort descending by order_id (monotonically increasing in Delta, so newest is first)
+    try:
+        combined_orders.sort(key=lambda x: int(x.get("order_id", 0)), reverse=True)
+    except Exception:
+        pass
 
     return combined_orders
 
