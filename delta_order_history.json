@@ -1,0 +1,22 @@
+[
+  {
+    "sym": "C-ETH-2650-131126",
+    "qty": 2,
+    "side": "Close Buy",
+    "status": "Filled",
+    "status_col": "#34d399",
+    "filled": 2,
+    "type": "Limit",
+    "limit": "1.80",
+    "trigger": "-",
+    "exec": "1.80",
+    "size": "+0.020 ETH",
+    "cashflow": "0.04 USD",
+    "realized_pnl": "+0.08 USD",
+    "trading_fees": "0.00 USD",
+    "net_pnl": "+0.08 USD",
+    "order_id": "2177319804",
+    "time": "03 - Nov - 26, 11:05:12 AM",
+    "cat": "options"
+  }
+]
