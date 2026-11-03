@@ -461,6 +461,40 @@ body {
 .trading-table-row:hover {
   background: #10141f !important;
 }
+
+/* ── RESPONSIVE WIDESCREEN & MOBILE ADAPTATION ── */
+@media (max-width: 1280px) {
+  .dashboard-grid-4col {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .dashboard-grid-mid {
+    grid-template-columns: 1fr !important;
+  }
+  .dashboard-grid-strategy {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid-4col {
+    grid-template-columns: 1fr !important;
+  }
+  .dashboard-quick-trade-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  main {
+    padding: 14px 12px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-quick-trade-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .mode-capsule {
+    display: none !important;
+  }
+}
 """
 
 DASHBOARD_JS = """
@@ -1069,7 +1103,7 @@ def generate_dynamic_pnl_chart(delta_orders_history, ledger, total_true_profit, 
     y_labels_html = "".join([f"<span>{yl}</span>" for yl in y_labels])
 
     chart_html = f'''
-    <div id="chart-pnl-container" style="display:none; position:relative; width:100%; height:230px; margin-top:10px;">
+    <div id="chart-pnl-container" style="display:none; position:relative; width:100%; height:260px; margin-top:10px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:0 4px;">
         <div style="display:flex; align-items:center; gap:12px;">
           <div style="font-size:11px; font-weight:700; color:{stroke_color}; background:rgba({('52,211,153' if current_total_equity>=0 else '248,113,113')},0.12); border:1px solid rgba({('52,211,153' if current_total_equity>=0 else '248,113,113')},0.3); padding:3px 10px; border-radius:6px; font-family:var(--font-mono);">
@@ -1084,13 +1118,13 @@ def generate_dynamic_pnl_chart(delta_orders_history, ledger, total_true_profit, 
         </div>
       </div>
 
-      <div style="position:relative; width:100%; height:185px;">
+      <div style="position:relative; width:100%; height:210px;">
         <div style="position:absolute; left:0; top:0; bottom:24px; width:45px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:#94a3b8; font-family:var(--font-mono); text-align:right; padding-right:6px;">
           {y_labels_html}
         </div>
 
         <div style="margin-left:48px; height:100%;">
-          <svg style="width:100%; height:160px; overflow:visible;" viewBox="0 0 500 175" preserveAspectRatio="none">
+          <svg style="width:100%; height:185px; overflow:visible;" viewBox="0 0 500 175" preserveAspectRatio="none">
             <defs>
               <linearGradient id="dynamicPnlGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="{grad_color}" stop-opacity="0.35" />
@@ -2168,7 +2202,8 @@ def generate_dashboard_html():
 <body>
 
   <!-- Top Sticky Navigation (NEXORA ALGO Purple Glow Style) -->
-  <header style="height:60px; border-bottom:1px solid rgba(168,85,247,0.22); background:rgba(0,0,0,0.96); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); padding:0 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40;">
+  <header style="height:60px; border-bottom:1px solid rgba(168,85,247,0.22); background:rgba(0,0,0,0.96); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); position:sticky; top:0; z-index:40; width:100%;">
+    <div style="max-width:1760px; width:100%; margin:0 auto; padding:0 24px; height:100%; display:flex; align-items:center; justify-content:space-between;">
     <div style="display:flex; align-items:center; gap:28px;">
       <!-- NEXORA ALGO Sleek Brand Logo -->
       <div style="display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="switchNavTab('dashboard')">
@@ -2218,10 +2253,11 @@ def generate_dashboard_html():
         <span>🛑</span> Kill Switch
       </button>
     </div>
+    </div>
   </header>
 
   <!-- Main Container -->
-  <main style="max-width:1260px; margin:0 auto; padding:28px 24px; position:relative;">
+  <main style="max-width:1760px; width:100%; margin:0 auto; padding:20px 24px; position:relative;">
 
     {kill_switch_banner}
 
@@ -2272,7 +2308,7 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <!-- TOP 4 METRICS CARDS (NEXORA Glowing Purple Cards)-->
       <!-- ============================================== -->
-      <section style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:22px;">
+      <section class="dashboard-grid-4col" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:22px;">
         
         <!-- Card 1: Estimated Sandbox Balance (Binance + Delta) -->
         <div class="stat-card">
@@ -2366,7 +2402,7 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <!-- MID SECTION: Portfolio Performance + Strategy Hub-->
       <!-- ============================================== -->
-      <section style="display:grid; grid-template-columns:2.1fr 1fr; gap:18px; margin-bottom:22px;">
+      <section class="dashboard-grid-mid" style="display:grid; grid-template-columns:2.1fr 1fr; gap:18px; margin-bottom:22px;">
         
         <!-- Left: Portfolio Performance Chart (TradingView Live + PnL Curve) -->
         <div class="clean-card" style="padding:22px;">
@@ -2386,7 +2422,7 @@ def generate_dashboard_html():
           </div>
 
           <!-- TradingView Live Candlestick Widget -->
-          <div id="chart-tv-container" style="position:relative; width:100%; height:230px; margin-top:8px; border-radius:10px; overflow:hidden;">
+          <div id="chart-tv-container" style="position:relative; width:100%; height:260px; margin-top:8px; border-radius:10px; overflow:hidden;">
             <iframe src="https://s.tradingview.com/widgetembed/?symbol=BINANCE%3ABTCUSDT&interval=5&theme=dark&style=1&timezone=Etc%2FUTC&hide_side_toolbar=1&allow_symbol_change=1" style="width:100%; height:100%; border:none; border-radius:10px;"></iframe>
           </div>
 
@@ -2440,7 +2476,7 @@ def generate_dashboard_html():
           <span style="font-size:10px; font-family:var(--font-mono); font-weight:700; color:#34d399; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); padding:3px 8px; border-radius:6px;">LIVE TESTNET API</span>
         </div>
 
-        <div style="display:grid; grid-template-columns:180px 180px 1fr 180px; gap:14px; align-items:end; flex-wrap:wrap;">
+        <div class="dashboard-quick-trade-grid" style="display:grid; grid-template-columns:180px 180px 1fr 180px; gap:14px; align-items:end; flex-wrap:wrap;">
           <div>
             <label style="display:block; font-size:10px; color:var(--text-secondary); margin-bottom:6px; font-weight:700; text-transform:uppercase;">ORDER SIDE</label>
             <div style="display:flex; gap:6px;">
@@ -2482,7 +2518,7 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <!-- MID-LOWER: Active Strategy + Groq AI           -->
       <!-- ============================================== -->
-      <section id="sec-strategy" style="display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-bottom:22px;">
+      <section id="sec-strategy" class="dashboard-grid-strategy" style="display:grid; grid-template-columns:2fr 1fr; gap:18px; margin-bottom:22px;">
         
         <!-- Active Strategy Table with Capital Limits -->
         <div class="clean-card" style="padding:22px;">
