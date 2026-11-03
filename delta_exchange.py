@@ -621,16 +621,19 @@ def buy_to_close_option(product_id: int, symbol: str, contracts: int = 1) -> dic
 def close_any_position(symbol: str, product_id: int = None, size: int = None) -> tuple:
     """
     Close an open position (Option or Futures) on Delta Exchange with 1-click.
+    Handles both short positions (buy to cover) and long positions (sell to close).
     Returns (success: bool, message: str).
     """
     try:
         client = _get_client()
+        pos_size = None
         if not product_id or size is None:
             positions = get_all_positions()
             for p in positions:
                 if p.get("symbol") == symbol:
                     product_id = p.get("product_id") or product_id
-                    size = abs(int(p.get("size", 1)))
+                    pos_size = float(p.get("size", 1))
+                    size = abs(int(pos_size))
                     break
 
         if not product_id:
@@ -644,25 +647,35 @@ def close_any_position(symbol: str, product_id: int = None, size: int = None) ->
             return False, f"Product ID not found for {symbol}"
 
         contracts = abs(int(size or 1))
-        # For short options, buy to close at market ask + buffer
+        # Determine side: if position was short (<0), we BUY to close. If long (>0), we SELL to close.
+        is_short = True if pos_size is None or pos_size < 0 else False
+        close_side = "buy" if is_short else "sell"
+
         try:
             ticker = client.get_ticker(symbol)
             quotes = ticker.get("quotes", {})
             best_ask = float(quotes.get("best_ask", 0) or 0)
+            best_bid = float(quotes.get("best_bid", 0) or 0)
             mark_p = float(ticker.get("mark_price", 0) or 0)
-            buy_price = round(max(best_ask, mark_p) * 1.05, 2) if (best_ask > 0 or mark_p > 0) else 10.0
+
+            if close_side == "buy":
+                ref_p = max(best_ask, mark_p)
+                buy_price = round(ref_p * 1.05, 2) if ref_p > 0 else 10.0
+            else:
+                ref_p = min(best_bid, mark_p) if min(best_bid, mark_p) > 0 else max(best_bid, mark_p)
+                buy_price = round(ref_p * 0.95, 2) if ref_p > 0 else 1.0
         except Exception:
-            buy_price = 10.0
+            buy_price = 10.0 if close_side == "buy" else 1.0
 
         res = client.place_order(
             product_id=product_id,
             size=contracts,
-            side="buy",
+            side=close_side,
             limit_price=str(buy_price),
             order_type=OrderType.LIMIT
         )
         if isinstance(res, dict) and res.get("id"):
-            logger.info(f"[DELTA] Successfully closed {contracts} lots of {symbol} (Order ID: {res['id']})")
+            logger.info(f"[DELTA] Successfully closed {contracts} lots of {symbol} via {close_side.upper()} @ ${buy_price} (Order ID: {res['id']})")
             return True, f"Closed {contracts} lots of {symbol} successfully."
         return False, f"Delta order response: {res}"
     except Exception as e:

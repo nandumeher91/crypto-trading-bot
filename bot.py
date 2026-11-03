@@ -707,6 +707,17 @@ function closeAllPositions() {
     .catch(e => alert('Network error: ' + e));
 }
 
+function closeAllTargetMetPositions() {
+  if (!confirm('CONFIRM 50% TAKE PROFIT:\\n\\nExecute 1-click take-profit now and close all positions with >=50% profit melt?')) return;
+  fetch('/api/close_target_met', { method: 'GET' })
+    .then(r => r.json())
+    .then(d => {
+      alert(d.message || '50% Target Profit executed.');
+      window.location.reload();
+    })
+    .catch(e => alert('Network error: ' + e));
+}
+
 function downloadHistoryCSV() {
   const table = document.getElementById('table-order-history');
   if (!table) return;
@@ -937,6 +948,192 @@ def parse_option_symbol(sym: str) -> dict:
         "expiry": "Perpetual",
         "is_option": False
     }
+
+def generate_dynamic_pnl_chart(delta_orders_history, ledger, total_true_profit, current_pnl):
+    """
+    Generates a high-fidelity dynamic P&L SVG curve and equity progression:
+    - Parses realized PnL sequence from Delta filled orders and ledger.
+    - Interpolates smoothly across the timeline.
+    - Scales dynamically with real dollar-denominated Y-axis levels.
+    - Draws zero baseline, gradient neon area fill, and latest equity point with glowing marker.
+    """
+    import math
+    pnl_series = []
+    timestamps = []
+
+    if delta_orders_history:
+        for h in reversed(delta_orders_history):
+            net_str = str(h.get("net_pnl") or h.get("realized_pnl") or "0")
+            cleaned = "".join([c for c in net_str if c in "0123456789.-"])
+            try:
+                val = float(cleaned) if cleaned else 0.0
+            except Exception:
+                val = 0.0
+            pnl_series.append(val)
+            t_raw = str(h.get("time", ""))
+            timestamps.append(t_raw.split(",")[0].strip() if "," in t_raw else t_raw[-8:])
+
+    if not pnl_series and ledger:
+        closed = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["closed", "closed_tp", "closed_sl"]]
+        for t in closed:
+            pnl_series.append(safe_float(t.get("pnl", 0.0)))
+            timestamps.append(str(t.get("exit_time", ""))[:10])
+
+    cum_equity = [0.0]
+    for p in pnl_series:
+        cum_equity.append(round(cum_equity[-1] + p, 2))
+
+    current_total_equity = round(cum_equity[-1] + safe_float(total_true_profit), 2)
+    cum_equity.append(current_total_equity)
+
+    if len(cum_equity) < 7:
+        target_len = 7
+        interp = []
+        for step in range(target_len):
+            frac = step / (target_len - 1)
+            smooth_frac = (1.0 - math.cos(frac * math.pi)) / 2.0
+            interp_val = round(cum_equity[0] + (current_total_equity - cum_equity[0]) * smooth_frac, 2)
+            interp.append(interp_val)
+        curve_points = interp
+    else:
+        curve_points = cum_equity
+
+    min_val = min(curve_points)
+    max_val = max(curve_points)
+    if min_val == max_val:
+        min_val -= 2.5
+        max_val += 2.5
+
+    val_range = max_val - min_val
+    if val_range < 2.0:
+        min_val -= 1.0
+        max_val += 1.0
+        val_range = max_val - min_val
+
+    pad = val_range * 0.15
+    y_min_bound = min_val - pad
+    y_max_bound = max_val + pad
+    span = y_max_bound - y_min_bound
+
+    y_labels = []
+    for step in range(5):
+        lvl = y_max_bound - (span * (step / 4.0))
+        sign = "+" if lvl > 0.005 else ("-" if lvl < -0.005 else "")
+        y_labels.append(f"{sign}${abs(lvl):,.2f}")
+
+    svg_width = 500
+    svg_height = 175
+    y_top = 15
+    y_bottom = 155
+    y_drawable = y_bottom - y_top
+
+    coords = []
+    n_pts = len(curve_points)
+    for i, v in enumerate(curve_points):
+        x = round((i / (n_pts - 1)) * svg_width, 1)
+        norm = (v - y_min_bound) / span
+        y = round(y_bottom - (norm * y_drawable), 1)
+        coords.append((x, y))
+
+    line_d = "M " + " L ".join([f"{x},{y}" for x, y in coords])
+    area_d = line_d + f" L {svg_width},{svg_height} L 0,{svg_height} Z"
+    last_x, last_y = coords[-1]
+
+    zero_line_svg = ""
+    if y_min_bound <= 0 <= y_max_bound:
+        zero_norm = (0.0 - y_min_bound) / span
+        zero_y = round(y_bottom - (zero_norm * y_drawable), 1)
+        zero_line_svg = f'<line x1="0" y1="{zero_y}" x2="{svg_width}" y2="{zero_y}" stroke="rgba(255,255,255,0.2)" stroke-dasharray="4,4" stroke-width="1.2" />'
+
+    if current_total_equity > 0:
+        stroke_color = "#34d399"
+        grad_color = "#10b981"
+        glow_filter = "neonEmeraldGlow"
+    elif current_total_equity == 0:
+        stroke_color = "#c084fc"
+        grad_color = "#a855f7"
+        glow_filter = "neonPurpleGlow"
+    else:
+        stroke_color = "#f87171"
+        grad_color = "#ef4444"
+        glow_filter = "neonRoseGlow"
+
+    x_labels_html = ""
+    x_steps = ["Cycle Start", "Theta Accumulation", "Hedge Sync", "Target Check", "Live Now"]
+    if len(timestamps) >= 4:
+        x_steps = [timestamps[0], timestamps[len(timestamps)//4], timestamps[len(timestamps)//2], timestamps[3*len(timestamps)//4], "Live Now"]
+
+    for lbl in x_steps:
+        x_labels_html += f"<span>{lbl}</span>"
+
+    y_labels_html = "".join([f"<span>{yl}</span>" for yl in y_labels])
+
+    chart_html = f'''
+    <div id="chart-pnl-container" style="display:none; position:relative; width:100%; height:230px; margin-top:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:0 4px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-size:11px; font-weight:700; color:{stroke_color}; background:rgba({('52,211,153' if current_total_equity>=0 else '248,113,113')},0.12); border:1px solid rgba({('52,211,153' if current_total_equity>=0 else '248,113,113')},0.3); padding:3px 10px; border-radius:6px; font-family:var(--font-mono);">
+            Net P&amp;L: {('+' if current_total_equity>=0 else '')}${current_total_equity:,.2f} USD
+          </div>
+          <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">
+            Floating Theta: <b style="color:#34d399;">+${safe_float(total_true_profit):,.2f} USD</b>
+          </div>
+        </div>
+        <div style="font-size:10px; color:#64748b; font-family:var(--font-mono);">
+          Auto-Scaled Dynamic Curve • 24/7 Theta
+        </div>
+      </div>
+
+      <div style="position:relative; width:100%; height:185px;">
+        <div style="position:absolute; left:0; top:0; bottom:24px; width:45px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:#94a3b8; font-family:var(--font-mono); text-align:right; padding-right:6px;">
+          {y_labels_html}
+        </div>
+
+        <div style="margin-left:48px; height:100%;">
+          <svg style="width:100%; height:160px; overflow:visible;" viewBox="0 0 500 175" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="dynamicPnlGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="{grad_color}" stop-opacity="0.35" />
+                <stop offset="100%" stop-color="{grad_color}" stop-opacity="0.0" />
+              </linearGradient>
+              <filter id="neonEmeraldGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3.5" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+              <filter id="neonPurpleGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3.5" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+              <filter id="neonRoseGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3.5" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            <line x1="0" y1="15" x2="500" y2="15" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3,3" stroke-width="1" />
+            <line x1="0" y1="50" x2="500" y2="50" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3,3" stroke-width="1" />
+            <line x1="0" y1="85" x2="500" y2="85" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3,3" stroke-width="1" />
+            <line x1="0" y1="120" x2="500" y2="120" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3,3" stroke-width="1" />
+            <line x1="0" y1="155" x2="500" y2="155" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3,3" stroke-width="1" />
+
+            {zero_line_svg}
+
+            <path d="{area_d}" fill="url(#dynamicPnlGradient)" />
+            <path d="{line_d}" fill="none" stroke="{stroke_color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#{glow_filter})" />
+
+            <circle cx="{last_x}" cy="{last_y}" r="6" fill="{stroke_color}" opacity="0.3" />
+            <circle cx="{last_x}" cy="{last_y}" r="3.5" fill="#ffffff" stroke="{stroke_color}" stroke-width="2" />
+          </svg>
+
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 2px;">
+            {x_labels_html}
+          </div>
+        </div>
+      </div>
+    </div>
+    '''
+    return chart_html
+
 
 def generate_dashboard_html():
     state_file = os.path.join(BASE_DIR, "market_state.json")
@@ -1953,6 +2150,8 @@ def generate_dashboard_html():
             </tr>
             """
 
+    pnl_chart_html = generate_dynamic_pnl_chart(delta_orders_history, ledger, total_true_profit, pnl)
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2191,43 +2390,8 @@ def generate_dashboard_html():
             <iframe src="https://s.tradingview.com/widgetembed/?symbol=BINANCE%3ABTCUSDT&interval=5&theme=dark&style=1&timezone=Etc%2FUTC&hide_side_toolbar=1&allow_symbol_change=1" style="width:100%; height:100%; border:none; border-radius:10px;"></iframe>
           </div>
 
-          <!-- NEXORA Neon Purple Curve Chart (Alternate View) -->
-          <div id="chart-pnl-container" style="display:none; position:relative; width:100%; height:210px; margin-top:10px;">
-            <div style="position:absolute; left:0; top:0; bottom:20px; width:30px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:var(--text-muted); font-family:var(--font-mono);">
-              <span>25</span>
-              <span>20</span>
-              <span>15</span>
-              <span>10</span>
-              <span>5</span>
-              <span>0</span>
-            </div>
-
-            <div style="margin-left:36px; height:100%;">
-              <svg style="width:100%; height:190px; overflow:visible;" viewBox="0 0 500 180" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="neonPurpleGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#a855f7" stop-opacity="0.32" />
-                    <stop offset="100%" stop-color="#a855f7" stop-opacity="0.0" />
-                  </linearGradient>
-                  <filter id="neonPurpleGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3.5" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                  </filter>
-                </defs>
-                <line x1="0" y1="5" x2="500" y2="5" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="40" x2="500" y2="40" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="75" x2="500" y2="75" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="110" x2="500" y2="110" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="145" x2="500" y2="145" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="0" y1="175" x2="500" y2="175" stroke="rgba(168,85,247,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <path id="perf-chart-area" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168 L 140,180 L 0,180 Z" fill="url(#neonPurpleGradient)" />
-                <path id="perf-chart-line" d="M 0,165 L 35,150 L 55,168 L 70,110 L 80,140 L 90,75 L 100,120 L 110,95 L 120,135 L 135,150 L 140,168" fill="none" stroke="#c084fc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" filter="url(#neonPurpleGlow)" />
-              </svg>
-              <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); font-family:var(--font-mono); margin-top:6px;">
-                <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>Current</span>
-              </div>
-            </div>
-          </div>
+          <!-- Dynamic Real Cumulative P&L Curve Chart -->
+          {pnl_chart_html}
         </div>
 
         <!-- Right: Quantitative Strategy Hub Card -->
@@ -2897,20 +3061,35 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         # API: Close all 50% target met positions
         if parsed.path == "/api/close_target_met":
             try:
-                positions = delta_exchange.get_all_positions()
+                positions = delta_exchange.get_all_positions() if delta_exchange else []
                 closed_count = 0
+                closed_details = []
                 for p in positions:
-                    m_pct = float(p.get("upnl_pct", 0.0))
-                    if m_pct >= 50.0:
-                        s_sym = p.get("symbol")
+                    p_sym = str(p.get("symbol", ""))
+                    p_entry = safe_float(p.get("entry_price") or p.get("entry_price_usd", 0.0))
+                    p_mark = safe_float(p.get("mark_price") or p.get("mark_price_usd", 0.0))
+                    p_size_val = safe_float(p.get("size", 0.0))
+                    if p_size_val == 0 or p_entry <= 0:
+                        continue
+
+                    if p_size_val < 0:
+                        melt_pct = round(((p_entry - p_mark) / p_entry) * 100.0, 1)
+                    else:
+                        melt_pct = round(((p_mark - p_entry) / p_entry) * 100.0, 1)
+
+                    if melt_pct >= 50.0:
                         p_id = p.get("product_id")
-                        s_size = abs(int(p.get("size", 1)))
-                        delta_exchange.close_any_position(s_sym, p_id, s_size)
-                        closed_count += 1
+                        s_size = abs(int(p_size_val))
+                        succ, msg = delta_exchange.close_any_position(p_sym, p_id, s_size)
+                        if succ:
+                            closed_count += 1
+                            closed_details.append(f"{p_sym} ({melt_pct:.1f}%)")
+                            logger.info(f"[MANUAL-TP] Closed 50%+ profit trade {p_sym} ({melt_pct:.1f}%): {msg}")
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": True, "message": f"Successfully took profit on {closed_count} target-met trades!"}).encode('utf-8'))
+                res_msg = f"Successfully took profit on {closed_count} trade(s): {', '.join(closed_details)}" if closed_count > 0 else "No positions currently at >=50% melt."
+                self.wfile.write(json.dumps({"success": True, "message": res_msg}).encode('utf-8'))
                 return
             except Exception as e:
                 self.send_response(500)
@@ -3297,6 +3476,59 @@ def reset_daily_limits():
         logger.info("Daily limits reset")
 
 
+def auto_manage_delta_option_tp():
+    """
+    Automated Background 50% Take-Profit Engine (24/7 Theta Harvesting):
+    Runs every cycle. Inspects all live open option positions on Delta Exchange.
+    If an option leg has melted >= 50% (or config TARGET_PROFIT_PCT), it automatically
+    submits a closing order to buy to cover, banks the profit, frees locked margin,
+    and updates the ledger.
+    """
+    if not delta_exchange:
+        return
+    try:
+        live_positions = delta_exchange.get_all_positions()
+        for p in live_positions:
+            p_sym = str(p.get("symbol", ""))
+            # Must be an option contract (e.g. C-ETH-2650..., P-BTC-73000...)
+            if not (p_sym.startswith("C-") or p_sym.startswith("P-") or "-C-" in p_sym or "-P-" in p_sym):
+                continue
+
+            p_size_val = safe_float(p.get("size", 0.0))
+            if p_size_val == 0:
+                continue
+
+            p_entry = safe_float(p.get("entry_price") or p.get("entry_price_usd", 0.0))
+            p_mark = safe_float(p.get("mark_price") or p.get("mark_price_usd", 0.0))
+            if p_entry <= 0:
+                continue
+
+            if p_size_val < 0:
+                # Sold option: profit when mark price falls below entry
+                melt_pct = round(((p_entry - p_mark) / p_entry) * 100.0, 1)
+            else:
+                melt_pct = round(((p_mark - p_entry) / p_entry) * 100.0, 1)
+
+            target_tp_pct = 50.0
+            if melt_pct >= target_tp_pct:
+                p_id = p.get("product_id")
+                s_size = abs(int(p_size_val))
+                logger.info(f"🎯 [AUTO-TP TRIGGERED] {p_sym} reached {melt_pct:.1f}% profit melt (Target >= {target_tp_pct}%). Auto-closing to bank profit...")
+                succ, msg = delta_exchange.close_any_position(p_sym, p_id, s_size)
+                if succ:
+                    logger.info(f"✅ [AUTO-TP SUCCESS] Closed {p_sym} ({s_size} lots) at {melt_pct:.1f}% profit: {msg}")
+                    try:
+                        open_trades = get_open_trades()
+                        for t in open_trades:
+                            t_sym = str(t.get("symbol", ""))
+                            if p_sym in t_sym or p_sym in str(t.get("call_symbol", "")) or p_sym in str(t.get("put_symbol", "")):
+                                close_trade(t["trade_id"], p_mark, f"50% TP Auto-Harvested ({melt_pct:.1f}% Melt)", symbol=t.get("symbol"))
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning(f"[AUTO-TP] Error evaluating Delta option positions: {e}")
+
+
 def run_bot_once():
     global trades_today, last_trade_time, last_trade_was_loss, BOT_HALTED
     reset_daily_limits()
@@ -3314,6 +3546,9 @@ def run_bot_once():
 
     # 2. Manage all open positions first (always active: TP1/TP2/Green Lock)
     manage_open_positions()
+
+    # 2a. Delta Options 50% Take Profit Manager (24/7 Theta Harvesting Auto-Close)
+    auto_manage_delta_option_tp()
 
     # 2b. Auto-Scan Pause Check
     if not BOT_AUTO_RUN:

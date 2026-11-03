@@ -310,6 +310,15 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
                         f"Initial=${init_tot_prem:.2f} -> Remaining=${cur_tot_prem:.2f} (<= ${target_melt_thresh:.2f})")
             # Close any active hedge future
             dx.close_futures_position(asset)
+            # Actively buy to close both option legs on Delta Exchange!
+            try:
+                if c_sym:
+                    dx.close_any_position(c_sym)
+                if p_sym:
+                    dx.close_any_position(p_sym)
+            except Exception as e:
+                logger.error(f"[DHURANDHAR] Error closing option legs on 50% TP: {e}")
+
             # Close Strangle in ledger
             if close_trade and opts_state.get("trade_id"):
                 try:
@@ -331,6 +340,15 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
             logger.warning(f"[DHURANDHAR] 🛑 2.2x HARD STOP-LOSS HIT for {asset}: "
                            f"Current=${cur_tot_prem:.2f} >= ${hard_sl_thresh:.2f} (2.2x Initial). Closing to cap risk.")
             dx.close_futures_position(asset)
+            # Actively buy to close both option legs on Delta Exchange!
+            try:
+                if c_sym:
+                    dx.close_any_position(c_sym)
+                if p_sym:
+                    dx.close_any_position(p_sym)
+            except Exception as e:
+                logger.error(f"[DHURANDHAR] Error closing option legs on 2.2x SL: {e}")
+
             if close_trade and opts_state.get("trade_id"):
                 try:
                     close_trade(opts_state["trade_id"], current_price, f"Hard 2.2x SL Hit (${cur_tot_prem:.2f})", symbol=f"{asset}-STRANGLE")
