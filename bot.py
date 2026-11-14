@@ -1694,6 +1694,18 @@ def generate_dashboard_html():
                 </div>
                 """
 
+            # Hard 2.0x Stop-Loss Protection Pill
+            p_sl_price = round(p_entry * 2.0, 2) if p_entry > 0 else 0.0
+            is_sl_danger = (p_mark >= p_entry * 1.5) and (p_size_val < 0)
+            sl_pill_html = f"""
+            <div style="font-size:11px; font-family:var(--font-mono); color:{'#f87171' if is_sl_danger else '#34d399'}; font-weight:700;">
+              ${p_sl_price:,.2f}
+            </div>
+            <div style="font-size:10px; color:{'#f87171' if is_sl_danger else '#94a3b8'}; margin-top:2px;">
+              {'⚠️ Near SL (Risk)' if is_sl_danger else '🛡️ 2.0x SL Guard'}
+            </div>
+            """
+
             is_option = parsed_opt.get("is_option", True)
             cat = "options" if is_option else "futures"
             iv_val = "52.7%" if "BTC" in p_sym else ("53.5%" if "ETH" in p_sym else "50.0%")
@@ -1734,6 +1746,9 @@ def generate_dashboard_html():
               <td style="padding:12px 14px;">
                 {tp_pill_html}
               </td>
+              <td style="padding:12px 14px;">
+                {sl_pill_html}
+              </td>
               <td style="padding:12px 12px; font-family:var(--font-mono);">
                 <div style="font-weight:700; color:#c084fc; font-size:12px;">${p_margin:,.2f} USD</div>
                 <div style="font-size:10px; color:#64748b;">Isolated</div>
@@ -1748,7 +1763,7 @@ def generate_dashboard_html():
     else:
         positions_rows_html = """
         <tr>
-          <td colspan="11" style="text-align:center; padding:36px; color:#64748b; font-size:12px;">
+          <td colspan="12" style="text-align:center; padding:36px; color:#64748b; font-size:12px;">
             <div style="font-size:22px; margin-bottom:6px;">📡</div>
             <div style="font-weight:600; color:#ffffff; font-size:13px;">No Open Positions Active</div>
             <div style="font-size:11px; color:#64748b; margin-top:2px;">Bot is scanning market for high-probability setups...</div>
@@ -2107,7 +2122,12 @@ def generate_dashboard_html():
             <div style="font-size:10px; color:#34d399; margin-top:2px;">Ready to recycle capital</div>
           </div>
           <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
-            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">🛡️ Collateral Margin Locked</div>
+            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">🛡️ Hard 2.0x SL Guard</div>
+            <div style="font-size:18px; font-weight:800; color:#34d399; font-family:var(--font-mono); margin-top:3px;">ARMED 24/7</div>
+            <div style="font-size:10px; color:#34d399; margin-top:2px;">Pre-liquidation auto-exit active</div>
+          </div>
+          <div style="background:#0c0f17; border:1px solid #1a1e2a; border-radius:8px; padding:12px 14px;">
+            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">🔒 Margin Locked</div>
             <div style="font-size:18px; font-weight:800; color:#c084fc; font-family:var(--font-mono); margin-top:3px;">${total_pos_margin:,.2f} USD</div>
             <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Collateral locked across active trades</div>
           </div>
@@ -2137,6 +2157,7 @@ def generate_dashboard_html():
               <th style="padding:10px 12px;">Current Value</th>
               <th style="padding:10px 14px;">Net Theta Profit</th>
               <th style="padding:10px 14px;">50% TP Target</th>
+              <th style="padding:10px 14px;">Hard SL Guard (2.0x)</th>
               <th style="padding:10px 12px;">Margin</th>
               <th style="padding:10px 12px; text-align:center;">Action</th>
             </tr>
@@ -3710,13 +3731,13 @@ def reset_daily_limits():
         logger.info("Daily limits reset")
 
 
-def auto_manage_delta_option_tp():
+def auto_manage_delta_option_risk():
     """
-    Automated Background 50% Take-Profit Engine (24/7 Theta Harvesting):
-    Runs every cycle. Inspects all live open option positions on Delta Exchange.
-    If an option leg has melted >= 50% (or config TARGET_PROFIT_PCT), it automatically
-    submits a closing order to buy to cover, banks the profit, frees locked margin,
-    and updates the ledger.
+    Automated Background Risk & Profit Management Engine (24/7 Theta Harvesting):
+    Runs every cycle. Evaluates all live open option positions on Delta Exchange:
+    1. 50% Take-Profit: If an option leg has melted >= 50% of sold premium, auto-closes to lock in profit.
+    2. Hard 2.0x Stop-Loss (Pre-Liquidation Guard): If an option leg spikes to >= 2.0x of its entry premium
+       (i.e. >= 100% loss), it IMMEDIATELY auto-closes at market, capping risk and preventing any exchange liquidation!
     """
     if not delta_exchange:
         return
@@ -3737,30 +3758,58 @@ def auto_manage_delta_option_tp():
             if p_entry <= 0:
                 continue
 
+            p_id = p.get("product_id")
+            s_size = abs(int(p_size_val))
+
             if p_size_val < 0:
                 # Sold option: profit when mark price falls below entry
                 melt_pct = round(((p_entry - p_mark) / p_entry) * 100.0, 1)
-            else:
-                melt_pct = round(((p_mark - p_entry) / p_entry) * 100.0, 1)
 
-            target_tp_pct = 50.0
-            if melt_pct >= target_tp_pct:
-                p_id = p.get("product_id")
-                s_size = abs(int(p_size_val))
-                logger.info(f"🎯 [AUTO-TP TRIGGERED] {p_sym} reached {melt_pct:.1f}% profit melt (Target >= {target_tp_pct}%). Auto-closing to bank profit...")
-                succ, msg = delta_exchange.close_any_position(p_sym, p_id, s_size)
-                if succ:
-                    logger.info(f"✅ [AUTO-TP SUCCESS] Closed {p_sym} ({s_size} lots) at {melt_pct:.1f}% profit: {msg}")
-                    try:
-                        open_trades = get_open_trades()
-                        for t in open_trades:
-                            t_sym = str(t.get("symbol", ""))
-                            if p_sym in t_sym or p_sym in str(t.get("call_symbol", "")) or p_sym in str(t.get("put_symbol", "")):
-                                close_trade(t["trade_id"], p_mark, f"50% TP Auto-Harvested ({melt_pct:.1f}% Melt)", symbol=t.get("symbol"))
-                    except Exception:
-                        pass
+                # 1. Take-Profit Check: 50% premium melt
+                target_tp_pct = 50.0
+                if melt_pct >= target_tp_pct:
+                    logger.info(f"🎯 [AUTO-TP TRIGGERED] {p_sym} reached {melt_pct:.1f}% profit melt (Target >= {target_tp_pct}%). Auto-closing to bank profit...")
+                    succ, msg = delta_exchange.close_any_position(p_sym, p_id, s_size)
+                    if succ:
+                        logger.info(f"✅ [AUTO-TP SUCCESS] Closed {p_sym} ({s_size} lots) at {melt_pct:.1f}% profit: {msg}")
+                        try:
+                            open_trades = get_open_trades()
+                            for t in open_trades:
+                                t_sym = str(t.get("symbol", ""))
+                                if p_sym in t_sym or p_sym in str(t.get("call_symbol", "")) or p_sym in str(t.get("put_symbol", "")):
+                                    close_trade(t["trade_id"], p_mark, f"50% TP Auto-Harvested ({melt_pct:.1f}% Melt)", symbol=t.get("symbol"))
+                        except Exception:
+                            pass
+                    continue
+
+                # 2. Hard Stop-Loss Check: 2.0x Premium Spike (Liquidation Prevention)
+                sl_multiplier = 2.0
+                hard_sl_price = round(p_entry * sl_multiplier, 2)
+                if p_mark >= hard_sl_price:
+                    logger.warning(f"🛑 [AUTO-SL TRIGGERED] {p_sym} hit Hard 2.0x Stop-Loss! Entry: ${p_entry:.2f} -> Current Mark: ${p_mark:.2f} (SL Threshold: ${hard_sl_price:.2f}, Melt: {melt_pct:.1f}%). Auto-closing to PREVENT LIQUIDATION...")
+                    succ, msg = delta_exchange.close_any_position(p_sym, p_id, s_size)
+                    if succ:
+                        logger.warning(f"🛡️ [AUTO-SL SUCCESS] Closed {p_sym} ({s_size} lots) at Stop-Loss: {msg}")
+                        try:
+                            open_trades = get_open_trades()
+                            for t in open_trades:
+                                t_sym = str(t.get("symbol", ""))
+                                if p_sym in t_sym or p_sym in str(t.get("call_symbol", "")) or p_sym in str(t.get("put_symbol", "")):
+                                    close_trade(t["trade_id"], p_mark, f"Hard 2.0x SL Guard Hit (${p_mark:.2f})", symbol=t.get("symbol"), is_loss=True)
+                        except Exception:
+                            pass
+                    continue
+
+            else:
+                # Long position: stop-loss at 50% loss
+                gain_pct = round(((p_mark - p_entry) / p_entry) * 100.0, 1)
+                if gain_pct <= -50.0:
+                    logger.warning(f"🛑 [AUTO-SL TRIGGERED] Long {p_sym} hit 50% Stop-Loss ({gain_pct:.1f}%). Closing...")
+                    succ, msg = delta_exchange.close_any_position(p_sym, p_id, s_size)
+                    continue
+
     except Exception as e:
-        logger.warning(f"[AUTO-TP] Error evaluating Delta option positions: {e}")
+        logger.warning(f"[AUTO-RISK] Error evaluating Delta option positions: {e}")
 
 
 def run_bot_once():
@@ -3781,8 +3830,8 @@ def run_bot_once():
     # 2. Manage all open positions first (always active: TP1/TP2/Green Lock)
     manage_open_positions()
 
-    # 2a. Delta Options 50% Take Profit Manager (24/7 Theta Harvesting Auto-Close)
-    auto_manage_delta_option_tp()
+    # 2a. Delta Options 50% TP & Hard 2.0x SL Manager (24/7 Risk & Profit Auto-Guard)
+    auto_manage_delta_option_risk()
 
     # 2b. Auto-Scan Pause Check
     if not BOT_AUTO_RUN:

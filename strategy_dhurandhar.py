@@ -333,10 +333,16 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
             logger.info(f"[DHURANDHAR] ✅ {asset} 50% Profit Booked. Capital recycled. Returning to STATE 0 (SCAN/IDLE).")
             return asset_state
 
-        # 2. Strict 2.2x Hard Stop-Loss: Exit if remaining combined premium >= 2.2x initial
-        sl_mult = config.get("STOP_LOSS_MULT", 2.2)
+        # 2. Strict 2.0x Hard Stop-Loss: Combined or Individual Leg Blowout Protection
+        sl_mult = config.get("STOP_LOSS_MULT", 2.0)
         hard_sl_thresh = round(init_tot_prem * sl_mult, 2)
-        if init_tot_prem > 0 and cur_tot_prem >= hard_sl_thresh:
+        init_c_prem = float(asset_state.get("initial_call_premium") or (init_tot_prem / 2.0))
+        init_p_prem = float(asset_state.get("initial_put_premium") or (init_tot_prem / 2.0))
+        single_leg_sl = (init_c_prem > 0 and cur_c_prem >= init_c_prem * 2.0) or (init_p_prem > 0 and cur_p_prem >= init_p_prem * 2.0)
+
+        if (init_tot_prem > 0 and cur_tot_prem >= hard_sl_thresh) or single_leg_sl:
+            reason_sl = "Single Leg 2.0x Spike" if single_leg_sl else f"Combined 2.0x SL (${cur_tot_prem:.2f} >= ${hard_sl_thresh:.2f})"
+            logger.warning(f"[DHURANDHAR] 🛑 HARD STOP-LOSS HIT for {asset}: {reason_sl}. Auto-closing to PREVENT LIQUIDATION.")
             logger.warning(f"[DHURANDHAR] 🛑 2.2x HARD STOP-LOSS HIT for {asset}: "
                            f"Current=${cur_tot_prem:.2f} >= ${hard_sl_thresh:.2f} (2.2x Initial). Closing to cap risk.")
             dx.close_futures_position(asset)
