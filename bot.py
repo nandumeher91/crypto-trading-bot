@@ -1929,34 +1929,60 @@ def generate_dashboard_html():
         logger.warning(f"[DASHBOARD] Fetch delta_orders_history failed: {e}")
         delta_orders_history = []
 
+    def _pnl_col(val_str: str) -> str:
+        s = str(val_str).replace('USD', '').replace('+', '').replace(',', '').strip()
+        try:
+            val = float(s)
+            if val > 0: return '#34d399'
+            if val < 0: return '#f87171'
+            return '#cbd5e1'
+        except Exception:
+            return '#cbd5e1'
+
     if delta_orders_history:
         for h in delta_orders_history:
             history_count += 1
+            h_sym = str(h.get('sym', '-'))
             h_side = str(h.get("side", "Open Sell"))
             h_side_col = "#34d399" if "Buy" in h_side else "#f87171"
             h_stripe_col = "#34d399" if "Buy" in h_side else "#f87171"
             h_status = str(h.get("status", "Filled"))
-            h_status_col = h.get("status_col") or ("#34d399" if h_status.lower() == "filled" else "#f87171")
-            h_cat = h.get("cat", "options")
+            h_filled = str(h.get("filled", h.get("qty", 1)))
+            h_type = str(h.get("type", "Limit"))
+            h_limit = str(h.get("limit", "-"))
+            h_trigger = str(h.get("trigger", "-"))
+            h_exec = str(h.get("exec", "-"))
+            h_size = str(h.get("size", "-"))
+            h_cf = str(h.get("cashflow", "0 USD"))
+            h_rpnl = str(h.get("realized_pnl", "0 USD"))
+            h_fees = str(h.get("trading_fees", "0.00 USD"))
+            h_net = str(h.get("net_pnl", "-0.00 USD"))
+            h_oid = str(h.get("order_id", "-"))
+            h_reduce = str(h.get("reduce_only") or ("✓" if "Close" in h_side or "Liquidation" in h_type else "✕"))
+            h_time = str(h.get("time", "-"))
+            h_cat = str(h.get("cat", "options"))
 
-            h_cf = h.get("cashflow", "0 USD")
-            h_rpnl = h.get("realized_pnl", "0 USD")
-            h_fees = h.get("trading_fees", "0.00 USD")
-            h_net = h.get("net_pnl", "-0.00 USD")
-            h_oid = h.get("order_id", "-")
+            rpnl_color = _pnl_col(h_rpnl)
+            net_color = _pnl_col(h_net)
 
             order_history_rows_html += f"""
             <tr class="trading-table-row" data-category="{h_cat}" style="border-bottom:1px solid #161a25; transition:background 0.15s;">
-              <td style="padding:12px 14px; border-left:3px solid {h_stripe_col}; font-weight:700; color:#ffffff; font-family:var(--font-mono);">{h.get('sym', '-')}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h.get('trigger', '-')}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{h.get('exec', '-')}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:600; color:{h_side_col};">{h.get('size', '-')}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h_cf}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h_rpnl}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h_fees}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h_net}</td>
+              <td style="padding:12px 14px; border-left:3px solid {h_stripe_col}; font-weight:700; color:#ffffff; font-family:var(--font-mono); position:sticky; left:0; background:#090b10; z-index:5; box-shadow:2px 0 6px rgba(0,0,0,0.6);">{h_sym}</td>
+              <td style="padding:12px 14px; font-weight:700; color:{h_side_col}; font-family:var(--font-mono); white-space:nowrap;">{h_side}</td>
+              <td style="padding:12px 14px; white-space:nowrap;"><span style="color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); padding:2px 7px; border-radius:4px; font-size:11px; font-weight:600;">{h_status}</span></td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600; text-align:center;">{h_filled}</td>
+              <td style="padding:12px 14px; color:#cbd5e1; font-weight:500; white-space:nowrap;">{h_type}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#cbd5e1;">{h_limit}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:{'#fbbf24' if h_trigger != '-' else '#64748b'}; font-weight:{'600' if h_trigger != '-' else '400'};">{h_trigger}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600;">{h_exec}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:700; color:{h_side_col}; white-space:nowrap;">{h_size}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#ffffff; font-weight:600; white-space:nowrap;">{h_cf}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:600; color:{rpnl_color}; white-space:nowrap;">{h_rpnl}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#94a3b8; white-space:nowrap;">{h_fees}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); font-weight:700; color:{net_color}; white-space:nowrap;">{h_net}</td>
               <td style="padding:12px 14px; font-family:var(--font-mono); color:#94a3b8; font-size:11px;">{h_oid}</td>
-              <td style="padding:12px 14px; font-family:var(--font-mono); color:#64748b; font-size:11px;">{h.get('time', '-')}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); text-align:center; color:{'#34d399' if h_reduce == '✓' else '#64748b'}; font-weight:700; font-size:13px;">{h_reduce}</td>
+              <td style="padding:12px 14px; font-family:var(--font-mono); color:#64748b; font-size:11px; white-space:nowrap;">{h_time}</td>
             </tr>
             """
     else:
@@ -2213,21 +2239,27 @@ def generate_dashboard_html():
         </div>
       </div>
 
-      <!-- TAB 5: ORDER HISTORY (Controlled Height & Pagination) -->
+      <!-- TAB 5: ORDER HISTORY (Full 16-Column Live Delta Mirror & Pinned Symbol) -->
       <div id="tab-content-order-history" style="display:none;">
-        <div style="max-height:460px; overflow-y:auto; overflow-x:auto;">
-          <table id="table-order-history" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
+        <div style="max-height:500px; overflow-y:auto; overflow-x:auto;">
+          <table id="table-order-history" style="width:100%; min-width:1480px; border-collapse:collapse; text-align:left; font-size:12px; white-space:nowrap;">
             <thead style="position:sticky; top:0; z-index:10; background:#080a10;">
               <tr style="border-bottom:1px solid #161a25; background:#080a10; font-size:11px; color:#64748b; font-weight:600;">
-                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Symbol</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0; left:0; z-index:20; box-shadow:2px 0 6px rgba(0,0,0,0.6);">Symbol</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Side</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Status</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0; text-align:center;">Filled (Lot)</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Order Type</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Limit Price</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Trigger Price</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Execution Price</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Size</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Cashflow</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Realized PnL</th>
-                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Trading Fees</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Trading Fees (Inc. GST)</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Net PnL (USD)</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Order ID</th>
+                <th style="padding:10px 14px; background:#080a10; position:sticky; top:0; text-align:center;">Reduce-Only</th>
                 <th style="padding:10px 14px; background:#080a10; position:sticky; top:0;">Time</th>
               </tr>
             </thead>
