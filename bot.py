@@ -820,34 +820,6 @@ function handleEquityMouseLeave() {
 }
 
 
-// ── INTERACTIVE CONTROLS FOR REALIZED PNL, VOLUME & FEES CHARTS ──
-const rpnlDataPoints = [
-  { svgX: 109, svgY: 148, barId: 'rpnl-bar-0', date: "Mon 09 Nov 2026", inr: "-₹305.03", usd: "-$3.64 USD", trade: "P-ETH-1900 Closed (Loss)", isWin: false },
-  { svgX: 170, svgY: 80,  barId: null,         date: "Tue 10 Nov 2026", inr: "₹0.00",    usd: "$0.00 USD",    trade: "No closed trades (Scanning)", isWin: true },
-  { svgX: 229, svgY: 44,  barId: 'rpnl-bar-2', date: "Wed 11 Nov 2026", inr: "+₹105.59", usd: "+$1.26 USD", trade: "C-ETH-2700 & C-BTC-89000 Win", isWin: true },
-  { svgX: 289, svgY: 102, barId: 'rpnl-bar-3', date: "Thu 12 Nov 2026", inr: "-₹65.36",  usd: "-$0.78 USD", trade: "P-BTC-70000 Closed (Loss)", isWin: false },
-  { svgX: 349, svgY: 90,  barId: 'rpnl-bar-4', date: "Fri 13 Nov 2026", inr: "-₹19.27",  usd: "-$0.23 USD", trade: "P-ETH-1800 Closed (Loss)", isWin: false },
-  { svgX: 409, svgY: 77,  barId: 'rpnl-bar-5', date: "Sat 14 Nov 2026", inr: "+₹1.68",   usd: "+$0.02 USD", trade: "C-ETH-2450 Take-Profit Hit", isWin: true }
-];
-
-const volDataPoints = [
-  { svgX: 109, svgY: 85,  barId: 'vol-bar-0', date: "Mon 09 Nov 2026", inr: "₹65,200", usd: "$778.04 USD", desc: "1 Option Contract Traded" },
-  { svgX: 170, svgY: 160, barId: null,        date: "Tue 10 Nov 2026", inr: "₹0",      usd: "$0.00 USD",    desc: "Market Hold / Scanning" },
-  { svgX: 229, svgY: 65,  barId: 'vol-bar-2', date: "Wed 11 Nov 2026", inr: "₹80,500", usd: "$960.62 USD", desc: "2 Option Contracts Traded" },
-  { svgX: 289, svgY: 115, barId: 'vol-bar-3', date: "Thu 12 Nov 2026", inr: "₹35,100", usd: "$418.85 USD", desc: "1 Option Contract Traded" },
-  { svgX: 349, svgY: 138, barId: 'vol-bar-4', date: "Fri 13 Nov 2026", inr: "₹18,800", usd: "$224.34 USD", desc: "1 Option Contract Traded" },
-  { svgX: 409, svgY: 152, barId: 'vol-bar-5', date: "Sat 14 Nov 2026", inr: "₹4,200",  usd: "$50.12 USD",  desc: "1 Option Contract Traded" }
-];
-
-const feeDataPoints = [
-  { svgX: 109, svgY: 80,  barId: 'fee-bar-0', date: "Mon 09 Nov 2026", inr: "₹2.51", usd: "$0.03 USD" },
-  { svgX: 170, svgY: 130, barId: null,        date: "Tue 10 Nov 2026", inr: "₹0.00", usd: "$0.00 USD" },
-  { svgX: 229, svgY: 112, barId: 'fee-bar-2', date: "Wed 11 Nov 2026", inr: "₹0.84", usd: "$0.01 USD" },
-  { svgX: 289, svgY: 80,  barId: 'fee-bar-3', date: "Thu 12 Nov 2026", inr: "₹2.51", usd: "$0.03 USD" },
-  { svgX: 349, svgY: 112, barId: 'fee-bar-4', date: "Fri 13 Nov 2026", inr: "₹0.84", usd: "$0.01 USD" },
-  { svgX: 409, svgY: 120, barId: 'fee-bar-5', date: "Sat 14 Nov 2026", inr: "₹0.47", usd: "$0.01 USD" }
-];
-
 // View Toggle Handlers: Bars vs Line
 function switchRpnlView(mode) {
   const isLine = (mode === 'line');
@@ -1257,9 +1229,10 @@ function openPnlAnalytics() {
   if (vLive) vLive.style.display = 'none';
   if (vAnalytics) {
     vAnalytics.style.display = 'block';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    vAnalytics.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
+window.openPnlAnalytics = openPnlAnalytics;
 
 function closePnlAnalytics() {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -1271,6 +1244,7 @@ function closePnlAnalytics() {
   if (vMain) vMain.style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+window.closePnlAnalytics = closePnlAnalytics;
 
 function switchAnalyticsCurrency(curr) {
   const isINR = (curr === 'inr');
@@ -1755,6 +1729,20 @@ setInterval(fetchLiveStatus, 5000);
 
 document.addEventListener('DOMContentLoaded', function() {
   renderHistoryPagination();
+  const cardPnl = document.getElementById('stat-card-pnl');
+  if (cardPnl) {
+    cardPnl.addEventListener('click', function(e) {
+      e.preventDefault();
+      openPnlAnalytics();
+    });
+  }
+  const cardWin = document.getElementById('stat-card-winrate');
+  if (cardWin) {
+    cardWin.addEventListener('click', function(e) {
+      e.preventDefault();
+      openPnlAnalytics();
+    });
+  }
 });
 setTimeout(renderHistoryPagination, 100);
 """
@@ -3962,7 +3950,7 @@ def generate_dashboard_html():
         </div>
 
         <!-- Card 3: P&L (Clickable to Delta Analytics) -->
-        <div class="stat-card" onclick="openPnlAnalytics()" style="cursor:pointer; position:relative; overflow:hidden;" title="Click to open Delta Exchange PNL Analytics">
+        <div id="stat-card-pnl" class="stat-card" onclick="openPnlAnalytics()" style="cursor:pointer; position:relative; overflow:hidden;" title="Click to open Delta Exchange PNL Analytics">
           <div style="position:absolute; top:12px; right:14px; background:rgba(192,132,252,0.12); border:1px solid rgba(192,132,252,0.3); border-radius:6px; padding:3px 8px; font-size:10px; font-weight:700; color:#c084fc; display:flex; align-items:center; gap:4px; letter-spacing:0.02em;">
             <span>Analytics</span>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
@@ -3985,7 +3973,7 @@ def generate_dashboard_html():
         </div>
 
         <!-- Card 4: Win Rate -->
-        <div class="stat-card" onclick="openPnlAnalytics()" style="cursor:pointer;" title="Click to view Win Rate Analytics">
+        <div id="stat-card-winrate" class="stat-card" onclick="openPnlAnalytics()" style="cursor:pointer;" title="Click to view Win Rate Analytics">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="stat-icon-box">
