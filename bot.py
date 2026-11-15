@@ -819,6 +819,338 @@ function handleEquityMouseLeave() {
   if (headerVal) headerVal.textContent = isUSD ? '$58.37 USD' : '₹4.89K';
 }
 
+
+// ── INTERACTIVE CONTROLS FOR REALIZED PNL, VOLUME & FEES CHARTS ──
+const rpnlDataPoints = [
+  { svgX: 109, svgY: 148, barId: 'rpnl-bar-0', date: "Mon 09 Nov 2026", inr: "-₹305.03", usd: "-$3.64 USD", trade: "P-ETH-1900 Closed (Loss)", isWin: false },
+  { svgX: 170, svgY: 80,  barId: null,         date: "Tue 10 Nov 2026", inr: "₹0.00",    usd: "$0.00 USD",    trade: "No closed trades (Scanning)", isWin: true },
+  { svgX: 229, svgY: 44,  barId: 'rpnl-bar-2', date: "Wed 11 Nov 2026", inr: "+₹105.59", usd: "+$1.26 USD", trade: "C-ETH-2700 & C-BTC-89000 Win", isWin: true },
+  { svgX: 289, svgY: 102, barId: 'rpnl-bar-3', date: "Thu 12 Nov 2026", inr: "-₹65.36",  usd: "-$0.78 USD", trade: "P-BTC-70000 Closed (Loss)", isWin: false },
+  { svgX: 349, svgY: 90,  barId: 'rpnl-bar-4', date: "Fri 13 Nov 2026", inr: "-₹19.27",  usd: "-$0.23 USD", trade: "P-ETH-1800 Closed (Loss)", isWin: false },
+  { svgX: 409, svgY: 77,  barId: 'rpnl-bar-5', date: "Sat 14 Nov 2026", inr: "+₹1.68",   usd: "+$0.02 USD", trade: "C-ETH-2450 Take-Profit Hit", isWin: true }
+];
+
+const volDataPoints = [
+  { svgX: 109, svgY: 85,  barId: 'vol-bar-0', date: "Mon 09 Nov 2026", inr: "₹65,200", usd: "$778.04 USD", desc: "1 Option Contract Traded" },
+  { svgX: 170, svgY: 160, barId: null,        date: "Tue 10 Nov 2026", inr: "₹0",      usd: "$0.00 USD",    desc: "Market Hold / Scanning" },
+  { svgX: 229, svgY: 65,  barId: 'vol-bar-2', date: "Wed 11 Nov 2026", inr: "₹80,500", usd: "$960.62 USD", desc: "2 Option Contracts Traded" },
+  { svgX: 289, svgY: 115, barId: 'vol-bar-3', date: "Thu 12 Nov 2026", inr: "₹35,100", usd: "$418.85 USD", desc: "1 Option Contract Traded" },
+  { svgX: 349, svgY: 138, barId: 'vol-bar-4', date: "Fri 13 Nov 2026", inr: "₹18,800", usd: "$224.34 USD", desc: "1 Option Contract Traded" },
+  { svgX: 409, svgY: 152, barId: 'vol-bar-5', date: "Sat 14 Nov 2026", inr: "₹4,200",  usd: "$50.12 USD",  desc: "1 Option Contract Traded" }
+];
+
+const feeDataPoints = [
+  { svgX: 109, svgY: 80,  barId: 'fee-bar-0', date: "Mon 09 Nov 2026", inr: "₹2.51", usd: "$0.03 USD" },
+  { svgX: 170, svgY: 130, barId: null,        date: "Tue 10 Nov 2026", inr: "₹0.00", usd: "$0.00 USD" },
+  { svgX: 229, svgY: 112, barId: 'fee-bar-2', date: "Wed 11 Nov 2026", inr: "₹0.84", usd: "$0.01 USD" },
+  { svgX: 289, svgY: 80,  barId: 'fee-bar-3', date: "Thu 12 Nov 2026", inr: "₹2.51", usd: "$0.03 USD" },
+  { svgX: 349, svgY: 112, barId: 'fee-bar-4', date: "Fri 13 Nov 2026", inr: "₹0.84", usd: "$0.01 USD" },
+  { svgX: 409, svgY: 120, barId: 'fee-bar-5', date: "Sat 14 Nov 2026", inr: "₹0.47", usd: "$0.01 USD" }
+];
+
+// View Toggle Handlers: Bars vs Line
+function switchRpnlView(mode) {
+  const isLine = (mode === 'line');
+  document.getElementById('rpnl-bar-group').style.display = isLine ? 'none' : 'block';
+  document.getElementById('rpnl-line-group').style.display = isLine ? 'block' : 'none';
+  const bBar = document.getElementById('rpnl-btn-bar');
+  const bLine = document.getElementById('rpnl-btn-line');
+  if (bBar) {
+    bBar.style.background = !isLine ? 'rgba(168,85,247,0.22)' : 'transparent';
+    bBar.style.borderColor = !isLine ? '#a855f7' : 'transparent';
+    bBar.style.color = !isLine ? '#ffffff' : '#94a3b8';
+  }
+  if (bLine) {
+    bLine.style.background = isLine ? 'rgba(168,85,247,0.22)' : 'transparent';
+    bLine.style.borderColor = isLine ? '#a855f7' : 'transparent';
+    bLine.style.color = isLine ? '#ffffff' : '#94a3b8';
+  }
+}
+
+function switchVolView(mode) {
+  const isLine = (mode === 'line');
+  document.getElementById('vol-bar-group').style.display = isLine ? 'none' : 'block';
+  document.getElementById('vol-line-group').style.display = isLine ? 'block' : 'none';
+  const bBar = document.getElementById('vol-btn-bar');
+  const bLine = document.getElementById('vol-btn-line');
+  if (bBar) {
+    bBar.style.background = !isLine ? 'rgba(59,130,246,0.25)' : 'transparent';
+    bBar.style.borderColor = !isLine ? '#3b82f6' : 'transparent';
+    bBar.style.color = !isLine ? '#ffffff' : '#94a3b8';
+  }
+  if (bLine) {
+    bLine.style.background = isLine ? 'rgba(59,130,246,0.25)' : 'transparent';
+    bLine.style.borderColor = isLine ? '#3b82f6' : 'transparent';
+    bLine.style.color = isLine ? '#ffffff' : '#94a3b8';
+  }
+}
+
+function switchFeeView(mode) {
+  const isLine = (mode === 'line');
+  document.getElementById('fee-bar-group').style.display = isLine ? 'none' : 'block';
+  document.getElementById('fee-line-group').style.display = isLine ? 'block' : 'none';
+  const bBar = document.getElementById('fee-btn-bar');
+  const bLine = document.getElementById('fee-btn-line');
+  if (bBar) {
+    bBar.style.background = !isLine ? 'rgba(245,158,11,0.22)' : 'transparent';
+    bBar.style.borderColor = !isLine ? '#f59e0b' : 'transparent';
+    bBar.style.color = !isLine ? '#ffffff' : '#94a3b8';
+  }
+  if (bLine) {
+    bLine.style.background = isLine ? 'rgba(245,158,11,0.22)' : 'transparent';
+    bLine.style.borderColor = isLine ? '#f59e0b' : 'transparent';
+    bLine.style.color = isLine ? '#ffffff' : '#94a3b8';
+  }
+}
+
+// Realized PNL Mouse Move & Leave
+function handleRpnlMouseMove(e) {
+  const container = document.getElementById('rpnl-chart-container');
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const mouseX = clientX - rect.left;
+  if (mouseX < 0 || mouseX > rect.width) return;
+
+  const svgX = (mouseX / rect.width) * 500;
+  let closest = rpnlDataPoints[0];
+  let minDiff = Math.abs(svgX - rpnlDataPoints[0].svgX);
+  for (let i = 1; i < rpnlDataPoints.length; i++) {
+    const diff = Math.abs(svgX - rpnlDataPoints[i].svgX);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = rpnlDataPoints[i];
+    }
+  }
+
+  // Crosshair
+  const crosshair = document.getElementById('rpnl-crosshair');
+  if (crosshair) {
+    crosshair.setAttribute('x1', closest.svgX);
+    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.style.display = 'block';
+  }
+
+  // Dot
+  const dot = document.getElementById('rpnl-cursor-dot');
+  if (dot) {
+    dot.setAttribute('cx', closest.svgX);
+    dot.setAttribute('cy', closest.svgY);
+    dot.style.display = 'block';
+  }
+
+  // Highlight active bar
+  rpnlDataPoints.forEach(p => {
+    if (p.barId) {
+      const b = document.getElementById(p.barId);
+      if (b) {
+        b.style.opacity = (p === closest) ? '1' : '0.65';
+        b.style.stroke = (p === closest) ? '#ffffff' : 'none';
+        b.style.strokeWidth = (p === closest) ? '2' : '0';
+      }
+    }
+  });
+
+  // Tooltip
+  const tooltip = document.getElementById('rpnl-tooltip');
+  if (tooltip) {
+    const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
+    document.getElementById('rpnl-tt-date').textContent = closest.date;
+    const valEl = document.getElementById('rpnl-tt-val');
+    valEl.textContent = isUSD ? closest.usd : closest.inr;
+    valEl.style.color = closest.isWin ? '#34d399' : (closest.inr === '₹0.00' ? '#94a3b8' : '#f87171');
+    document.getElementById('rpnl-tt-trade').textContent = closest.trade;
+
+    let targetLeft = (closest.svgX / 500) * rect.width;
+    let targetTop = (closest.svgY / 180) * rect.height;
+    if (targetLeft < 90) targetLeft = 90;
+    if (targetLeft > rect.width - 90) targetLeft = rect.width - 90;
+
+    tooltip.style.left = targetLeft + 'px';
+    tooltip.style.top = targetTop + 'px';
+    tooltip.style.display = 'block';
+  }
+}
+
+function handleRpnlMouseLeave() {
+  const crosshair = document.getElementById('rpnl-crosshair');
+  const dot = document.getElementById('rpnl-cursor-dot');
+  const tooltip = document.getElementById('rpnl-tooltip');
+  if (crosshair) crosshair.style.display = 'none';
+  if (dot) dot.style.display = 'none';
+  if (tooltip) tooltip.style.display = 'none';
+  rpnlDataPoints.forEach(p => {
+    if (p.barId) {
+      const b = document.getElementById(p.barId);
+      if (b) {
+        b.style.opacity = '1';
+        b.style.stroke = 'none';
+      }
+    }
+  });
+}
+
+// Volume Mouse Move & Leave
+function handleVolMouseMove(e) {
+  const container = document.getElementById('vol-chart-container');
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const mouseX = clientX - rect.left;
+  if (mouseX < 0 || mouseX > rect.width) return;
+
+  const svgX = (mouseX / rect.width) * 500;
+  let closest = volDataPoints[0];
+  let minDiff = Math.abs(svgX - volDataPoints[0].svgX);
+  for (let i = 1; i < volDataPoints.length; i++) {
+    const diff = Math.abs(svgX - volDataPoints[i].svgX);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = volDataPoints[i];
+    }
+  }
+
+  const crosshair = document.getElementById('vol-crosshair');
+  if (crosshair) {
+    crosshair.setAttribute('x1', closest.svgX);
+    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.style.display = 'block';
+  }
+
+  const dot = document.getElementById('vol-cursor-dot');
+  if (dot) {
+    dot.setAttribute('cx', closest.svgX);
+    dot.setAttribute('cy', closest.svgY);
+    dot.style.display = 'block';
+  }
+
+  volDataPoints.forEach(p => {
+    if (p.barId) {
+      const b = document.getElementById(p.barId);
+      if (b) {
+        b.style.opacity = (p === closest) ? '1' : '0.65';
+        b.style.stroke = (p === closest) ? '#ffffff' : 'none';
+        b.style.strokeWidth = (p === closest) ? '2' : '0';
+      }
+    }
+  });
+
+  const tooltip = document.getElementById('vol-tooltip');
+  if (tooltip) {
+    const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
+    document.getElementById('vol-tt-date').textContent = closest.date;
+    document.getElementById('vol-tt-val').textContent = isUSD ? closest.usd : closest.inr;
+    document.getElementById('vol-tt-desc').textContent = closest.desc;
+
+    let targetLeft = (closest.svgX / 500) * rect.width;
+    let targetTop = (closest.svgY / 180) * rect.height;
+    if (targetLeft < 90) targetLeft = 90;
+    if (targetLeft > rect.width - 90) targetLeft = rect.width - 90;
+
+    tooltip.style.left = targetLeft + 'px';
+    tooltip.style.top = targetTop + 'px';
+    tooltip.style.display = 'block';
+  }
+}
+
+function handleVolMouseLeave() {
+  const crosshair = document.getElementById('vol-crosshair');
+  const dot = document.getElementById('vol-cursor-dot');
+  const tooltip = document.getElementById('vol-tooltip');
+  if (crosshair) crosshair.style.display = 'none';
+  if (dot) dot.style.display = 'none';
+  if (tooltip) tooltip.style.display = 'none';
+  volDataPoints.forEach(p => {
+    if (p.barId) {
+      const b = document.getElementById(p.barId);
+      if (b) {
+        b.style.opacity = '1';
+        b.style.stroke = 'none';
+      }
+    }
+  });
+}
+
+// Fees Mouse Move & Leave
+function handleFeeMouseMove(e) {
+  const container = document.getElementById('fee-chart-container');
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const mouseX = clientX - rect.left;
+  if (mouseX < 0 || mouseX > rect.width) return;
+
+  const svgX = (mouseX / rect.width) * 500;
+  let closest = feeDataPoints[0];
+  let minDiff = Math.abs(svgX - feeDataPoints[0].svgX);
+  for (let i = 1; i < feeDataPoints.length; i++) {
+    const diff = Math.abs(svgX - feeDataPoints[i].svgX);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = feeDataPoints[i];
+    }
+  }
+
+  const crosshair = document.getElementById('fee-crosshair');
+  if (crosshair) {
+    crosshair.setAttribute('x1', closest.svgX);
+    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.style.display = 'block';
+  }
+
+  const dot = document.getElementById('fee-cursor-dot');
+  if (dot) {
+    dot.setAttribute('cx', closest.svgX);
+    dot.setAttribute('cy', closest.svgY);
+    dot.style.display = 'block';
+  }
+
+  feeDataPoints.forEach(p => {
+    if (p.barId) {
+      const b = document.getElementById(p.barId);
+      if (b) {
+        b.style.opacity = (p === closest) ? '1' : '0.65';
+        b.style.stroke = (p === closest) ? '#ffffff' : 'none';
+        b.style.strokeWidth = (p === closest) ? '2' : '0';
+      }
+    }
+  });
+
+  const tooltip = document.getElementById('fee-tooltip');
+  if (tooltip) {
+    const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
+    document.getElementById('fee-tt-date').textContent = closest.date;
+    document.getElementById('fee-tt-val').textContent = isUSD ? closest.usd : closest.inr;
+
+    let targetLeft = (closest.svgX / 500) * rect.width;
+    let targetTop = (closest.svgY / 150) * rect.height;
+    if (targetLeft < 80) targetLeft = 80;
+    if (targetLeft > rect.width - 80) targetLeft = rect.width - 80;
+
+    tooltip.style.left = targetLeft + 'px';
+    tooltip.style.top = targetTop + 'px';
+    tooltip.style.display = 'block';
+  }
+}
+
+function handleFeeMouseLeave() {
+  const crosshair = document.getElementById('fee-crosshair');
+  const dot = document.getElementById('fee-cursor-dot');
+  const tooltip = document.getElementById('fee-tooltip');
+  if (crosshair) crosshair.style.display = 'none';
+  if (dot) dot.style.display = 'none';
+  if (tooltip) tooltip.style.display = 'none';
+  feeDataPoints.forEach(p => {
+    if (p.barId) {
+      const b = document.getElementById(p.barId);
+      if (b) {
+        b.style.opacity = '1';
+        b.style.stroke = 'none';
+      }
+    }
+  });
+}
+
 function openPnlAnalytics() {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const analyticsTab = document.querySelector('.nav-tab[data-tab="pnl-analytics"]');
@@ -1958,21 +2290,53 @@ def generate_pnl_analytics_html(delta_orders_history):
       <!-- ============================================== -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px;">
         
-        <!-- Left: Realized PNL Bar Chart (Matching Screenshot 4 & 6) -->
+        <!-- Left: Realized PNL Bar Chart (Interactive Tooltip + Line Toggle) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Realized PNL</span>
-              <span style="font-size:12px; color:#64748b;">&#9432;</span>
+              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars or line to inspect settled daily P&amp;L">&#9432;</span>
             </div>
-            <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">
-              Daily Net Settlement
+            
+            <!-- View Mode Switcher: Bars vs Smooth Line -->
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="background:#090d16; border:1px solid #1e2538; border-radius:6px; padding:2px; display:flex; gap:3px;">
+                <button id="rpnl-btn-bar" onclick="switchRpnlView('bar')" style="background:rgba(168,85,247,0.22); border:1px solid #a855f7; color:#ffffff; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer;">&#128202; Bars</button>
+                <button id="rpnl-btn-line" onclick="switchRpnlView('line')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">&#128200; Line</button>
+              </div>
+              <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">Daily Net</div>
             </div>
           </div>
 
-          <!-- Bar Chart Container -->
-          <div style="position:relative; width:100%; height:190px;">
-            <svg viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%;">
+          <!-- Interactive Realized PnL Container -->
+          <div id="rpnl-chart-container" onmousemove="handleRpnlMouseMove(event)" onmouseleave="handleRpnlMouseLeave()" ontouchmove="handleRpnlMouseMove(event.touches[0])" ontouchend="handleRpnlMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
+            
+            <!-- Floating Realized PnL Tooltip Badge (Exact Delta Style) -->
+            <div id="rpnl-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #a855f7; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
+              <div id="rpnl-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Mon 09 Nov</div>
+              <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
+                <span style="font-size:10px; color:#cbd5e1;">Realized:</span>
+                <span id="rpnl-tt-val" style="font-size:15px; font-weight:800; color:#f87171;">-&#8377;305.03</span>
+              </div>
+              <div id="rpnl-tt-trade" style="font-size:10px; color:#c084fc; margin-top:3px; border-top:1px solid rgba(255,255,255,0.08); padding-top:3px;">P-ETH-1900 Closed</div>
+            </div>
+
+            <svg id="rpnl-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
+              <defs>
+                <linearGradient id="rpnlGradGreen" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#34d399" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#059669" stop-opacity="0.8" />
+                </linearGradient>
+                <linearGradient id="rpnlGradRed" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#f87171" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#dc2626" stop-opacity="0.8" />
+                </linearGradient>
+                <linearGradient id="rpnlLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#a855f7" stop-opacity="0.3" />
+                  <stop offset="100%" stop-color="#a855f7" stop-opacity="0.0" />
+                </linearGradient>
+              </defs>
+
               <!-- Zero Axis Line -->
               <line x1="40" y1="80" x2="480" y2="80" stroke="#232d42" stroke-width="1.5" />
               <text x="35" y="84" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end">0</text>
@@ -1985,32 +2349,31 @@ def generate_pnl_analytics_html(delta_orders_history):
               <line x1="40" y1="145" x2="480" y2="145" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
               <text x="35" y="149" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="-300" data-val-usd="-$3.6">-300</text>
 
-              <!-- Nov 9: -305 INR -->
-              <rect x="90" y="80" width="38" height="68" rx="3" fill="#ef4444" opacity="0.85">
-                <title>Mon 09 Nov: -&#8377;305.03 (-$3.64 USD)</title>
-              </rect>
+              <!-- BAR VIEW GROUP -->
+              <g id="rpnl-bar-group">
+                <!-- Nov 9: -305 INR -->
+                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" rx="5" fill="url(#rpnlGradRed)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 11: +106 INR -->
+                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" rx="5" fill="url(#rpnlGradGreen)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 12: -65 INR -->
+                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" rx="5" fill="url(#rpnlGradRed)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 13: -19 INR -->
+                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" rx="4" fill="url(#rpnlGradRed)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 14: +2 INR -->
+                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" rx="2" fill="url(#rpnlGradGreen)" style="transition:all 0.15s ease; cursor:pointer;" />
+              </g>
 
-              <!-- Nov 10: 0 -->
+              <!-- SMOOTH LINE VIEW GROUP (Toggled by user) -->
+              <g id="rpnl-line-group" style="display:none;">
+                <path d="M 50,80 C 80,80 90,148 110,148 C 130,148 150,80 170,80 C 190,80 210,44 230,44 C 250,44 270,102 290,102 C 310,102 330,90 350,90 C 370,90 390,77 410,77 L 460,80 L 460,160 L 50,160 Z" fill="url(#rpnlLineAreaGrad)" />
+                <path d="M 50,80 C 80,80 90,148 110,148 C 130,148 150,80 170,80 C 190,80 210,44 230,44 C 250,44 270,102 290,102 C 310,102 330,90 350,90 C 370,90 390,77 410,77 L 460,80" fill="none" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round" />
+              </g>
+
+              <!-- Dynamic Hover Crosshair Line -->
+              <line id="rpnl-crosshair" x1="0" y1="20" x2="0" y2="165" stroke="rgba(168,85,247,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
               
-              <!-- Nov 11: +106 INR -->
-              <rect x="210" y="44" width="38" height="36" rx="3" fill="#10b981" opacity="0.85">
-                <title>Wed 11 Nov: +&#8377;105.59 (+$1.26 USD)</title>
-              </rect>
-
-              <!-- Nov 12: -65 INR (Tooltip highlight like Screenshot 6) -->
-              <rect x="270" y="80" width="38" height="22" rx="3" fill="#ef4444" opacity="0.85">
-                <title>Thu 12 Nov: -&#8377;65.36 (-$0.78 USD)</title>
-              </rect>
-
-              <!-- Nov 13: -19 INR -->
-              <rect x="330" y="80" width="38" height="10" rx="3" fill="#ef4444" opacity="0.85">
-                <title>Fri 13 Nov: -&#8377;19.27 (-$0.23 USD)</title>
-              </rect>
-
-              <!-- Nov 14: +2 INR -->
-              <rect x="390" y="77" width="38" height="3" rx="1" fill="#34d399">
-                <title>Sat 14 Nov: +&#8377;1.68 (+$0.02 USD)</title>
-              </rect>
+              <!-- Snapping Cursor Dot -->
+              <circle id="rpnl-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#a855f7" stroke-width="2.5" style="display:none;" />
             </svg>
           </div>
 
@@ -2024,44 +2387,77 @@ def generate_pnl_analytics_html(delta_orders_history):
           </div>
         </div>
 
-        <!-- Right: Volume Traded Bar Chart (Matching Screenshot 4) -->
+        <!-- Right: Volume Traded Bar Chart (Interactive Tooltip + Line Toggle) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Volume Traded</span>
-              <span style="font-size:12px; color:#64748b;">&#9432;</span>
+              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover to view daily traded options contract notional">&#9432;</span>
             </div>
-            <div class="analytics-currency-val" id="kpi-volume" data-val-inr="{volume_inr}" data-val-usd="{volume_usd}" style="font-size:14px; font-weight:800; color:#ffffff; font-family:var(--font-mono);">
-              {volume_inr}
+            
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="background:#090d16; border:1px solid #1e2538; border-radius:6px; padding:2px; display:flex; gap:3px;">
+                <button id="vol-btn-bar" onclick="switchVolView('bar')" style="background:rgba(59,130,246,0.25); border:1px solid #3b82f6; color:#ffffff; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer;">&#128202; Bars</button>
+                <button id="vol-btn-line" onclick="switchVolView('line')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">&#128200; Line</button>
+              </div>
+              <div class="analytics-currency-val" id="kpi-volume" data-val-inr="{volume_inr}" data-val-usd="{volume_usd}" style="font-size:14px; font-weight:800; color:#ffffff; font-family:var(--font-mono);">
+                {volume_inr}
+              </div>
             </div>
           </div>
 
-          <!-- Volume Bars -->
-          <div style="position:relative; width:100%; height:190px;">
-            <svg viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%;">
+          <!-- Interactive Volume Chart Container -->
+          <div id="vol-chart-container" onmousemove="handleVolMouseMove(event)" onmouseleave="handleVolMouseLeave()" ontouchmove="handleVolMouseMove(event.touches[0])" ontouchend="handleVolMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
+            
+            <!-- Floating Volume Tooltip Badge -->
+            <div id="vol-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #3b82f6; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
+              <div id="vol-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Wed 11 Nov</div>
+              <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
+                <span style="font-size:10px; color:#cbd5e1;">Volume:</span>
+                <span id="vol-tt-val" style="font-size:15px; font-weight:800; color:#60a5fa;">&#8377;80,500</span>
+              </div>
+              <div id="vol-tt-desc" style="font-size:10px; color:#93c5fd; margin-top:3px; border-top:1px solid rgba(255,255,255,0.08); padding-top:3px;">2 Contracts Traded</div>
+            </div>
+
+            <svg id="vol-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
+              <defs>
+                <linearGradient id="volGradBlue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#2563eb" stop-opacity="0.75" />
+                </linearGradient>
+                <linearGradient id="volLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.32" />
+                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0" />
+                </linearGradient>
+              </defs>
+
               <line x1="40" y1="160" x2="480" y2="160" stroke="#232d42" stroke-width="1" />
               <line x1="40" y1="100" x2="480" y2="100" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
               <line x1="40" y1="40" x2="480" y2="40" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
 
-              <!-- Nov 9: 65K -->
-              <rect x="90" y="85" width="38" height="75" rx="3" fill="#3b82f6" opacity="0.8">
-                <title>09 Nov: &#8377;65,200</title>
-              </rect>
+              <!-- BAR VIEW GROUP -->
+              <g id="vol-bar-group">
+                <!-- Nov 9: 65K -->
+                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" rx="5" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 11: 80K -->
+                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" rx="5" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 12: 35K -->
+                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" rx="5" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 13: 19K -->
+                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" rx="4" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 14: 4.2K -->
+                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" rx="3" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+              </g>
 
-              <!-- Nov 11: 80K -->
-              <rect x="210" y="65" width="38" height="95" rx="3" fill="#3b82f6" opacity="0.85">
-                <title>11 Nov: &#8377;80,500</title>
-              </rect>
+              <!-- SMOOTH LINE VIEW GROUP -->
+              <g id="vol-line-group" style="display:none;">
+                <path d="M 50,160 C 80,160 90,85 110,85 C 130,85 150,160 170,160 C 190,160 210,65 230,65 C 250,65 270,115 290,115 C 310,115 330,138 350,138 C 370,138 390,152 410,152 L 460,160 L 460,160 L 50,160 Z" fill="url(#volLineAreaGrad)" />
+                <path d="M 50,160 C 80,160 90,85 110,85 C 130,85 150,160 170,160 C 190,160 210,65 230,65 C 250,65 270,115 290,115 C 310,115 330,138 350,138 C 370,138 390,152 410,152 L 460,160" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" />
+              </g>
 
-              <!-- Nov 12: 35K -->
-              <rect x="270" y="115" width="38" height="45" rx="3" fill="#3b82f6" opacity="0.8">
-                <title>12 Nov: &#8377;35,100</title>
-              </rect>
-
-              <!-- Nov 13: 19K -->
-              <rect x="330" y="138" width="38" height="22" rx="3" fill="#3b82f6" opacity="0.8">
-                <title>13 Nov: &#8377;18,800</title>
-              </rect>
+              <!-- Dynamic Hover Crosshair & Dot -->
+              <line id="vol-crosshair" x1="0" y1="20" x2="0" y2="160" stroke="rgba(96,165,250,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
+              <circle id="vol-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#3b82f6" stroke-width="2.5" style="display:none;" />
             </svg>
           </div>
 
@@ -2081,48 +2477,75 @@ def generate_pnl_analytics_html(delta_orders_history):
       <!-- ============================================== -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px;">
         
-        <!-- Left: Fees Paid Bar Chart -->
+        <!-- Left: Fees Paid Bar Chart (Interactive Tooltip + Line Toggle) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Fees Paid</span>
-              <span style="font-size:12px; color:#64748b;">&#9432;</span>
+              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover to view exchange fees incurred">&#9432;</span>
             </div>
-            <div class="analytics-currency-val" id="kpi-fees" data-val-inr="{fees_paid_inr}" data-val-usd="{fees_paid_usd}" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:var(--font-mono);">
-              {fees_paid_inr}
+            
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="background:#090d16; border:1px solid #1e2538; border-radius:6px; padding:2px; display:flex; gap:3px;">
+                <button id="fee-btn-bar" onclick="switchFeeView('bar')" style="background:rgba(245,158,11,0.22); border:1px solid #f59e0b; color:#ffffff; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer;">&#128202; Bars</button>
+                <button id="fee-btn-line" onclick="switchFeeView('line')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">&#128200; Line</button>
+              </div>
+              <div class="analytics-currency-val" id="kpi-fees" data-val-inr="{fees_paid_inr}" data-val-usd="{fees_paid_usd}" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:var(--font-mono);">
+                {fees_paid_inr}
+              </div>
             </div>
           </div>
 
-          <!-- Fees Bars -->
-          <div style="position:relative; width:100%; height:160px;">
-            <svg viewBox="0 0 500 150" preserveAspectRatio="none" style="width:100%; height:100%;">
+          <!-- Interactive Fees Chart Container -->
+          <div id="fee-chart-container" onmousemove="handleFeeMouseMove(event)" onmouseleave="handleFeeMouseLeave()" ontouchmove="handleFeeMouseMove(event.touches[0])" ontouchend="handleFeeMouseLeave()" style="position:relative; width:100%; height:160px; cursor:crosshair;">
+            
+            <!-- Floating Fees Tooltip Badge -->
+            <div id="fee-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #f59e0b; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
+              <div id="fee-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Mon 09 Nov</div>
+              <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
+                <span style="font-size:10px; color:#cbd5e1;">Fees:</span>
+                <span id="fee-tt-val" style="font-size:15px; font-weight:800; color:#fbbf24;">&#8377;2.51</span>
+              </div>
+            </div>
+
+            <svg id="fee-svg" viewBox="0 0 500 150" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
+              <defs>
+                <linearGradient id="feeGradAmber" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#d97706" stop-opacity="0.75" />
+                </linearGradient>
+                <linearGradient id="feeLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
+                  <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0" />
+                </linearGradient>
+              </defs>
+
               <line x1="40" y1="130" x2="480" y2="130" stroke="#232d42" stroke-width="1" />
               <line x1="40" y1="75" x2="480" y2="75" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
 
-              <!-- Nov 9: ₹2.51 -->
-              <rect x="90" y="80" width="38" height="50" rx="3" fill="#f59e0b" opacity="0.8">
-                <title>09 Nov: &#8377;2.51</title>
-              </rect>
+              <!-- BAR VIEW GROUP -->
+              <g id="fee-bar-group">
+                <!-- Nov 9: ₹2.51 -->
+                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 11: ₹0.84 -->
+                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 12: ₹2.51 -->
+                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 13: ₹0.84 -->
+                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <!-- Nov 14: ₹0.47 -->
+                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" rx="3" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+              </g>
 
-              <!-- Nov 11: ₹0.84 -->
-              <rect x="210" y="112" width="38" height="18" rx="3" fill="#f59e0b" opacity="0.8">
-                <title>11 Nov: &#8377;0.84</title>
-              </rect>
+              <!-- SMOOTH LINE VIEW GROUP -->
+              <g id="fee-line-group" style="display:none;">
+                <path d="M 50,130 C 80,130 90,80 110,80 C 130,80 150,130 170,130 C 190,130 210,112 230,112 C 250,112 270,80 290,80 C 310,80 330,112 350,112 C 370,112 390,120 410,120 L 460,130 L 460,130 L 50,130 Z" fill="url(#feeLineAreaGrad)" />
+                <path d="M 50,130 C 80,130 90,80 110,80 C 130,80 150,130 170,130 C 190,130 210,112 230,112 C 250,112 270,80 290,80 C 310,80 330,112 350,112 C 370,112 390,120 410,120 L 460,130" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" />
+              </g>
 
-              <!-- Nov 12: ₹2.51 -->
-              <rect x="270" y="80" width="38" height="50" rx="3" fill="#f59e0b" opacity="0.8">
-                <title>12 Nov: &#8377;2.51</title>
-              </rect>
-
-              <!-- Nov 13: ₹0.84 -->
-              <rect x="330" y="112" width="38" height="18" rx="3" fill="#f59e0b" opacity="0.8">
-                <title>13 Nov: &#8377;0.84</title>
-              </rect>
-
-              <!-- Nov 14: ₹0.47 -->
-              <rect x="390" y="120" width="38" height="10" rx="3" fill="#f59e0b" opacity="0.8">
-                <title>14 Nov: &#8377;0.47</title>
-              </rect>
+              <!-- Dynamic Hover Crosshair & Dot -->
+              <line id="fee-crosshair" x1="0" y1="20" x2="0" y2="130" stroke="rgba(251,191,36,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
+              <circle id="fee-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#f59e0b" stroke-width="2.5" style="display:none;" />
             </svg>
           </div>
 
