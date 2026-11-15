@@ -692,6 +692,133 @@ function toggleBotAutoScan() {
   .catch(err => alert('Error toggling bot auto-scan: ' + err));
 }
 
+// ── TRADING EQUITY CURVE INTERACTIVE CROSSHAIR & TOOLTIP ──
+const equity7dPoints = [
+  { xPct: 6.0,  svgX: 60,  svgY: 60,  date: "08 Nov 2026, 12:00 AM", equityInr: "₹5,180.00", equityUsd: "$61.80", pnlInr: "₹0.00", pnlUsd: "$0.00", desc: "Starting Sandbox Capital", isGain: true },
+  { xPct: 22.0, svgX: 220, svgY: 165, date: "09 Nov 2026, 03:25 AM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "-₹308.38", pnlUsd: "-$3.68", desc: "P-ETH-1900 SL Triggered", isGain: false },
+  { xPct: 37.0, svgX: 370, svgY: 165, date: "10 Nov 2026, 11:30 PM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "₹0.00", pnlUsd: "$0.00", desc: "Market Scanning (Holding)", isGain: true },
+  { xPct: 52.0, svgX: 520, svgY: 118, date: "11 Nov 2026, 07:10 PM", equityInr: "₹4,976.37", equityUsd: "$59.38", pnlInr: "+₹104.75", pnlUsd: "+$1.25", desc: "C-ETH-2700 & C-BTC-89000 Win", isGain: true },
+  { xPct: 68.0, svgX: 680, svgY: 145, date: "12 Nov 2026, 07:51 PM", equityInr: "₹4,909.33", equityUsd: "$58.58", pnlInr: "-₹67.04", pnlUsd: "-$0.80", desc: "P-BTC-70000 Closed", isGain: false },
+  { xPct: 83.0, svgX: 830, svgY: 165, date: "13 Nov 2026, 08:53 AM", equityInr: "₹4,890.06", equityUsd: "$58.35", pnlInr: "-₹19.27", pnlUsd: "-$0.23", desc: "P-ETH-1800 Closed", isGain: false },
+  { xPct: 97.0, svgX: 970, svgY: 163, date: "14 Nov 2026, 11:51 AM", equityInr: "₹4,891.74", equityUsd: "$58.37", pnlInr: "+₹1.68", pnlUsd: "+$0.02", desc: "C-ETH-2450 Take-Profit Hit", isGain: true }
+];
+
+const equityAllPoints = [
+  { xPct: 6.0,  svgX: 60,  svgY: 60,  date: "30 Oct 2026, 05:51 AM", equityInr: "₹5,180.00", equityUsd: "$61.80", pnlInr: "-₹974.59", pnlUsd: "-$11.63", desc: "BTC & ETH Put Liquidation", isGain: false },
+  { xPct: 22.0, svgX: 220, svgY: 165, date: "03 Nov 2026, 11:04 AM", equityInr: "₹5,190.89", equityUsd: "$61.93", pnlInr: "+₹10.89", pnlUsd: "+$0.13", desc: "C-ETH-2650 Profit", isGain: true },
+  { xPct: 37.0, svgX: 370, svgY: 165, date: "09 Nov 2026, 03:25 AM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "-₹308.38", pnlUsd: "-$3.68", desc: "P-ETH-1900 SL Triggered", isGain: false },
+  { xPct: 52.0, svgX: 520, svgY: 118, date: "11 Nov 2026, 07:10 PM", equityInr: "₹4,976.37", equityUsd: "$59.38", pnlInr: "+₹104.75", pnlUsd: "+$1.25", desc: "C-ETH-2700 & C-BTC-89000 Win", isGain: true },
+  { xPct: 68.0, svgX: 680, svgY: 145, date: "12 Nov 2026, 07:51 PM", equityInr: "₹4,909.33", equityUsd: "$58.58", pnlInr: "-₹67.04", pnlUsd: "-$0.80", desc: "P-BTC-70000 Closed", isGain: false },
+  { xPct: 83.0, svgX: 830, svgY: 165, date: "13 Nov 2026, 08:53 AM", equityInr: "₹4,890.06", equityUsd: "$58.35", pnlInr: "-₹19.27", pnlUsd: "-$0.23", desc: "P-ETH-1800 Closed", isGain: false },
+  { xPct: 97.0, svgX: 970, svgY: 163, date: "14 Nov 2026, 11:51 AM", equityInr: "₹4,891.74", equityUsd: "$58.37", pnlInr: "+₹1.68", pnlUsd: "+$0.02", desc: "C-ETH-2450 Take-Profit Hit", isGain: true }
+];
+
+let activeAnalyticsTf = '7d';
+
+function handleEquityMouseMove(e) {
+  const container = document.getElementById('equity-chart-container');
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const mouseX = clientX - rect.left;
+  if (mouseX < 0 || mouseX > rect.width) return;
+
+  const svgX = (mouseX / rect.width) * 1000;
+  const pts = (activeAnalyticsTf === '7d') ? equity7dPoints : equityAllPoints;
+
+  // Find nearest data point along the curve
+  let closest = pts[0];
+  let minDiff = Math.abs(svgX - pts[0].svgX);
+  for (let i = 1; i < pts.length; i++) {
+    const diff = Math.abs(svgX - pts[i].svgX);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = pts[i];
+    }
+  }
+
+  // 1. Move vertical crosshair
+  const crosshair = document.getElementById('equity-crosshair');
+  if (crosshair) {
+    crosshair.setAttribute('x1', closest.svgX);
+    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.style.display = 'block';
+  }
+
+  // 2. Move snapping dot
+  const glow = document.getElementById('equity-cursor-dot-glow');
+  const dot = document.getElementById('equity-cursor-dot');
+  if (glow && dot) {
+    glow.setAttribute('cx', closest.svgX);
+    glow.setAttribute('cy', closest.svgY);
+    glow.style.display = 'block';
+    dot.setAttribute('cx', closest.svgX);
+    dot.setAttribute('cy', closest.svgY);
+    dot.style.display = 'block';
+  }
+
+  // 3. Update floating tooltip badge
+  const tooltip = document.getElementById('equity-tooltip');
+  if (tooltip) {
+    const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
+    
+    const dateEl = document.getElementById('eq-tt-date');
+    if (dateEl) dateEl.textContent = closest.date;
+    
+    const capitalEl = document.getElementById('eq-tt-capital');
+    if (capitalEl) {
+      capitalEl.textContent = isUSD ? closest.equityUsd : closest.equityInr;
+      capitalEl.style.color = closest.isGain ? '#34d399' : '#f87171';
+    }
+
+    const pnlEl = document.getElementById('eq-tt-pnl');
+    if (pnlEl) {
+      pnlEl.textContent = isUSD ? closest.pnlUsd : closest.pnlInr;
+      pnlEl.style.color = closest.isGain ? '#34d399' : (closest.pnlInr === '₹0.00' ? '#94a3b8' : '#f87171');
+    }
+
+    const descEl = document.getElementById('eq-tt-desc');
+    if (descEl) descEl.textContent = closest.desc;
+
+    // Convert SVG coords to relative container pixels
+    let targetLeft = (closest.svgX / 1000) * rect.width;
+    let targetTop = (closest.svgY / 240) * rect.height;
+
+    // Boundary protection so tooltip stays visible inside card
+    if (targetLeft < 110) targetLeft = 110;
+    if (targetLeft > rect.width - 110) targetLeft = rect.width - 110;
+
+    tooltip.style.left = targetLeft + 'px';
+    tooltip.style.top = targetTop + 'px';
+    tooltip.style.display = 'block';
+  }
+
+  // 4. Dynamically update header display badge
+  const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
+  const headerDate = document.getElementById('equity-header-date');
+  const headerVal = document.getElementById('equity-header-val');
+  if (headerDate) headerDate.textContent = closest.date;
+  if (headerVal) headerVal.textContent = isUSD ? closest.equityUsd : closest.equityInr;
+}
+
+function handleEquityMouseLeave() {
+  const crosshair = document.getElementById('equity-crosshair');
+  const glow = document.getElementById('equity-cursor-dot-glow');
+  const dot = document.getElementById('equity-cursor-dot');
+  const tooltip = document.getElementById('equity-tooltip');
+  if (crosshair) crosshair.style.display = 'none';
+  if (glow) glow.style.display = 'none';
+  if (dot) dot.style.display = 'none';
+  if (tooltip) tooltip.style.display = 'none';
+
+  // Restore latest default header
+  const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
+  const headerDate = document.getElementById('equity-header-date');
+  const headerVal = document.getElementById('equity-header-val');
+  if (headerDate) headerDate.textContent = '14 Nov 2026, 11:51 AM';
+  if (headerVal) headerVal.textContent = isUSD ? '$58.37 USD' : '₹4.89K';
+}
+
 function openPnlAnalytics() {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const analyticsTab = document.querySelector('.nav-tab[data-tab="pnl-analytics"]');
@@ -744,6 +871,7 @@ function switchAnalyticsCurrency(curr) {
 }
 
 function switchAnalyticsTimeframe(tf) {
+  activeAnalyticsTf = tf;
   document.querySelectorAll('.timeframe-pill').forEach(b => {
     b.style.background = 'transparent';
     b.style.borderColor = 'transparent';
@@ -1546,19 +1674,35 @@ def generate_pnl_analytics_html(delta_orders_history):
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:14px; font-weight:700; color:#cbd5e1; letter-spacing:0.04em;">TRADING EQUITY</span>
-            <span style="font-size:12px; color:#64748b; cursor:help;" title="Total account equity curve including cash balance and settled options P&amp;L">&#9432;</span>
+            <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover across curve to inspect real-time capital &amp; PnL at each point">&#9432;</span>
+            <span style="font-size:10px; color:#a855f7; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); padding:2px 7px; border-radius:4px; font-family:var(--font-mono);">INTERACTIVE CROSSHAIR</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px; font-family:var(--font-mono); font-size:12px;">
-            <span style="color:#94a3b8;">Friday 13 Nov 12:30 AM</span>
+            <span id="equity-header-date" style="color:#94a3b8;">14 Nov 2026, 11:51 AM</span>
             <span style="color:#ffffff; font-weight:700; background:#121826; border:1px solid #232d42; padding:3px 10px; border-radius:6px;">
-              Equity: <b class="analytics-currency-val" data-val-inr="&#8377;4.87K" data-val-usd="$58.12 USD" style="color:#c084fc;">&#8377;4.87K</b>
+              Equity: <b id="equity-header-val" class="analytics-currency-val" data-val-inr="&#8377;4.89K" data-val-usd="$58.37 USD" style="color:#c084fc;">&#8377;4.89K</b>
             </span>
           </div>
         </div>
 
-        <!-- SVG Equity Curve (Responsive SVG) -->
-        <div style="position:relative; width:100%; height:260px; overflow:hidden;">
-          <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%; height:100%; display:block;">
+        <!-- SVG Equity Curve (Responsive Interactive SVG Container) -->
+        <div id="equity-chart-container" onmousemove="handleEquityMouseMove(event)" onmouseleave="handleEquityMouseLeave()" ontouchmove="handleEquityMouseMove(event.touches[0])" ontouchend="handleEquityMouseLeave()" style="position:relative; width:100%; height:260px; overflow:visible; cursor:crosshair; user-select:none;">
+          
+          <!-- Floating Crosshair Tooltip Badge -->
+          <div id="equity-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:rgba(9,13,22,0.95); border:1px solid #a855f7; border-radius:10px; padding:10px 14px; box-shadow:0 8px 30px rgba(0,0,0,0.85), 0 0 16px rgba(168,85,247,0.35); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(8px);">
+            <div id="eq-tt-date" style="font-size:11px; color:#94a3b8; font-weight:600; margin-bottom:5px;">09 Nov 2026, 03:25 AM</div>
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:14px;">
+              <span style="font-size:11px; color:#cbd5e1; font-weight:600;">Capital / Equity:</span>
+              <span id="eq-tt-capital" style="font-size:16px; font-weight:800; color:#34d399;">&#8377;4,871.62</span>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:5px; font-size:11px;">
+              <span style="color:#64748b;">Daily Settled PnL:</span>
+              <span id="eq-tt-pnl" style="font-weight:700; color:#f87171;">-&#8377;308.38</span>
+            </div>
+            <div id="eq-tt-desc" style="font-size:10px; color:#c084fc; margin-top:5px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px; font-weight:500;">P-ETH-1900 Closed</div>
+          </div>
+
+          <svg id="equity-svg" viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
             <defs>
               <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#a855f7" stop-opacity="0.32" />
@@ -1594,12 +1738,20 @@ def generate_pnl_analytics_html(delta_orders_history):
             <path d="M 60,60 C 130,60 170,165 220,165 C 290,165 330,165 370,165 C 440,165 470,118 520,118 C 590,118 630,145 680,145 C 750,145 780,165 830,165 C 880,165 920,163 970,163" fill="none" stroke="#a855f7" stroke-width="2.6" stroke-linecap="round" filter="url(#glowLine)" />
 
             <!-- Points on curve -->
-            <circle cx="60" cy="60" r="4" fill="#a855f7" stroke="#080b12" stroke-width="2" />
-            <circle cx="220" cy="165" r="4" fill="#ef4444" stroke="#080b12" stroke-width="2" />
-            <circle cx="520" cy="118" r="4" fill="#10b981" stroke="#080b12" stroke-width="2" />
-            <circle cx="680" cy="145" r="4" fill="#ef4444" stroke="#080b12" stroke-width="2" />
-            <circle cx="830" cy="165" r="4" fill="#ef4444" stroke="#080b12" stroke-width="2" />
-            <circle cx="970" cy="163" r="5" fill="#34d399" stroke="#ffffff" stroke-width="2" />
+            <circle cx="60" cy="60" r="4.5" fill="#a855f7" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
+            <circle cx="220" cy="165" r="4.5" fill="#ef4444" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
+            <circle cx="370" cy="165" r="4.5" fill="#64748b" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
+            <circle cx="520" cy="118" r="4.5" fill="#10b981" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
+            <circle cx="680" cy="145" r="4.5" fill="#ef4444" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
+            <circle cx="830" cy="165" r="4.5" fill="#ef4444" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
+            <circle cx="970" cy="163" r="5.5" fill="#34d399" stroke="#ffffff" stroke-width="2" style="cursor:pointer;" />
+
+            <!-- Dynamic Interactive Crosshair Line -->
+            <line id="equity-crosshair" x1="0" y1="20" x2="0" y2="225" stroke="rgba(192, 132, 252, 0.65)" stroke-width="1.5" stroke-dasharray="4,4" style="display:none;" />
+
+            <!-- Dynamic Snapping Hover Marker Dot with Glow -->
+            <circle id="equity-cursor-dot-glow" cx="0" cy="0" r="11" fill="rgba(168, 85, 247, 0.35)" style="display:none;" />
+            <circle id="equity-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#c084fc" stroke-width="2.5" style="display:none;" />
           </svg>
         </div>
 
