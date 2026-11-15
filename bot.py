@@ -903,50 +903,97 @@ function switchFeeView(mode) {
   }
 }
 
-// Realized PNL Mouse Move & Leave
+// ── INTERACTIVE CONTROLS FOR REALIZED PNL, VOLUME & FEES CHARTS ──
+const rpnlDataPoints = [
+  { svgX: 109, svgY: 148, barId: 'rpnl-bar-0', bx: 90,  bw: 38, by: 80, bh: 68, date: "Mon 09 Nov 2026", inr: "-₹305.03", usd: "-$3.64 USD", trade: "P-ETH-1900 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
+  { svgX: 229, svgY: 44,  barId: 'rpnl-bar-2', bx: 210, bw: 38, by: 44, bh: 36, date: "Wed 11 Nov 2026", inr: "+₹105.59", usd: "+$1.26 USD", trade: "C-ETH-2700 & C-BTC-89000 Win", isWin: true, glowCol: "rgba(16, 185, 129, 0.85)" },
+  { svgX: 289, svgY: 102, barId: 'rpnl-bar-3', bx: 270, bw: 38, by: 80, bh: 22, date: "Thu 12 Nov 2026", inr: "-₹65.36",  usd: "-$0.78 USD", trade: "P-BTC-70000 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
+  { svgX: 349, svgY: 90,  barId: 'rpnl-bar-4', bx: 330, bw: 38, by: 80, bh: 10, date: "Fri 13 Nov 2026", inr: "-₹19.27",  usd: "-$0.23 USD", trade: "P-ETH-1800 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
+  { svgX: 409, svgY: 77,  barId: 'rpnl-bar-5', bx: 390, bw: 38, by: 77, bh: 6,  date: "Sat 14 Nov 2026", inr: "+₹1.68",   usd: "+$0.02 USD", trade: "C-ETH-2450 Take-Profit Hit", isWin: true, glowCol: "rgba(16, 185, 129, 0.85)" }
+];
+
+const volDataPoints = [
+  { svgX: 109, svgY: 85,  barId: 'vol-bar-0', bx: 90,  bw: 38, by: 85,  bh: 75, date: "Mon 09 Nov 2026", inr: "₹65,200", usd: "$778.04 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
+  { svgX: 229, svgY: 65,  barId: 'vol-bar-2', bx: 210, bw: 38, by: 65,  bh: 95, date: "Wed 11 Nov 2026", inr: "₹80,500", usd: "$960.62 USD", desc: "2 Option Contracts Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
+  { svgX: 289, svgY: 115, barId: 'vol-bar-3', bx: 270, bw: 38, by: 115, bh: 45, date: "Thu 12 Nov 2026", inr: "₹35,100", usd: "$418.85 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
+  { svgX: 349, svgY: 138, barId: 'vol-bar-4', bx: 330, bw: 38, by: 138, bh: 22, date: "Fri 13 Nov 2026", inr: "₹18,800", usd: "$224.34 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
+  { svgX: 409, svgY: 152, barId: 'vol-bar-5', bx: 390, bw: 38, by: 152, bh: 10, date: "Sat 14 Nov 2026", inr: "₹4,200",  usd: "$50.12 USD",  desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" }
+];
+
+const feeDataPoints = [
+  { svgX: 109, svgY: 80,  barId: 'fee-bar-0', bx: 90,  bw: 38, by: 80,  bh: 50, date: "Mon 09 Nov 2026", inr: "₹2.51", usd: "$0.03 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
+  { svgX: 229, svgY: 112, barId: 'fee-bar-2', bx: 210, bw: 38, by: 112, bh: 18, date: "Wed 11 Nov 2026", inr: "₹0.84", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
+  { svgX: 289, svgY: 80,  barId: 'fee-bar-3', bx: 270, bw: 38, by: 80,  bh: 50, date: "Thu 12 Nov 2026", inr: "₹2.51", usd: "$0.03 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
+  { svgX: 349, svgY: 112, barId: 'fee-bar-4', bx: 330, bw: 38, by: 112, bh: 18, date: "Fri 13 Nov 2026", inr: "₹0.84", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
+  { svgX: 409, svgY: 120, barId: 'fee-bar-5', bx: 390, bw: 38, by: 120, bh: 10, date: "Sat 14 Nov 2026", inr: "₹0.47", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" }
+];
+
+// Realized PNL Mouse Move & Leave: ONLY show data when cursor touches the bar
 function handleRpnlMouseMove(e) {
   const container = document.getElementById('rpnl-chart-container');
   if (!container) return;
   const rect = container.getBoundingClientRect();
   const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
   const mouseX = clientX - rect.left;
-  if (mouseX < 0 || mouseX > rect.width) return;
+  const mouseY = clientY - rect.top;
+  if (mouseX < 0 || mouseX > rect.width || mouseY < 0 || mouseY > rect.height) {
+    handleRpnlMouseLeave();
+    return;
+  }
 
   const svgX = (mouseX / rect.width) * 500;
-  let closest = rpnlDataPoints[0];
-  let minDiff = Math.abs(svgX - rpnlDataPoints[0].svgX);
-  for (let i = 1; i < rpnlDataPoints.length; i++) {
-    const diff = Math.abs(svgX - rpnlDataPoints[i].svgX);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = rpnlDataPoints[i];
+  const svgY = (mouseY / rect.height) * 180;
+
+  // STRICT HIT TEST: ONLY trigger when cursor directly touches the bar
+  let touchedBar = null;
+  for (let i = 0; i < rpnlDataPoints.length; i++) {
+    const p = rpnlDataPoints[i];
+    if (svgX >= (p.bx - 2) && svgX <= (p.bx + p.bw + 2) && svgY >= (p.by - 4) && svgY <= (p.by + p.bh + 4)) {
+      touchedBar = p;
+      break;
     }
+  }
+
+  // IF NOT TOUCHING ANY BAR, HIDE COMPLETELY!
+  if (!touchedBar) {
+    handleRpnlMouseLeave();
+    return;
   }
 
   // Crosshair
   const crosshair = document.getElementById('rpnl-crosshair');
   if (crosshair) {
-    crosshair.setAttribute('x1', closest.svgX);
-    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.setAttribute('x1', touchedBar.svgX);
+    crosshair.setAttribute('x2', touchedBar.svgX);
     crosshair.style.display = 'block';
   }
 
   // Dot
   const dot = document.getElementById('rpnl-cursor-dot');
   if (dot) {
-    dot.setAttribute('cx', closest.svgX);
-    dot.setAttribute('cy', closest.svgY);
+    dot.setAttribute('cx', touchedBar.svgX);
+    dot.setAttribute('cy', touchedBar.svgY);
     dot.style.display = 'block';
   }
 
-  // Highlight active bar
+  // POP the touched bar cleanly without white border
   rpnlDataPoints.forEach(p => {
     if (p.barId) {
       const b = document.getElementById(p.barId);
       if (b) {
-        b.style.opacity = (p === closest) ? '1' : '0.65';
-        b.style.stroke = (p === closest) ? '#ffffff' : 'none';
-        b.style.strokeWidth = (p === closest) ? '2' : '0';
+        if (p === touchedBar) {
+          b.style.opacity = '1';
+          b.style.stroke = 'none';
+          b.style.filter = 'brightness(1.3) drop-shadow(0 0 12px ' + p.glowCol + ')';
+          b.style.transform = 'scale(1.03)';
+          b.style.transformOrigin = (p.bx + p.bw / 2) + 'px 80px';
+        } else {
+          b.style.opacity = '0.45';
+          b.style.stroke = 'none';
+          b.style.filter = 'none';
+          b.style.transform = 'none';
+        }
       }
     }
   });
@@ -955,16 +1002,16 @@ function handleRpnlMouseMove(e) {
   const tooltip = document.getElementById('rpnl-tooltip');
   if (tooltip) {
     const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
-    document.getElementById('rpnl-tt-date').textContent = closest.date;
+    document.getElementById('rpnl-tt-date').textContent = touchedBar.date;
     const valEl = document.getElementById('rpnl-tt-val');
-    valEl.textContent = isUSD ? closest.usd : closest.inr;
-    valEl.style.color = closest.isWin ? '#34d399' : (closest.inr === '₹0.00' ? '#94a3b8' : '#f87171');
-    document.getElementById('rpnl-tt-trade').textContent = closest.trade;
+    valEl.textContent = isUSD ? touchedBar.usd : touchedBar.inr;
+    valEl.style.color = touchedBar.isWin ? '#34d399' : (touchedBar.inr === '₹0.00' ? '#94a3b8' : '#f87171');
+    document.getElementById('rpnl-tt-trade').textContent = touchedBar.trade;
 
-    let targetLeft = (closest.svgX / 500) * rect.width;
-    let targetTop = (closest.svgY / 180) * rect.height;
-    if (targetLeft < 90) targetLeft = 90;
-    if (targetLeft > rect.width - 90) targetLeft = rect.width - 90;
+    let targetLeft = (touchedBar.svgX / 500) * rect.width;
+    let targetTop = (touchedBar.svgY / 180) * rect.height;
+    if (targetLeft < 95) targetLeft = 95;
+    if (targetLeft > rect.width - 95) targetLeft = rect.width - 95;
 
     tooltip.style.left = targetLeft + 'px';
     tooltip.style.top = targetTop + 'px';
@@ -983,44 +1030,58 @@ function handleRpnlMouseLeave() {
     if (p.barId) {
       const b = document.getElementById(p.barId);
       if (b) {
-        b.style.opacity = '1';
+        b.style.opacity = '0.9';
         b.style.stroke = 'none';
+        b.style.filter = 'none';
+        b.style.transform = 'none';
       }
     }
   });
 }
 
-// Volume Mouse Move & Leave
+// Volume Mouse Move & Leave: ONLY show data when cursor touches the bar
 function handleVolMouseMove(e) {
   const container = document.getElementById('vol-chart-container');
   if (!container) return;
   const rect = container.getBoundingClientRect();
   const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
   const mouseX = clientX - rect.left;
-  if (mouseX < 0 || mouseX > rect.width) return;
+  const mouseY = clientY - rect.top;
+  if (mouseX < 0 || mouseX > rect.width || mouseY < 0 || mouseY > rect.height) {
+    handleVolMouseLeave();
+    return;
+  }
 
   const svgX = (mouseX / rect.width) * 500;
-  let closest = volDataPoints[0];
-  let minDiff = Math.abs(svgX - volDataPoints[0].svgX);
-  for (let i = 1; i < volDataPoints.length; i++) {
-    const diff = Math.abs(svgX - volDataPoints[i].svgX);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = volDataPoints[i];
+  const svgY = (mouseY / rect.height) * 180;
+
+  // STRICT HIT TEST: ONLY trigger when cursor directly touches the bar
+  let touchedBar = null;
+  for (let i = 0; i < volDataPoints.length; i++) {
+    const p = volDataPoints[i];
+    if (svgX >= (p.bx - 2) && svgX <= (p.bx + p.bw + 2) && svgY >= (p.by - 4) && svgY <= (p.by + p.bh + 4)) {
+      touchedBar = p;
+      break;
     }
+  }
+
+  if (!touchedBar) {
+    handleVolMouseLeave();
+    return;
   }
 
   const crosshair = document.getElementById('vol-crosshair');
   if (crosshair) {
-    crosshair.setAttribute('x1', closest.svgX);
-    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.setAttribute('x1', touchedBar.svgX);
+    crosshair.setAttribute('x2', touchedBar.svgX);
     crosshair.style.display = 'block';
   }
 
   const dot = document.getElementById('vol-cursor-dot');
   if (dot) {
-    dot.setAttribute('cx', closest.svgX);
-    dot.setAttribute('cy', closest.svgY);
+    dot.setAttribute('cx', touchedBar.svgX);
+    dot.setAttribute('cy', touchedBar.svgY);
     dot.style.display = 'block';
   }
 
@@ -1028,9 +1089,18 @@ function handleVolMouseMove(e) {
     if (p.barId) {
       const b = document.getElementById(p.barId);
       if (b) {
-        b.style.opacity = (p === closest) ? '1' : '0.65';
-        b.style.stroke = (p === closest) ? '#ffffff' : 'none';
-        b.style.strokeWidth = (p === closest) ? '2' : '0';
+        if (p === touchedBar) {
+          b.style.opacity = '1';
+          b.style.stroke = 'none';
+          b.style.filter = 'brightness(1.3) drop-shadow(0 0 12px ' + p.glowCol + ')';
+          b.style.transform = 'scale(1.03)';
+          b.style.transformOrigin = (p.bx + p.bw / 2) + 'px 160px';
+        } else {
+          b.style.opacity = '0.45';
+          b.style.stroke = 'none';
+          b.style.filter = 'none';
+          b.style.transform = 'none';
+        }
       }
     }
   });
@@ -1038,14 +1108,14 @@ function handleVolMouseMove(e) {
   const tooltip = document.getElementById('vol-tooltip');
   if (tooltip) {
     const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
-    document.getElementById('vol-tt-date').textContent = closest.date;
-    document.getElementById('vol-tt-val').textContent = isUSD ? closest.usd : closest.inr;
-    document.getElementById('vol-tt-desc').textContent = closest.desc;
+    document.getElementById('vol-tt-date').textContent = touchedBar.date;
+    document.getElementById('vol-tt-val').textContent = isUSD ? touchedBar.usd : touchedBar.inr;
+    document.getElementById('vol-tt-desc').textContent = touchedBar.desc;
 
-    let targetLeft = (closest.svgX / 500) * rect.width;
-    let targetTop = (closest.svgY / 180) * rect.height;
-    if (targetLeft < 90) targetLeft = 90;
-    if (targetLeft > rect.width - 90) targetLeft = rect.width - 90;
+    let targetLeft = (touchedBar.svgX / 500) * rect.width;
+    let targetTop = (touchedBar.svgY / 180) * rect.height;
+    if (targetLeft < 95) targetLeft = 95;
+    if (targetLeft > rect.width - 95) targetLeft = rect.width - 95;
 
     tooltip.style.left = targetLeft + 'px';
     tooltip.style.top = targetTop + 'px';
@@ -1064,44 +1134,58 @@ function handleVolMouseLeave() {
     if (p.barId) {
       const b = document.getElementById(p.barId);
       if (b) {
-        b.style.opacity = '1';
+        b.style.opacity = '0.85';
         b.style.stroke = 'none';
+        b.style.filter = 'none';
+        b.style.transform = 'none';
       }
     }
   });
 }
 
-// Fees Mouse Move & Leave
+// Fees Mouse Move & Leave: ONLY show data when cursor touches the bar
 function handleFeeMouseMove(e) {
   const container = document.getElementById('fee-chart-container');
   if (!container) return;
   const rect = container.getBoundingClientRect();
   const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
   const mouseX = clientX - rect.left;
-  if (mouseX < 0 || mouseX > rect.width) return;
+  const mouseY = clientY - rect.top;
+  if (mouseX < 0 || mouseX > rect.width || mouseY < 0 || mouseY > rect.height) {
+    handleFeeMouseLeave();
+    return;
+  }
 
   const svgX = (mouseX / rect.width) * 500;
-  let closest = feeDataPoints[0];
-  let minDiff = Math.abs(svgX - feeDataPoints[0].svgX);
-  for (let i = 1; i < feeDataPoints.length; i++) {
-    const diff = Math.abs(svgX - feeDataPoints[i].svgX);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = feeDataPoints[i];
+  const svgY = (mouseY / rect.height) * 150;
+
+  // STRICT HIT TEST: ONLY trigger when cursor directly touches the bar
+  let touchedBar = null;
+  for (let i = 0; i < feeDataPoints.length; i++) {
+    const p = feeDataPoints[i];
+    if (svgX >= (p.bx - 2) && svgX <= (p.bx + p.bw + 2) && svgY >= (p.by - 4) && svgY <= (p.by + p.bh + 4)) {
+      touchedBar = p;
+      break;
     }
+  }
+
+  if (!touchedBar) {
+    handleFeeMouseLeave();
+    return;
   }
 
   const crosshair = document.getElementById('fee-crosshair');
   if (crosshair) {
-    crosshair.setAttribute('x1', closest.svgX);
-    crosshair.setAttribute('x2', closest.svgX);
+    crosshair.setAttribute('x1', touchedBar.svgX);
+    crosshair.setAttribute('x2', touchedBar.svgX);
     crosshair.style.display = 'block';
   }
 
   const dot = document.getElementById('fee-cursor-dot');
   if (dot) {
-    dot.setAttribute('cx', closest.svgX);
-    dot.setAttribute('cy', closest.svgY);
+    dot.setAttribute('cx', touchedBar.svgX);
+    dot.setAttribute('cy', touchedBar.svgY);
     dot.style.display = 'block';
   }
 
@@ -1109,9 +1193,18 @@ function handleFeeMouseMove(e) {
     if (p.barId) {
       const b = document.getElementById(p.barId);
       if (b) {
-        b.style.opacity = (p === closest) ? '1' : '0.65';
-        b.style.stroke = (p === closest) ? '#ffffff' : 'none';
-        b.style.strokeWidth = (p === closest) ? '2' : '0';
+        if (p === touchedBar) {
+          b.style.opacity = '1';
+          b.style.stroke = 'none';
+          b.style.filter = 'brightness(1.3) drop-shadow(0 0 12px ' + p.glowCol + ')';
+          b.style.transform = 'scale(1.03)';
+          b.style.transformOrigin = (p.bx + p.bw / 2) + 'px 130px';
+        } else {
+          b.style.opacity = '0.45';
+          b.style.stroke = 'none';
+          b.style.filter = 'none';
+          b.style.transform = 'none';
+        }
       }
     }
   });
@@ -1119,13 +1212,13 @@ function handleFeeMouseMove(e) {
   const tooltip = document.getElementById('fee-tooltip');
   if (tooltip) {
     const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
-    document.getElementById('fee-tt-date').textContent = closest.date;
-    document.getElementById('fee-tt-val').textContent = isUSD ? closest.usd : closest.inr;
+    document.getElementById('fee-tt-date').textContent = touchedBar.date;
+    document.getElementById('fee-tt-val').textContent = isUSD ? touchedBar.usd : touchedBar.inr;
 
-    let targetLeft = (closest.svgX / 500) * rect.width;
-    let targetTop = (closest.svgY / 150) * rect.height;
-    if (targetLeft < 80) targetLeft = 80;
-    if (targetLeft > rect.width - 80) targetLeft = rect.width - 80;
+    let targetLeft = (touchedBar.svgX / 500) * rect.width;
+    let targetTop = (touchedBar.svgY / 150) * rect.height;
+    if (targetLeft < 85) targetLeft = 85;
+    if (targetLeft > rect.width - 85) targetLeft = rect.width - 85;
 
     tooltip.style.left = targetLeft + 'px';
     tooltip.style.top = targetTop + 'px';
@@ -1144,8 +1237,10 @@ function handleFeeMouseLeave() {
     if (p.barId) {
       const b = document.getElementById(p.barId);
       if (b) {
-        b.style.opacity = '1';
+        b.style.opacity = '0.85';
         b.style.stroke = 'none';
+        b.style.filter = 'none';
+        b.style.transform = 'none';
       }
     }
   });
@@ -2303,14 +2398,17 @@ def generate_pnl_analytics_html(delta_orders_history):
           <!-- Interactive Realized PnL Container -->
           <div id="rpnl-chart-container" onmousemove="handleRpnlMouseMove(event)" onmouseleave="handleRpnlMouseLeave()" ontouchmove="handleRpnlMouseMove(event.touches[0])" ontouchend="handleRpnlMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
             
-            <!-- Floating Realized PnL Tooltip Badge (Exact Delta Exchange Style) -->
-            <div id="rpnl-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #a855f7; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
-              <div id="rpnl-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Mon 09 Nov</div>
-              <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
-                <span style="font-size:10px; color:#cbd5e1;">Realized:</span>
-                <span id="rpnl-tt-val" style="font-size:15px; font-weight:800; color:#f87171;">-&#8377;305.03</span>
+            <!-- Floating Realized PnL Tooltip Badge (Ultra Premium Glassmorphism) -->
+            <div id="rpnl-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:linear-gradient(135deg, rgba(14,20,32,0.97) 0%, rgba(8,11,18,0.98) 100%); border:1px solid rgba(168,85,247,0.45); border-radius:10px; padding:10px 14px; box-shadow:0 14px 36px rgba(0,0,0,0.9), 0 0 20px rgba(168,85,247,0.25), inset 0 1px 0 rgba(255,255,255,0.12); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(10px); min-width:160px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
+                <span id="rpnl-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1; letter-spacing:0.02em;">Mon 09 Nov</span>
+                <span style="font-size:9px; font-weight:700; color:#a855f7; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:2px 6px; border-radius:4px;">SETTLED</span>
               </div>
-              <div id="rpnl-tt-trade" style="font-size:10px; color:#c084fc; margin-top:3px; border-top:1px solid rgba(255,255,255,0.08); padding-top:3px;">P-ETH-1900 Closed</div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Realized PnL:</span>
+                <span id="rpnl-tt-val" style="font-size:16px; font-weight:800; color:#f87171;">-&#8377;305.03</span>
+              </div>
+              <div id="rpnl-tt-trade" style="font-size:10px; color:#c084fc; margin-top:5px; border-top:1px solid rgba(255,255,255,0.08); padding-top:4px; font-weight:500;">P-ETH-1900 Closed</div>
             </div>
 
             <svg id="rpnl-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
@@ -2374,14 +2472,17 @@ def generate_pnl_analytics_html(delta_orders_history):
           <!-- Interactive Volume Chart Container -->
           <div id="vol-chart-container" onmousemove="handleVolMouseMove(event)" onmouseleave="handleVolMouseLeave()" ontouchmove="handleVolMouseMove(event.touches[0])" ontouchend="handleVolMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
             
-            <!-- Floating Volume Tooltip Badge -->
-            <div id="vol-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #3b82f6; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
-              <div id="vol-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Wed 11 Nov</div>
-              <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
-                <span style="font-size:10px; color:#cbd5e1;">Volume:</span>
-                <span id="vol-tt-val" style="font-size:15px; font-weight:800; color:#60a5fa;">&#8377;80,500</span>
+            <!-- Floating Volume Tooltip Badge (Ultra Premium Glassmorphism) -->
+            <div id="vol-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:linear-gradient(135deg, rgba(14,20,32,0.97) 0%, rgba(8,11,18,0.98) 100%); border:1px solid rgba(59,130,246,0.45); border-radius:10px; padding:10px 14px; box-shadow:0 14px 36px rgba(0,0,0,0.9), 0 0 20px rgba(59,130,246,0.25), inset 0 1px 0 rgba(255,255,255,0.12); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(10px); min-width:160px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
+                <span id="vol-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1; letter-spacing:0.02em;">Wed 11 Nov</span>
+                <span style="font-size:9px; font-weight:700; color:#60a5fa; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); padding:2px 6px; border-radius:4px;">VOLUME</span>
               </div>
-              <div id="vol-tt-desc" style="font-size:10px; color:#93c5fd; margin-top:3px; border-top:1px solid rgba(255,255,255,0.08); padding-top:3px;">2 Contracts Traded</div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Notional:</span>
+                <span id="vol-tt-val" style="font-size:16px; font-weight:800; color:#60a5fa;">&#8377;80,500</span>
+              </div>
+              <div id="vol-tt-desc" style="font-size:10px; color:#93c5fd; margin-top:5px; border-top:1px solid rgba(255,255,255,0.08); padding-top:4px; font-weight:500;">2 Contracts Traded</div>
             </div>
 
             <svg id="vol-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
@@ -2441,12 +2542,15 @@ def generate_pnl_analytics_html(delta_orders_history):
           <!-- Interactive Fees Chart Container -->
           <div id="fee-chart-container" onmousemove="handleFeeMouseMove(event)" onmouseleave="handleFeeMouseLeave()" ontouchmove="handleFeeMouseMove(event.touches[0])" ontouchend="handleFeeMouseLeave()" style="position:relative; width:100%; height:160px; cursor:crosshair;">
             
-            <!-- Floating Fees Tooltip Badge -->
-            <div id="fee-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #f59e0b; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
-              <div id="fee-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Mon 09 Nov</div>
-              <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
-                <span style="font-size:10px; color:#cbd5e1;">Fees:</span>
-                <span id="fee-tt-val" style="font-size:15px; font-weight:800; color:#fbbf24;">&#8377;2.51</span>
+            <!-- Floating Fees Tooltip Badge (Ultra Premium Glassmorphism) -->
+            <div id="fee-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:linear-gradient(135deg, rgba(14,20,32,0.97) 0%, rgba(8,11,18,0.98) 100%); border:1px solid rgba(245,158,11,0.45); border-radius:10px; padding:10px 14px; box-shadow:0 14px 36px rgba(0,0,0,0.9), 0 0 20px rgba(245,158,11,0.25), inset 0 1px 0 rgba(255,255,255,0.12); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(10px); min-width:150px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
+                <span id="fee-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1; letter-spacing:0.02em;">Mon 09 Nov</span>
+                <span style="font-size:9px; font-weight:700; color:#fbbf24; background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); padding:2px 6px; border-radius:4px;">FEES</span>
+              </div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Exchange Fee:</span>
+                <span id="fee-tt-val" style="font-size:16px; font-weight:800; color:#fbbf24;">&#8377;2.51</span>
               </div>
             </div>
 
