@@ -900,6 +900,11 @@ const feeDataPoints = [
   { svgX: 409, svgY: 120, barId: 'fee-bar-5', bx: 390, bw: 38, by: 120, bh: 10, date: "Sat 14 Nov 2026", inr: "₹0.47", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" }
 ];
 
+// Active hovered bar tracker to eliminate any frame jerk or re-flow
+let activeRpnlBarId = null;
+let activeVolBarId = null;
+let activeFeeBarId = null;
+
 // Realized PNL Mouse Move & Leave: ONLY show data when cursor touches the bar
 function handleRpnlMouseMove(e) {
   const container = document.getElementById('rpnl-chart-container');
@@ -949,26 +954,24 @@ function handleRpnlMouseMove(e) {
     dot.style.display = 'block';
   }
 
-  // POP the touched bar cleanly without white border
-  rpnlDataPoints.forEach(p => {
-    if (p.barId) {
-      const b = document.getElementById(p.barId);
-      if (b) {
-        if (p === touchedBar) {
-          b.style.opacity = '1';
-          b.style.stroke = 'none';
-          b.style.filter = 'brightness(1.3) drop-shadow(0 0 12px ' + p.glowCol + ')';
-          b.style.transform = 'scale(1.03)';
-          b.style.transformOrigin = (p.bx + p.bw / 2) + 'px 80px';
-        } else {
-          b.style.opacity = '0.45';
-          b.style.stroke = 'none';
-          b.style.filter = 'none';
-          b.style.transform = 'none';
+  // SUBTLE POP & SUBTLE DIM (No heavy glow, No scale transform jerk)
+  if (activeRpnlBarId !== touchedBar.barId) {
+    activeRpnlBarId = touchedBar.barId;
+    rpnlDataPoints.forEach(p => {
+      if (p.barId) {
+        const b = document.getElementById(p.barId);
+        if (b) {
+          if (p === touchedBar) {
+            b.style.opacity = '1';
+            b.style.filter = 'brightness(1.18)';
+          } else {
+            b.style.opacity = '0.72';
+            b.style.filter = 'none';
+          }
         }
       }
-    }
-  });
+    });
+  }
 
   // Tooltip
   const tooltip = document.getElementById('rpnl-tooltip');
@@ -998,17 +1001,18 @@ function handleRpnlMouseLeave() {
   if (crosshair) crosshair.style.display = 'none';
   if (dot) dot.style.display = 'none';
   if (tooltip) tooltip.style.display = 'none';
-  rpnlDataPoints.forEach(p => {
-    if (p.barId) {
-      const b = document.getElementById(p.barId);
-      if (b) {
-        b.style.opacity = '0.9';
-        b.style.stroke = 'none';
-        b.style.filter = 'none';
-        b.style.transform = 'none';
+  if (activeRpnlBarId !== null) {
+    activeRpnlBarId = null;
+    rpnlDataPoints.forEach(p => {
+      if (p.barId) {
+        const b = document.getElementById(p.barId);
+        if (b) {
+          b.style.opacity = '0.88';
+          b.style.filter = 'none';
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 // Volume Mouse Move & Leave: ONLY show data when cursor touches the bar
@@ -1057,25 +1061,24 @@ function handleVolMouseMove(e) {
     dot.style.display = 'block';
   }
 
-  volDataPoints.forEach(p => {
-    if (p.barId) {
-      const b = document.getElementById(p.barId);
-      if (b) {
-        if (p === touchedBar) {
-          b.style.opacity = '1';
-          b.style.stroke = 'none';
-          b.style.filter = 'brightness(1.3) drop-shadow(0 0 12px ' + p.glowCol + ')';
-          b.style.transform = 'scale(1.03)';
-          b.style.transformOrigin = (p.bx + p.bw / 2) + 'px 160px';
-        } else {
-          b.style.opacity = '0.45';
-          b.style.stroke = 'none';
-          b.style.filter = 'none';
-          b.style.transform = 'none';
+  // SUBTLE POP & SUBTLE DIM (No heavy glow, No scale transform jerk)
+  if (activeVolBarId !== touchedBar.barId) {
+    activeVolBarId = touchedBar.barId;
+    volDataPoints.forEach(p => {
+      if (p.barId) {
+        const b = document.getElementById(p.barId);
+        if (b) {
+          if (p === touchedBar) {
+            b.style.opacity = '1';
+            b.style.filter = 'brightness(1.18)';
+          } else {
+            b.style.opacity = '0.72';
+            b.style.filter = 'none';
+          }
         }
       }
-    }
-  });
+    });
+  }
 
   const tooltip = document.getElementById('vol-tooltip');
   if (tooltip) {
@@ -1102,17 +1105,18 @@ function handleVolMouseLeave() {
   if (crosshair) crosshair.style.display = 'none';
   if (dot) dot.style.display = 'none';
   if (tooltip) tooltip.style.display = 'none';
-  volDataPoints.forEach(p => {
-    if (p.barId) {
-      const b = document.getElementById(p.barId);
-      if (b) {
-        b.style.opacity = '0.85';
-        b.style.stroke = 'none';
-        b.style.filter = 'none';
-        b.style.transform = 'none';
+  if (activeVolBarId !== null) {
+    activeVolBarId = null;
+    volDataPoints.forEach(p => {
+      if (p.barId) {
+        const b = document.getElementById(p.barId);
+        if (b) {
+          b.style.opacity = '0.88';
+          b.style.filter = 'none';
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 // Fees Mouse Move & Leave: ONLY show data when cursor touches the bar
@@ -1161,25 +1165,24 @@ function handleFeeMouseMove(e) {
     dot.style.display = 'block';
   }
 
-  feeDataPoints.forEach(p => {
-    if (p.barId) {
-      const b = document.getElementById(p.barId);
-      if (b) {
-        if (p === touchedBar) {
-          b.style.opacity = '1';
-          b.style.stroke = 'none';
-          b.style.filter = 'brightness(1.3) drop-shadow(0 0 12px ' + p.glowCol + ')';
-          b.style.transform = 'scale(1.03)';
-          b.style.transformOrigin = (p.bx + p.bw / 2) + 'px 130px';
-        } else {
-          b.style.opacity = '0.45';
-          b.style.stroke = 'none';
-          b.style.filter = 'none';
-          b.style.transform = 'none';
+  // SUBTLE POP & SUBTLE DIM (No heavy glow, No scale transform jerk)
+  if (activeFeeBarId !== touchedBar.barId) {
+    activeFeeBarId = touchedBar.barId;
+    feeDataPoints.forEach(p => {
+      if (p.barId) {
+        const b = document.getElementById(p.barId);
+        if (b) {
+          if (p === touchedBar) {
+            b.style.opacity = '1';
+            b.style.filter = 'brightness(1.18)';
+          } else {
+            b.style.opacity = '0.72';
+            b.style.filter = 'none';
+          }
         }
       }
-    }
-  });
+    });
+  }
 
   const tooltip = document.getElementById('fee-tooltip');
   if (tooltip) {
@@ -1205,17 +1208,18 @@ function handleFeeMouseLeave() {
   if (crosshair) crosshair.style.display = 'none';
   if (dot) dot.style.display = 'none';
   if (tooltip) tooltip.style.display = 'none';
-  feeDataPoints.forEach(p => {
-    if (p.barId) {
-      const b = document.getElementById(p.barId);
-      if (b) {
-        b.style.opacity = '0.85';
-        b.style.stroke = 'none';
-        b.style.filter = 'none';
-        b.style.transform = 'none';
+  if (activeFeeBarId !== null) {
+    activeFeeBarId = null;
+    feeDataPoints.forEach(p => {
+      if (p.barId) {
+        const b = document.getElementById(p.barId);
+        if (b) {
+          b.style.opacity = '0.88';
+          b.style.filter = 'none';
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 function openPnlAnalytics() {
@@ -2415,15 +2419,15 @@ def generate_pnl_analytics_html(delta_orders_history):
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="rpnl-bar-group">
                 <!-- Nov 9: -305 INR -->
-                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" fill="#ef4444" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" fill="#ef4444" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 11: +106 INR -->
-                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" fill="#10b981" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" fill="#10b981" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 12: -65 INR -->
-                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" fill="#ef4444" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" fill="#ef4444" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 13: -19 INR -->
-                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" fill="#ef4444" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" fill="#ef4444" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 14: +2 INR -->
-                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" fill="#10b981" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" fill="#10b981" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair Line -->
@@ -2481,15 +2485,15 @@ def generate_pnl_analytics_html(delta_orders_history):
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="vol-bar-group">
                 <!-- Nov 9: 65K -->
-                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" fill="#3b82f6" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 11: 80K -->
-                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" fill="#3b82f6" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 12: 35K -->
-                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" fill="#3b82f6" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 13: 19K -->
-                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" fill="#3b82f6" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 14: 4.2K -->
-                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" fill="#3b82f6" opacity="0.8" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
@@ -2549,15 +2553,15 @@ def generate_pnl_analytics_html(delta_orders_history):
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="fee-bar-group">
                 <!-- Nov 9: ₹2.51 -->
-                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 11: ₹0.84 -->
-                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 12: ₹2.51 -->
-                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 13: ₹0.84 -->
-                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
                 <!-- Nov 14: ₹0.47 -->
-                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
+                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
