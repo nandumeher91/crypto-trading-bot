@@ -145,7 +145,10 @@ def get_balance() -> dict:
                 result[f"{sym}_order_margin"] = ord_m
                 if sym in ["USD", "USDT", "USDC", "DET"]:
                     total_equity += tot_b
+                elif sym == "INR":
+                    total_equity += (tot_b / 83.8)
         result["total_equity_usd"] = round(total_equity, 2)
+        result["total_equity_inr"] = round(total_equity * 83.8, 2)
         logger.info(f"[DELTA] Balance: {result}")
         return result
     except Exception as e:
@@ -199,16 +202,44 @@ def get_usd_balance() -> float:
 
 
 def get_total_usd_balance() -> float:
-    """Return total wallet equity across all assets matching the $95.37 header badge on Delta Exchange."""
+    """Return total wallet equity across all assets matching Delta Exchange."""
     bal = get_balance()
     if isinstance(bal, dict) and bal.get("error"):
         return 0.0
     tot_equity = float(bal.get("total_equity_usd", 0.0))
     if tot_equity > 0:
         return round(tot_equity, 2)
+    if "INR_total" in bal or "INR" in bal:
+        inr_val = float(bal.get("INR_total", bal.get("INR", 0.0)))
+        if inr_val > 0:
+            return round(inr_val / 83.8, 2)
     stable_keys = ["USD", "USDT", "USDC", "DET"]
     tot_sum = sum(float(bal.get(f"{k}_total", bal.get(k, 0.0))) for k in stable_keys if k in bal or f"{k}_total" in bal)
     return round(tot_sum, 2) if tot_sum > 0 else get_usd_balance()
+
+
+def get_available_inr_balance() -> float:
+    """Return available balance in INR matching the ₹4.09K badge on Delta Exchange Demo."""
+    bal = get_balance()
+    if isinstance(bal, dict) and bal.get("error"):
+        return 0.0
+    if "INR" in bal and float(bal["INR"]) > 0:
+        return round(float(bal["INR"]), 2)
+    avail_usd = get_usd_balance()
+    return round(avail_usd * 83.8, 2)
+
+
+def get_total_inr_balance() -> float:
+    """Return total wallet equity in INR matching Delta Exchange Demo."""
+    bal = get_balance()
+    if isinstance(bal, dict) and bal.get("error"):
+        return 0.0
+    if "INR_total" in bal and float(bal["INR_total"]) > 0:
+        return round(float(bal["INR_total"]), 2)
+    if "INR" in bal and float(bal["INR"]) > 0:
+        return round(float(bal["INR"]), 2)
+    tot_usd = get_total_usd_balance()
+    return round(tot_usd * 83.8, 2)
 
 
 # ── Market Data ───────────────────────────────────────────────────────────────

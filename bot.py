@@ -2804,6 +2804,8 @@ def generate_dashboard_html():
 
     delta_usd_bal = 0.0
     delta_usd_tot = 0.0
+    delta_inr_bal = 0.0
+    delta_inr_tot = 0.0
     delta_status_text = "Not Connected"
     delta_status_color = "#9490b0"
     delta_ip_warning = ""
@@ -2824,7 +2826,12 @@ def generate_dashboard_html():
             elif isinstance(d_bal, dict) and len(d_bal) > 0 and not d_bal.get("error"):
                 delta_usd_bal = delta_exchange.get_usd_balance()
                 delta_usd_tot = delta_exchange.get_total_usd_balance()
-                delta_status_text = f"${delta_usd_tot:,.2f} USD"
+                delta_inr_bal = delta_exchange.get_available_inr_balance() if hasattr(delta_exchange, "get_available_inr_balance") else round(delta_usd_bal * 83.8, 2)
+                delta_inr_tot = delta_exchange.get_total_inr_balance() if hasattr(delta_exchange, "get_total_inr_balance") else round(delta_usd_tot * 83.8, 2)
+                
+                inr_avail_badge = f"₹{delta_inr_bal/1000:.2f}K" if delta_inr_bal >= 1000 else f"₹{delta_inr_bal:,.2f}"
+                inr_tot_badge = f"₹{delta_inr_tot/1000:.2f}K" if delta_inr_tot >= 1000 else f"₹{delta_inr_tot:,.2f}"
+                delta_status_text = f"${delta_usd_tot:,.2f} USD ({inr_tot_badge})"
                 delta_status_color = "#34d399"
             else:
                 delta_status_text = "$0.00 USD (Connected)"
@@ -2839,8 +2846,24 @@ def generate_dashboard_html():
         delta_status_text = "Sync Error"
         delta_status_color = "#9490b0"
 
-    total_sandbox_balance = binance_usdt_bal + (delta_usd_tot if delta_usd_tot > 0 else delta_usd_bal)
-    total_sandbox_bal_str = f"${total_sandbox_balance:,.2f}"
+    inr_avail_badge = f"₹{delta_inr_bal/1000:.2f}K" if delta_inr_bal >= 1000 else f"₹{delta_inr_bal:,.2f}"
+    inr_tot_badge = f"₹{delta_inr_tot/1000:.2f}K" if delta_inr_tot >= 1000 else f"₹{delta_inr_tot:,.2f}"
+
+    if delta_usd_tot > 0 or delta_usd_bal > 0:
+        primary_capital_html = f"₹{delta_inr_tot:,.2f} <span style='font-size:14px; font-weight:500; color:#34d399;'>(${delta_usd_tot:,.2f} USD)</span>"
+        primary_capital_raw = f"₹{delta_inr_tot:,.2f} (${delta_usd_tot:,.2f})"
+        delta_avail_sub_html = f"{inr_avail_badge} <span style='font-size:10px; color:var(--text-secondary);'>(${delta_usd_bal:,.2f})</span>"
+    elif "IP Whitelist" in delta_status_text:
+        primary_capital_html = "<span style='color:#fbbf24; font-size:16px;'>IP Whitelist Needed</span>"
+        primary_capital_raw = "IP Whitelist Needed"
+        delta_avail_sub_html = "Restricted"
+    else:
+        primary_capital_html = "$0.00 USD"
+        primary_capital_raw = "$0.00 USD"
+        delta_avail_sub_html = "$0.00 USD"
+
+    total_sandbox_balance = delta_usd_tot if delta_usd_tot > 0 else delta_usd_bal
+    total_sandbox_bal_str = primary_capital_raw
 
     delta_ip_notice_html = ""
     if delta_ip_warning:
@@ -3959,31 +3982,35 @@ def generate_dashboard_html():
       <!-- ============================================== -->
       <section class="dashboard-grid-4col" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:22px;">
         
-        <!-- Card 1: Estimated Sandbox Balance (Binance + Delta) -->
-        <div class="stat-card">
+        <!-- Card 1: Delta Exchange Live Capital (Directly Matches Delta Exchange Web UI) -->
+        <div class="stat-card" style="position:relative; overflow:hidden;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; align-items:center; gap:10px;">
-              <div class="stat-icon-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+              <div class="stat-icon-box" style="background:rgba(52,211,153,0.12); border-color:rgba(52,211,153,0.3);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
               </div>
               <div style="display:flex; align-items:center; gap:6px;">
-                <span style="font-size:13px; font-weight:600; color:#ffffff;">Testnet Balance</span>
-                <span style="font-size:9px; font-weight:700; color:#c084fc; background:rgba(168,85,247,0.18); border:1px solid rgba(168,85,247,0.35); padding:1px 5px; border-radius:4px; font-family:var(--font-mono);">SANDBOX</span>
+                <span style="font-size:13px; font-weight:600; color:#ffffff;">Delta Capital</span>
+                <span style="font-size:9px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.3); padding:1px 5px; border-radius:4px; font-family:var(--font-mono);">DELTA DEMO</span>
               </div>
             </div>
             <span onclick="toggleBalanceVisibility()" style="color:var(--text-muted); cursor:pointer;" title="Hide/Show Balance">👁️</span>
           </div>
-          <div id="total-balance-display" data-val="{total_sandbox_bal_str}" style="font-size:24px; font-weight:700; color:#ffffff; margin-top:12px; letter-spacing:-0.02em; font-family:var(--font-mono);">
-            {total_sandbox_bal_str}
+          <div id="total-balance-display" data-val="{primary_capital_raw}" style="font-size:22px; font-weight:700; color:#ffffff; margin-top:12px; letter-spacing:-0.02em; font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {primary_capital_html}
           </div>
           <div style="margin-top:10px; display:flex; flex-direction:column; gap:4px; font-size:11px; font-family:var(--font-mono); border-top:1px solid rgba(168,85,247,0.14); padding-top:8px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="color:var(--text-secondary);">Binance Testnet:</span>
-              <span style="color:#ffffff; font-weight:600;">{binance_bal_str}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;" title="Available Wallet Cash (Matches Delta Exchange Header)">
+              <span style="color:var(--text-secondary);">Available Cash:</span>
+              <span style="color:#34d399; font-weight:600;">{delta_avail_sub_html}</span>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="color:var(--text-secondary);">Delta Testnet:</span>
-              <span style="color:{delta_status_color}; font-weight:600;">{delta_status_text}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;" title="Active Option Margin in open contracts">
+              <span style="color:var(--text-secondary);">Position Margin:</span>
+              <span style="color:#c084fc; font-weight:600;">${total_actual_margin:,.2f} USD <span style="font-size:10px; color:var(--text-secondary);">(≈ ₹{round(total_actual_margin*83.8, 1)})</span></span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; opacity:0.6; border-top:1px dashed rgba(255,255,255,0.08); padding-top:4px; margin-top:2px;">
+              <span style="color:var(--text-muted); font-size:10px;">Binance Spot (Idle):</span>
+              <span style="color:var(--text-muted); font-size:10px;">{binance_bal_str}</span>
             </div>
           </div>
         </div>
