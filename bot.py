@@ -1737,14 +1737,12 @@ def generate_pnl_analytics_html(delta_orders_history):
             <!-- Equity Line -->
             <path d="M 60,60 C 130,60 170,165 220,165 C 290,165 330,165 370,165 C 440,165 470,118 520,118 C 590,118 630,145 680,145 C 750,145 780,165 830,165 C 880,165 920,163 970,163" fill="none" stroke="#a855f7" stroke-width="2.6" stroke-linecap="round" filter="url(#glowLine)" />
 
-            <!-- Points on curve -->
-            <circle cx="60" cy="60" r="4.5" fill="#a855f7" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
-            <circle cx="220" cy="165" r="4.5" fill="#ef4444" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
-            <circle cx="370" cy="165" r="4.5" fill="#64748b" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
-            <circle cx="520" cy="118" r="4.5" fill="#10b981" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
-            <circle cx="680" cy="145" r="4.5" fill="#ef4444" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
-            <circle cx="830" cy="165" r="4.5" fill="#ef4444" stroke="#080b12" stroke-width="2" style="cursor:pointer;" />
-            <circle cx="970" cy="163" r="5.5" fill="#34d399" stroke="#ffffff" stroke-width="2" style="cursor:pointer;" />
+            <!-- Current Live Tip Pulse (Single Minimal Clean Indicator at End of Curve) -->
+            <circle cx="970" cy="163" r="7" fill="#a855f7" opacity="0.3">
+              <animate attributeName="r" values="5;9;5" dur="2.4s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.4s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="970" cy="163" r="3.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" />
 
             <!-- Dynamic Interactive Crosshair Line -->
             <line id="equity-crosshair" x1="0" y1="20" x2="0" y2="225" stroke="rgba(192, 132, 252, 0.65)" stroke-width="1.5" stroke-dasharray="4,4" style="display:none;" />
