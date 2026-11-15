@@ -2290,28 +2290,20 @@ def generate_pnl_analytics_html(delta_orders_history):
       <!-- ============================================== -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px;">
         
-        <!-- Left: Realized PNL Bar Chart (Interactive Tooltip + Line Toggle) -->
+        <!-- Left: Realized PNL Bar Chart (Clean Straight Rectangular Bars matching Delta Exchange) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Realized PNL</span>
-              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars or line to inspect settled daily P&amp;L">&#9432;</span>
+              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars to inspect settled daily P&amp;L">&#9432;</span>
             </div>
-            
-            <!-- View Mode Switcher: Bars vs Smooth Line -->
-            <div style="display:flex; align-items:center; gap:10px;">
-              <div style="background:#090d16; border:1px solid #1e2538; border-radius:6px; padding:2px; display:flex; gap:3px;">
-                <button id="rpnl-btn-bar" onclick="switchRpnlView('bar')" style="background:rgba(168,85,247,0.22); border:1px solid #a855f7; color:#ffffff; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer;">&#128202; Bars</button>
-                <button id="rpnl-btn-line" onclick="switchRpnlView('line')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">&#128200; Line</button>
-              </div>
-              <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">Daily Net</div>
-            </div>
+            <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">Daily Net Settlement</div>
           </div>
 
           <!-- Interactive Realized PnL Container -->
           <div id="rpnl-chart-container" onmousemove="handleRpnlMouseMove(event)" onmouseleave="handleRpnlMouseLeave()" ontouchmove="handleRpnlMouseMove(event.touches[0])" ontouchend="handleRpnlMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
             
-            <!-- Floating Realized PnL Tooltip Badge (Exact Delta Style) -->
+            <!-- Floating Realized PnL Tooltip Badge (Exact Delta Exchange Style) -->
             <div id="rpnl-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:50; background:rgba(9,13,22,0.95); border:1px solid #a855f7; border-radius:8px; padding:8px 12px; box-shadow:0 8px 24px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(6px);">
               <div id="rpnl-tt-date" style="font-size:10px; color:#94a3b8; font-weight:600;">Mon 09 Nov</div>
               <div style="display:flex; align-items:baseline; gap:8px; margin-top:3px;">
@@ -2322,21 +2314,6 @@ def generate_pnl_analytics_html(delta_orders_history):
             </div>
 
             <svg id="rpnl-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
-              <defs>
-                <linearGradient id="rpnlGradGreen" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#34d399" stop-opacity="0.95" />
-                  <stop offset="100%" stop-color="#059669" stop-opacity="0.8" />
-                </linearGradient>
-                <linearGradient id="rpnlGradRed" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#f87171" stop-opacity="0.95" />
-                  <stop offset="100%" stop-color="#dc2626" stop-opacity="0.8" />
-                </linearGradient>
-                <linearGradient id="rpnlLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#a855f7" stop-opacity="0.3" />
-                  <stop offset="100%" stop-color="#a855f7" stop-opacity="0.0" />
-                </linearGradient>
-              </defs>
-
               <!-- Zero Axis Line -->
               <line x1="40" y1="80" x2="480" y2="80" stroke="#232d42" stroke-width="1.5" />
               <text x="35" y="84" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end">0</text>
@@ -2349,31 +2326,25 @@ def generate_pnl_analytics_html(delta_orders_history):
               <line x1="40" y1="145" x2="480" y2="145" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
               <text x="35" y="149" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="-300" data-val-usd="-$3.6">-300</text>
 
-              <!-- BAR VIEW GROUP -->
+              <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="rpnl-bar-group">
                 <!-- Nov 9: -305 INR -->
-                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" rx="5" fill="url(#rpnlGradRed)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" fill="#ef4444" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 11: +106 INR -->
-                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" rx="5" fill="url(#rpnlGradGreen)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" fill="#10b981" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 12: -65 INR -->
-                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" rx="5" fill="url(#rpnlGradRed)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" fill="#ef4444" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 13: -19 INR -->
-                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" rx="4" fill="url(#rpnlGradRed)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" fill="#ef4444" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 14: +2 INR -->
-                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" rx="2" fill="url(#rpnlGradGreen)" style="transition:all 0.15s ease; cursor:pointer;" />
-              </g>
-
-              <!-- SMOOTH LINE VIEW GROUP (Toggled by user) -->
-              <g id="rpnl-line-group" style="display:none;">
-                <path d="M 50,80 C 80,80 90,148 110,148 C 130,148 150,80 170,80 C 190,80 210,44 230,44 C 250,44 270,102 290,102 C 310,102 330,90 350,90 C 370,90 390,77 410,77 L 460,80 L 460,160 L 50,160 Z" fill="url(#rpnlLineAreaGrad)" />
-                <path d="M 50,80 C 80,80 90,148 110,148 C 130,148 150,80 170,80 C 190,80 210,44 230,44 C 250,44 270,102 290,102 C 310,102 330,90 350,90 C 370,90 390,77 410,77 L 460,80" fill="none" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round" />
+                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" fill="#10b981" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair Line -->
               <line id="rpnl-crosshair" x1="0" y1="20" x2="0" y2="165" stroke="rgba(168,85,247,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
               
               <!-- Snapping Cursor Dot -->
-              <circle id="rpnl-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#a855f7" stroke-width="2.5" style="display:none;" />
+              <circle id="rpnl-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" style="display:none;" />
             </svg>
           </div>
 
@@ -2387,22 +2358,16 @@ def generate_pnl_analytics_html(delta_orders_history):
           </div>
         </div>
 
-        <!-- Right: Volume Traded Bar Chart (Interactive Tooltip + Line Toggle) -->
+        <!-- Right: Volume Traded Bar Chart (Clean Straight Rectangular Bars matching Delta Exchange) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Volume Traded</span>
-              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover to view daily traded options contract notional">&#9432;</span>
+              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars to view daily traded options volume">&#9432;</span>
             </div>
             
-            <div style="display:flex; align-items:center; gap:10px;">
-              <div style="background:#090d16; border:1px solid #1e2538; border-radius:6px; padding:2px; display:flex; gap:3px;">
-                <button id="vol-btn-bar" onclick="switchVolView('bar')" style="background:rgba(59,130,246,0.25); border:1px solid #3b82f6; color:#ffffff; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer;">&#128202; Bars</button>
-                <button id="vol-btn-line" onclick="switchVolView('line')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">&#128200; Line</button>
-              </div>
-              <div class="analytics-currency-val" id="kpi-volume" data-val-inr="{volume_inr}" data-val-usd="{volume_usd}" style="font-size:14px; font-weight:800; color:#ffffff; font-family:var(--font-mono);">
-                {volume_inr}
-              </div>
+            <div class="analytics-currency-val" id="kpi-volume" data-val-inr="{volume_inr}" data-val-usd="{volume_usd}" style="font-size:14px; font-weight:800; color:#ffffff; font-family:var(--font-mono);">
+              {volume_inr}
             </div>
           </div>
 
@@ -2420,44 +2385,27 @@ def generate_pnl_analytics_html(delta_orders_history):
             </div>
 
             <svg id="vol-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
-              <defs>
-                <linearGradient id="volGradBlue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.95" />
-                  <stop offset="100%" stop-color="#2563eb" stop-opacity="0.75" />
-                </linearGradient>
-                <linearGradient id="volLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.32" />
-                  <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0" />
-                </linearGradient>
-              </defs>
-
               <line x1="40" y1="160" x2="480" y2="160" stroke="#232d42" stroke-width="1" />
               <line x1="40" y1="100" x2="480" y2="100" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
               <line x1="40" y1="40" x2="480" y2="40" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
 
-              <!-- BAR VIEW GROUP -->
+              <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="vol-bar-group">
                 <!-- Nov 9: 65K -->
-                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" rx="5" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" fill="#3b82f6" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 11: 80K -->
-                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" rx="5" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" fill="#3b82f6" opacity="0.9" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 12: 35K -->
-                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" rx="5" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" fill="#3b82f6" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 13: 19K -->
-                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" rx="4" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" fill="#3b82f6" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 14: 4.2K -->
-                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" rx="3" fill="url(#volGradBlue)" style="transition:all 0.15s ease; cursor:pointer;" />
-              </g>
-
-              <!-- SMOOTH LINE VIEW GROUP -->
-              <g id="vol-line-group" style="display:none;">
-                <path d="M 50,160 C 80,160 90,85 110,85 C 130,85 150,160 170,160 C 190,160 210,65 230,65 C 250,65 270,115 290,115 C 310,115 330,138 350,138 C 370,138 390,152 410,152 L 460,160 L 460,160 L 50,160 Z" fill="url(#volLineAreaGrad)" />
-                <path d="M 50,160 C 80,160 90,85 110,85 C 130,85 150,160 170,160 C 190,160 210,65 230,65 C 250,65 270,115 290,115 C 310,115 330,138 350,138 C 370,138 390,152 410,152 L 460,160" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" />
+                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" fill="#3b82f6" opacity="0.8" style="transition:all 0.12s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
               <line id="vol-crosshair" x1="0" y1="20" x2="0" y2="160" stroke="rgba(96,165,250,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
-              <circle id="vol-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#3b82f6" stroke-width="2.5" style="display:none;" />
+              <circle id="vol-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#3b82f6" stroke-width="2" style="display:none;" />
             </svg>
           </div>
 
@@ -2477,22 +2425,16 @@ def generate_pnl_analytics_html(delta_orders_history):
       <!-- ============================================== -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px;">
         
-        <!-- Left: Fees Paid Bar Chart (Interactive Tooltip + Line Toggle) -->
+        <!-- Left: Fees Paid Bar Chart (Clean Straight Rectangular Bars matching Delta Exchange) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Fees Paid</span>
-              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover to view exchange fees incurred">&#9432;</span>
+              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars to view exchange fees incurred">&#9432;</span>
             </div>
             
-            <div style="display:flex; align-items:center; gap:10px;">
-              <div style="background:#090d16; border:1px solid #1e2538; border-radius:6px; padding:2px; display:flex; gap:3px;">
-                <button id="fee-btn-bar" onclick="switchFeeView('bar')" style="background:rgba(245,158,11,0.22); border:1px solid #f59e0b; color:#ffffff; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer;">&#128202; Bars</button>
-                <button id="fee-btn-line" onclick="switchFeeView('line')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:3px 9px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer;">&#128200; Line</button>
-              </div>
-              <div class="analytics-currency-val" id="kpi-fees" data-val-inr="{fees_paid_inr}" data-val-usd="{fees_paid_usd}" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:var(--font-mono);">
-                {fees_paid_inr}
-              </div>
+            <div class="analytics-currency-val" id="kpi-fees" data-val-inr="{fees_paid_inr}" data-val-usd="{fees_paid_usd}" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:var(--font-mono);">
+              {fees_paid_inr}
             </div>
           </div>
 
@@ -2509,43 +2451,26 @@ def generate_pnl_analytics_html(delta_orders_history):
             </div>
 
             <svg id="fee-svg" viewBox="0 0 500 150" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
-              <defs>
-                <linearGradient id="feeGradAmber" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.95" />
-                  <stop offset="100%" stop-color="#d97706" stop-opacity="0.75" />
-                </linearGradient>
-                <linearGradient id="feeLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
-                  <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0" />
-                </linearGradient>
-              </defs>
-
               <line x1="40" y1="130" x2="480" y2="130" stroke="#232d42" stroke-width="1" />
               <line x1="40" y1="75" x2="480" y2="75" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
 
-              <!-- BAR VIEW GROUP -->
+              <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="fee-bar-group">
                 <!-- Nov 9: ₹2.51 -->
-                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 11: ₹0.84 -->
-                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 12: ₹2.51 -->
-                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 13: ₹0.84 -->
-                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" rx="4" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
+                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
                 <!-- Nov 14: ₹0.47 -->
-                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" rx="3" fill="url(#feeGradAmber)" style="transition:all 0.15s ease; cursor:pointer;" />
-              </g>
-
-              <!-- SMOOTH LINE VIEW GROUP -->
-              <g id="fee-line-group" style="display:none;">
-                <path d="M 50,130 C 80,130 90,80 110,80 C 130,80 150,130 170,130 C 190,130 210,112 230,112 C 250,112 270,80 290,80 C 310,80 330,112 350,112 C 370,112 390,120 410,120 L 460,130 L 460,130 L 50,130 Z" fill="url(#feeLineAreaGrad)" />
-                <path d="M 50,130 C 80,130 90,80 110,80 C 130,80 150,130 170,130 C 190,130 210,112 230,112 C 250,112 270,80 290,80 C 310,80 330,112 350,112 C 370,112 390,120 410,120 L 460,130" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" />
+                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" fill="#f59e0b" opacity="0.85" style="transition:all 0.12s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
               <line id="fee-crosshair" x1="0" y1="20" x2="0" y2="130" stroke="rgba(251,191,36,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
-              <circle id="fee-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#f59e0b" stroke-width="2.5" style="display:none;" />
+              <circle id="fee-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#f59e0b" stroke-width="2" style="display:none;" />
             </svg>
           </div>
 
