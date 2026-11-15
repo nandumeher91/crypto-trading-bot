@@ -922,11 +922,12 @@ function handleRpnlMouseMove(e) {
   const svgX = (mouseX / rect.width) * 500;
   const svgY = (mouseY / rect.height) * 180;
 
-  // STRICT HIT TEST: ONLY trigger when cursor directly touches the bar
+  // STRICT HIT TEST WITH HYSTERESIS BUFFER (Prevents pop-out oscillation/jerk)
   let touchedBar = null;
   for (let i = 0; i < rpnlDataPoints.length; i++) {
     const p = rpnlDataPoints[i];
-    if (svgX >= (p.bx - 2) && svgX <= (p.bx + p.bw + 2) && svgY >= (p.by - 4) && svgY <= (p.by + p.bh + 4)) {
+    const hitBuffer = (activeRpnlBarId === p.barId) ? 8 : 2;
+    if (svgX >= (p.bx - hitBuffer) && svgX <= (p.bx + p.bw + hitBuffer) && svgY >= (p.by - hitBuffer) && svgY <= (p.by + p.bh + hitBuffer)) {
       touchedBar = p;
       break;
     }
@@ -954,7 +955,7 @@ function handleRpnlMouseMove(e) {
     dot.style.display = 'block';
   }
 
-  // SUBTLE POP & SUBTLE DIM (No heavy glow, No scale transform jerk)
+  // SUBTLE POP & GENTLE DIM (Zero jhatka, buttery smooth pop)
   if (activeRpnlBarId !== touchedBar.barId) {
     activeRpnlBarId = touchedBar.barId;
     rpnlDataPoints.forEach(p => {
@@ -963,10 +964,12 @@ function handleRpnlMouseMove(e) {
         if (b) {
           if (p === touchedBar) {
             b.style.opacity = '1';
-            b.style.filter = 'brightness(1.18)';
+            b.style.filter = 'brightness(1.15)';
+            b.style.transform = 'scale(1.045)';
           } else {
             b.style.opacity = '0.72';
             b.style.filter = 'none';
+            b.style.transform = 'scale(1)';
           }
         }
       }
@@ -1009,6 +1012,7 @@ function handleRpnlMouseLeave() {
         if (b) {
           b.style.opacity = '0.88';
           b.style.filter = 'none';
+          b.style.transform = 'scale(1)';
         }
       }
     });
@@ -1032,11 +1036,12 @@ function handleVolMouseMove(e) {
   const svgX = (mouseX / rect.width) * 500;
   const svgY = (mouseY / rect.height) * 180;
 
-  // STRICT HIT TEST: ONLY trigger when cursor directly touches the bar
+  // STRICT HIT TEST WITH HYSTERESIS BUFFER
   let touchedBar = null;
   for (let i = 0; i < volDataPoints.length; i++) {
     const p = volDataPoints[i];
-    if (svgX >= (p.bx - 2) && svgX <= (p.bx + p.bw + 2) && svgY >= (p.by - 4) && svgY <= (p.by + p.bh + 4)) {
+    const hitBuffer = (activeVolBarId === p.barId) ? 8 : 2;
+    if (svgX >= (p.bx - hitBuffer) && svgX <= (p.bx + p.bw + hitBuffer) && svgY >= (p.by - hitBuffer) && svgY <= (p.by + p.bh + hitBuffer)) {
       touchedBar = p;
       break;
     }
@@ -1061,7 +1066,7 @@ function handleVolMouseMove(e) {
     dot.style.display = 'block';
   }
 
-  // SUBTLE POP & SUBTLE DIM (No heavy glow, No scale transform jerk)
+  // SUBTLE POP & GENTLE DIM (Zero jhatka, buttery smooth pop)
   if (activeVolBarId !== touchedBar.barId) {
     activeVolBarId = touchedBar.barId;
     volDataPoints.forEach(p => {
@@ -1070,10 +1075,12 @@ function handleVolMouseMove(e) {
         if (b) {
           if (p === touchedBar) {
             b.style.opacity = '1';
-            b.style.filter = 'brightness(1.18)';
+            b.style.filter = 'brightness(1.15)';
+            b.style.transform = 'scale(1.045)';
           } else {
             b.style.opacity = '0.72';
             b.style.filter = 'none';
+            b.style.transform = 'scale(1)';
           }
         }
       }
@@ -1113,6 +1120,7 @@ function handleVolMouseLeave() {
         if (b) {
           b.style.opacity = '0.88';
           b.style.filter = 'none';
+          b.style.transform = 'scale(1)';
         }
       }
     });
@@ -1136,11 +1144,12 @@ function handleFeeMouseMove(e) {
   const svgX = (mouseX / rect.width) * 500;
   const svgY = (mouseY / rect.height) * 150;
 
-  // STRICT HIT TEST: ONLY trigger when cursor directly touches the bar
+  // STRICT HIT TEST WITH HYSTERESIS BUFFER
   let touchedBar = null;
   for (let i = 0; i < feeDataPoints.length; i++) {
     const p = feeDataPoints[i];
-    if (svgX >= (p.bx - 2) && svgX <= (p.bx + p.bw + 2) && svgY >= (p.by - 4) && svgY <= (p.by + p.bh + 4)) {
+    const hitBuffer = (activeFeeBarId === p.barId) ? 8 : 2;
+    if (svgX >= (p.bx - hitBuffer) && svgX <= (p.bx + p.bw + hitBuffer) && svgY >= (p.by - hitBuffer) && svgY <= (p.by + p.bh + hitBuffer)) {
       touchedBar = p;
       break;
     }
@@ -1165,7 +1174,7 @@ function handleFeeMouseMove(e) {
     dot.style.display = 'block';
   }
 
-  // SUBTLE POP & SUBTLE DIM (No heavy glow, No scale transform jerk)
+  // SUBTLE POP & GENTLE DIM (Zero jhatka, buttery smooth pop)
   if (activeFeeBarId !== touchedBar.barId) {
     activeFeeBarId = touchedBar.barId;
     feeDataPoints.forEach(p => {
@@ -1174,10 +1183,12 @@ function handleFeeMouseMove(e) {
         if (b) {
           if (p === touchedBar) {
             b.style.opacity = '1';
-            b.style.filter = 'brightness(1.18)';
+            b.style.filter = 'brightness(1.15)';
+            b.style.transform = 'scale(1.045)';
           } else {
             b.style.opacity = '0.72';
             b.style.filter = 'none';
+            b.style.transform = 'scale(1)';
           }
         }
       }
@@ -1216,6 +1227,7 @@ function handleFeeMouseLeave() {
         if (b) {
           b.style.opacity = '0.88';
           b.style.filter = 'none';
+          b.style.transform = 'scale(1)';
         }
       }
     });
@@ -2419,22 +2431,22 @@ def generate_pnl_analytics_html(delta_orders_history):
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="rpnl-bar-group">
                 <!-- Nov 9: -305 INR -->
-                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" fill="#ef4444" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" fill="#ef4444" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 11: +106 INR -->
-                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" fill="#10b981" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" fill="#10b981" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 12: -65 INR -->
-                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" fill="#ef4444" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" fill="#ef4444" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 13: -19 INR -->
-                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" fill="#ef4444" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" fill="#ef4444" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 14: +2 INR -->
-                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" fill="#10b981" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" fill="#10b981" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair Line -->
-              <line id="rpnl-crosshair" x1="0" y1="20" x2="0" y2="165" stroke="rgba(168,85,247,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
+              <line id="rpnl-crosshair" x1="0" y1="20" x2="0" y2="165" stroke="rgba(168,85,247,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none; pointer-events:none;" />
               
               <!-- Snapping Cursor Dot -->
-              <circle id="rpnl-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" style="display:none;" />
+              <circle id="rpnl-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" style="display:none; pointer-events:none;" />
             </svg>
           </div>
 
@@ -2485,20 +2497,20 @@ def generate_pnl_analytics_html(delta_orders_history):
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="vol-bar-group">
                 <!-- Nov 9: 65K -->
-                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 11: 80K -->
-                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 12: 35K -->
-                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 13: 19K -->
-                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 14: 4.2K -->
-                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" fill="#3b82f6" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
-              <line id="vol-crosshair" x1="0" y1="20" x2="0" y2="160" stroke="rgba(96,165,250,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
-              <circle id="vol-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#3b82f6" stroke-width="2" style="display:none;" />
+              <line id="vol-crosshair" x1="0" y1="20" x2="0" y2="160" stroke="rgba(96,165,250,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none; pointer-events:none;" />
+              <circle id="vol-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#3b82f6" stroke-width="2" style="display:none; pointer-events:none;" />
             </svg>
           </div>
 
@@ -2553,20 +2565,20 @@ def generate_pnl_analytics_html(delta_orders_history):
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="fee-bar-group">
                 <!-- Nov 9: ₹2.51 -->
-                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 11: ₹0.84 -->
-                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 12: ₹2.51 -->
-                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 13: ₹0.84 -->
-                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
                 <!-- Nov 14: ₹0.47 -->
-                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" fill="#f59e0b" opacity="0.88" style="transition:opacity 0.2s ease, filter 0.2s ease; cursor:pointer;" />
+                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
-              <line id="fee-crosshair" x1="0" y1="20" x2="0" y2="130" stroke="rgba(251,191,36,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;" />
-              <circle id="fee-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#f59e0b" stroke-width="2" style="display:none;" />
+              <line id="fee-crosshair" x1="0" y1="20" x2="0" y2="130" stroke="rgba(251,191,36,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none; pointer-events:none;" />
+              <circle id="fee-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#f59e0b" stroke-width="2" style="display:none; pointer-events:none;" />
             </svg>
           </div>
 
