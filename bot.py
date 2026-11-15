@@ -3331,6 +3331,47 @@ def generate_dashboard_html():
         logger.warning(f"[DASHBOARD] Fetch delta_orders_history failed: {e}")
         delta_orders_history = []
 
+    # Merge closed trades from local ledger so no execution is ever missed
+    seen_oids = set(str(h.get("order_id", "")) for h in delta_orders_history if h.get("order_id"))
+    closed_trades = [t for t in ledger if isinstance(t, dict) and t.get("status") in ["closed", "closed_tp", "closed_sl", "closed_manual"]]
+    for t in reversed(closed_trades):
+        t_oid = str(t.get("order_id", t.get("trade_id", "")))
+        if t_oid and t_oid not in seen_oids:
+            seen_oids.add(t_oid)
+            t_sym = str(t.get('symbol', 'BTCUSD')).replace('-STRANGLE', 'USD')
+            t_qty = safe_float(t.get('quantity', 1))
+            t_qty_lot = int(t_qty) if t_qty >= 1 else 1
+            t_status = str(t.get('status', 'closed')).lower()
+            is_tp = 'tp' in t_status
+            is_sl = 'sl' in t_status
+            order_type_str = "Bracket - TP" if is_tp else ("Bracket - SL" if is_sl else "Limit")
+            side_text = "Close Buy" if (is_tp or is_sl) else "Open Sell"
+            c_val = 0.001 if "BTC" in t_sym else (0.01 if "ETH" in t_sym else 1.0)
+            t_exit = safe_float(t.get('exit_price', t.get('entry_price', 0)))
+            cf_val = round(t_exit * t_qty_lot * c_val, 2)
+            t_pnl = safe_float(t.get('pnl', 0.0))
+            delta_orders_history.insert(0, {
+                "sym": t_sym,
+                "qty": t_qty_lot,
+                "side": side_text,
+                "status": "Filled",
+                "status_col": "#34d399",
+                "filled": t_qty_lot,
+                "type": order_type_str,
+                "limit": f"{t_exit:,.1f}",
+                "trigger": "-",
+                "exec": f"{t_exit:,.1f}",
+                "size": f"{'+' if 'Buy' in side_text else '-'}{t_qty_lot * c_val:.3f} {t_sym[:3]}",
+                "cashflow": f"{cf_val:,.2f} USD",
+                "realized_pnl": f"{t_pnl:,.2f} USD",
+                "trading_fees": "0.00 USD",
+                "net_pnl": f"{t_pnl:,.2f} USD",
+                "order_id": t_oid,
+                "reduce_only": "✓" if "Buy" in side_text else "✕",
+                "time": str(t.get('exit_timestamp', t.get('timestamp', ''))),
+                "cat": "options" if ("C-" in t_sym or "P-" in t_sym) else "futures"
+            })
+
     def _pnl_col(val_str: str) -> str:
         s = str(val_str).replace('USD', '').replace('+', '').replace(',', '').strip()
         try:
