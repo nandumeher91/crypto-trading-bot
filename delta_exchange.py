@@ -577,6 +577,7 @@ def sell_option(product_id: int, symbol: str, contracts: int = 1) -> dict:
         {"success": bool, "order_id": int}
     """
     try:
+        contracts = max(1, min(int(contracts), 2))
         client = _get_client()
 
         # Fetch option's current best bid for limit sell
@@ -668,7 +669,8 @@ def buy_to_close_option(product_id: int, symbol: str, contracts: int = 1) -> dic
             size=contracts,
             side="buy",
             limit_price=price_str,
-            order_type=OrderType.LIMIT
+            order_type=OrderType.LIMIT,
+            reduce_only='true'
         )
         if isinstance(response, dict) and response.get("id"):
             order_id = str(response["id"])
@@ -788,7 +790,8 @@ def close_any_position(symbol: str, product_id: int = None, size: int = None) ->
             size=contracts,
             side=close_side,
             limit_price=str(buy_price),
-            order_type=OrderType.LIMIT
+            order_type=OrderType.LIMIT,
+            reduce_only='true'
         )
         if isinstance(res, dict) and res.get("id"):
             order_id = str(res["id"])
@@ -895,6 +898,11 @@ def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.18) -> dic
     Returns:
         {"success": bool, "call_order": dict, "put_order": dict, "strangle_info": dict}
     """
+    contracts = max(1, min(int(contracts or 1), 2))
+    if has_active_strangle(asset):
+        logger.info(f"[DELTA] Skipping place_strangle({asset}): active option position already open on Delta Exchange.")
+        return {"success": False, "error": f"Active {asset} option position already exists"}
+
     strangle = get_options_for_strangle(asset, otm_pct=otm_pct)
     if not strangle:
         return {"success": False, "error": "Could not find strangle strikes"}
@@ -905,7 +913,16 @@ def place_strangle(asset: str, contracts: int = 1, otm_pct: float = 0.18) -> dic
     call_result = sell_option(call_info["product_id"], call_info["symbol"], contracts)
     put_result  = sell_option(put_info["product_id"],  put_info["symbol"],  contracts)
 
-    success = call_result.get("success") and put_result.get("success")
+    c_ok = bool(call_result.get("success"))
+    p_ok = bool(put_result.get("success"))
+    if c_ok and not p_ok:
+        logger.warning(f"[DELTA] Put leg failed for {asset}; rolling back Call leg {call_info['symbol']} to keep strangle balanced!")
+        close_any_position(call_info["symbol"], call_info["product_id"], contracts)
+    elif p_ok and not c_ok:
+        logger.warning(f"[DELTA] Call leg failed for {asset}; rolling back Put leg {put_info['symbol']} to keep strangle balanced!")
+        close_any_position(put_info["symbol"], put_info["product_id"], contracts)
+
+    success = c_ok and p_ok
     logger.info(f"[DELTA] {'✅' if success else '❌'} Strangle for {asset}: "
                 f"Call={call_info.get('strike')} ({call_result.get('success')}) | "
                 f"Put={put_info.get('strike')} ({put_result.get('success')})")
@@ -934,6 +951,14 @@ def has_active_strangle(asset: str) -> bool:
     """
     asset = asset.upper()
     try:
+        # 0. Check LIVE open option positions on Delta Exchange API first
+        if DELTA_API_KEY:
+            live_pos = get_all_positions()
+            for p in live_pos:
+                p_sym = str(p.get("symbol", "")).upper()
+                if p.get("is_option") and f"-{asset}-" in p_sym and abs(float(p.get("size", 0))) > 0:
+                    return True
+
         # 1. Check dhurandhar_state.json if exists
         state_file = os.path.join(BASE_DIR, "dhurandhar_state.json")
         if os.path.exists(state_file):
@@ -1166,119 +1191,160 @@ _FALLBACK_ORDERS = [
 
 def get_order_history(page_size: int = 50) -> list:
     """
-    Return comprehensive Order History directly from Delta Exchange API merged with
-    persistent recorded closed/filled trades.
-    Guarantees every closed trade appears at the very top immediately.
+    Return comprehensive Order History directly from Delta Exchange API (/v2/orders/history + /v2/fills).
+    Live Delta API data always takes priority over local cache so status, fees, cashflow, and PnL match Delta UI.
     """
-    combined_orders = []
-    seen_ids = set()
+    orders_by_id = {}
+    live_fetch_ok = False
 
-    # 1. Load locally recorded trades (contains all recent auto-TP and manual closes)
+    # 1. Query live Delta Exchange API: /v2/fills (for exact realized_pnl, fees, cashflow) + /v2/orders/history
+    if DELTA_API_KEY:
+        try:
+            client = _get_client()
+            fills_by_oid = {}
+            try:
+                res_f = client.request("GET", "/v2/fills", query={"page_size": max(page_size, 100)}, auth=True)
+                raw_f = res_f.json() if hasattr(res_f, 'json') else (res_f if isinstance(res_f, dict) else {})
+                for fl in (raw_f.get("result", []) if isinstance(raw_f, dict) else []):
+                    f_oid = str(fl.get("order_id") or "")
+                    if not f_oid:
+                        continue
+                    meta = fl.get("meta_data") or {}
+                    f_pnl = safe_float(fl.get("realized_pnl") or meta.get("pnl") or 0.0)
+                    f_fee = safe_float(fl.get("commission") or fl.get("trading_fee") or 0.0)
+                    f_cf = safe_float(fl.get("cashflow") or meta.get("cashflow") or 0.0)
+                    f_price = safe_float(fl.get("price") or 0.0)
+                    f_size = safe_float(fl.get("size") or 0.0)
+                    prev = fills_by_oid.get(f_oid, {"pnl": 0.0, "fee": 0.0, "cf": 0.0, "price": 0.0, "size": 0.0})
+                    prev["pnl"] += f_pnl
+                    prev["fee"] += f_fee
+                    prev["cf"] += f_cf
+                    prev["size"] += f_size
+                    if f_price > 0:
+                        prev["price"] = f_price
+                    fills_by_oid[f_oid] = prev
+            except Exception as fe:
+                logger.warning(f"[DELTA] /v2/fills fetch notice: {fe}")
+
+            res = client.request("GET", "/v2/orders/history", query={"page_size": page_size}, auth=True)
+            raw = res.json() if hasattr(res, 'json') else (res if isinstance(res, dict) else {})
+            raw_list = raw.get("result", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+
+            if raw_list:
+                live_fetch_ok = True
+
+            for o in raw_list:
+                prod = o.get("product") or {}
+                sym = prod.get("symbol") or o.get("product_symbol") or o.get("symbol", "-")
+                order_id = str(o.get("id") or o.get("order_id") or "")
+                if not order_id:
+                    continue
+
+                size_val = safe_float(o.get("size", 0))
+                unfilled_val = safe_float(o.get("unfilled_size", 0))
+                filled_val = max(0.0, size_val - unfilled_val) if unfilled_val >= 0 else size_val
+
+                c_val = safe_float(prod.get("contract_value") or (0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)))
+                coin_unit = "BTC" if "BTC" in sym else ("ETH" if "ETH" in sym else "")
+
+                side_raw = str(o.get("side", "")).lower()
+                is_reduce = str(o.get("reduce_only", "")).lower() in ("true", "1") or bool(o.get("reduce_only") is True)
+                state_raw = str(o.get("state", "")).lower()
+                if state_raw == "closed":
+                    ord_state = "Filled" if filled_val > 0 else "Cancelled"
+                elif state_raw == "cancelled":
+                    ord_state = "Filled" if filled_val > 0 else "Cancelled"
+                else:
+                    ord_state = state_raw.capitalize() if state_raw else ("Filled" if filled_val > 0 else "Cancelled")
+
+                ord_type = str(o.get("order_type", "limit_order")).replace("_order", "").replace("_", " ").title()
+                limit_p = safe_float(o.get("limit_price", 0))
+                fill_info = fills_by_oid.get(order_id, {})
+                exec_p = safe_float(o.get("average_fill_price", 0) or fill_info.get("price", 0) or limit_p)
+                stop_p = safe_float(o.get("stop_price", 0))
+
+                t_raw = o.get("created_at") or o.get("updated_at") or ""
+                time_disp = t_raw
+                if t_raw and len(str(t_raw)) >= 19:
+                    try:
+                        dt = datetime.fromisoformat(str(t_raw).replace("Z", "+00:00")) + timedelta(hours=5, minutes=30)
+                        time_disp = dt.strftime("%d - %b - %y, %I:%M:%S %p")
+                    except Exception:
+                        time_disp = str(t_raw)[:19]
+
+                sign = "-" if side_raw == "sell" else "+"
+                size_unit_str = f"{sign}{filled_val * c_val:.3f} {coin_unit}".strip() if filled_val > 0 else f"0.000 {coin_unit}".strip()
+
+                cf_val = safe_float(fill_info.get("cf") or o.get("cashflow") or o.get("paid_amount") or 0.0)
+                if cf_val == 0.0 and exec_p > 0 and filled_val > 0:
+                    raw_cf = round(exec_p * filled_val * c_val, 2)
+                    cf_val = raw_cf if side_raw == "sell" else -raw_cf
+
+                realized_pnl = safe_float(fill_info.get("pnl") or o.get("realized_pnl") or 0.0)
+                trading_fees = safe_float(fill_info.get("fee") or o.get("trading_fee") or o.get("commission") or 0.0)
+                net_pnl = round(realized_pnl - trading_fees, 2)
+
+                side_label = f"{'Close' if is_reduce else 'Open'} {'Sell' if side_raw == 'sell' else 'Buy'}"
+
+                orders_by_id[order_id] = {
+                    "sym": sym,
+                    "qty": int(size_val) if size_val.is_integer() else size_val,
+                    "side": side_label,
+                    "status": ord_state,
+                    "status_col": "#34d399" if ord_state == "Filled" else "#f87171",
+                    "filled": int(filled_val) if filled_val.is_integer() else filled_val,
+                    "type": ord_type,
+                    "limit": f"{limit_p:,.1f}" if limit_p > 0 else "-",
+                    "trigger": f"{stop_p:,.1f}" if stop_p > 0 else "-",
+                    "exec": f"{exec_p:,.1f}" if (exec_p > 0 and filled_val > 0) else "-",
+                    "size": size_unit_str,
+                    "cashflow": f"{cf_val:,.2f} USD" if cf_val != 0 else "0 USD",
+                    "realized_pnl": f"{realized_pnl:,.2f} USD" if realized_pnl != 0 else "0 USD",
+                    "trading_fees": f"{trading_fees:,.2f} USD",
+                    "net_pnl": f"{net_pnl:,.2f} USD",
+                    "order_id": order_id,
+                    "reduce_only": "✓" if is_reduce else "✕",
+                    "time": time_disp,
+                    "cat": "options" if ("C-" in sym or "P-" in sym) else "futures"
+                }
+        except Exception as e:
+            logger.warning(f"[DELTA] Live order history fetch notice: {e}")
+
+    # 2. Merge locally recorded orders ONLY if not already returned by live API
     if os.path.exists(ORDER_HISTORY_FILE):
         try:
             with open(ORDER_HISTORY_FILE, "r", encoding="utf-8") as f:
                 local_records = json.load(f)
                 for r in local_records:
                     oid = str(r.get("order_id", ""))
-                    if oid and oid not in seen_ids:
-                        seen_ids.add(oid)
-                        combined_orders.append(r)
+                    if oid and oid not in orders_by_id:
+                        orders_by_id[oid] = r
         except Exception as e:
             logger.warning(f"[DELTA] Read ORDER_HISTORY_FILE error: {e}")
 
-    # 2. Query live Delta Exchange API with proper query dict for HMAC signing
-    try:
-        client = _get_client()
-        res = client.request("GET", "/v2/orders/history", query={"page_size": page_size}, auth=True)
-        raw = res.json() if hasattr(res, 'json') else (res if isinstance(res, dict) else {})
-        raw_list = raw.get("result", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+    # 3. Only use static fallback records if API key is missing and nothing was fetched
+    if not live_fetch_ok and not orders_by_id:
+        for fb in _FALLBACK_ORDERS:
+            f_oid = str(fb.get("order_id", ""))
+            if f_oid and f_oid not in orders_by_id:
+                orders_by_id[f_oid] = fb
 
-        if not raw_list:
-            res_f = client.request("GET", "/v2/fills", query={"page_size": page_size}, auth=True)
-            raw_f = res_f.json() if hasattr(res_f, 'json') else {}
-            raw_list = raw_f.get("result", []) if isinstance(raw_f, dict) else []
+    combined_orders = list(orders_by_id.values())
 
-        for o in raw_list:
-            prod = o.get("product", {})
-            sym = prod.get("symbol") or o.get("product_symbol") or o.get("symbol", "-")
-            order_id = str(o.get("id") or o.get("order_id") or "")
-            if order_id and order_id in seen_ids:
-                continue
-            if order_id:
-                seen_ids.add(order_id)
+    # 4. Sort descending by numeric order_id safely (newest always on top)
+    def _oid_sort_key(item):
+        oid_s = str(item.get("order_id", "0"))
+        return int(oid_s) if oid_s.isdigit() else 0
 
-            size_val = safe_float(o.get("size", 0))
-            unfilled_val = safe_float(o.get("unfilled_size", 0))
-            filled_val = max(0.0, size_val - unfilled_val) if unfilled_val >= 0 else size_val
+    combined_orders.sort(key=_oid_sort_key, reverse=True)
 
-            c_val = safe_float(prod.get("contract_value") or (0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)))
-            coin_unit = "BTC" if "BTC" in sym else ("ETH" if "ETH" in sym else "")
-
-            side_raw = str(o.get("side", "")).lower()
-            ord_state = str(o.get("state", "filled")).capitalize()
-            ord_type = str(o.get("order_type", "limit_order")).replace("_order", "").capitalize()
-
-            limit_p = safe_float(o.get("limit_price", 0))
-            exec_p = safe_float(o.get("average_fill_price", 0) or o.get("exec_price", 0) or limit_p)
-            stop_p = safe_float(o.get("stop_price", 0))
-
-            t_raw = o.get("created_at") or o.get("updated_at") or ""
-            time_disp = t_raw
-            if t_raw and len(str(t_raw)) >= 19:
-                try:
-                    dt = datetime.fromisoformat(str(t_raw).replace("Z", "+00:00")) + timedelta(hours=5, minutes=30)
-                    time_disp = dt.strftime("%d - %b - %y, %I:%M:%S %p")
-                except Exception:
-                    time_disp = str(t_raw)[:19]
-
-            sign = "-" if side_raw == "sell" else "+"
-            size_unit_str = f"{sign}{filled_val * c_val:.3f} {coin_unit}".strip()
-
-            cf_val = safe_float(o.get("cashflow") or o.get("paid_amount") or 0.0)
-            if cf_val == 0.0 and exec_p > 0 and filled_val > 0:
-                cf_val = round(exec_p * filled_val * c_val, 2)
-
-            realized_pnl = safe_float(o.get("realized_pnl", 0.0))
-            trading_fees = safe_float(o.get("trading_fee") or o.get("commission") or 0.0)
-            net_pnl = safe_float(o.get("net_pnl") or (realized_pnl - trading_fees))
-
-            new_entry = {
-                "sym": sym,
-                "qty": int(size_val) if size_val.is_integer() else size_val,
-                "side": f"{'Close' if side_raw == 'buy' else 'Open'} {'Sell' if side_raw == 'sell' else 'Buy'}",
-                "status": ord_state,
-                "status_col": "#34d399" if ord_state.lower() == "filled" else "#f87171",
-                "filled": int(filled_val) if filled_val.is_integer() else filled_val,
-                "type": ord_type,
-                "limit": f"{limit_p:,.1f}" if limit_p > 0 else "-",
-                "trigger": f"{stop_p:,.1f}" if stop_p > 0 else "-",
-                "exec": f"{exec_p:,.1f}" if exec_p > 0 else "-",
-                "size": size_unit_str,
-                "cashflow": f"{cf_val:,.2f} USD" if cf_val != 0 else "0 USD",
-                "realized_pnl": f"{realized_pnl:,.2f} USD" if realized_pnl != 0 else "0 USD",
-                "trading_fees": f"{trading_fees:,.2f} USD",
-                "net_pnl": f"{net_pnl:,.2f} USD",
-                "order_id": order_id,
-                "time": time_disp,
-                "cat": "options" if ("C-" in sym or "P-" in sym) else "futures"
-            }
-            combined_orders.insert(0, new_entry)
-            record_delta_order(new_entry)
-    except Exception as e:
-        logger.warning(f"[DELTA] Live order history fetch notice: {e}")
-
-    # 3. Append base fallback records if not present
-    for fb in _FALLBACK_ORDERS:
-        f_oid = str(fb.get("order_id", ""))
-        if f_oid and f_oid not in seen_ids:
-            seen_ids.add(f_oid)
-            combined_orders.append(fb)
-
-    # 4. Sort descending by order_id (monotonically increasing in Delta, so newest is first)
-    try:
-        combined_orders.sort(key=lambda x: int(x.get("order_id", 0)), reverse=True)
-    except Exception:
-        pass
+    # Refresh local cache with latest live truth
+    if live_fetch_ok and combined_orders:
+        try:
+            with open(ORDER_HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(combined_orders[:100], f, indent=2)
+        except Exception:
+            pass
 
     return combined_orders
 

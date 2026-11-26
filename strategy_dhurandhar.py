@@ -370,6 +370,12 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
 
     # ── STATE 0 -> STATE 1: INITIAL ENTRY (Deep OTM Delta-Neutral Strangle) ───
     if not opts_state.get(active_key):
+        if dx.has_active_strangle(asset):
+            logger.info(f"[DHURANDHAR] {asset}: Live option position already open on Delta Exchange. Skipping duplicate entry.")
+            opts_state[active_key] = True
+            asset_state["state"] = "STRANGLE_ACTIVE"
+            return asset_state
+
         iv_rank = dx.get_iv_rank(asset)
         if iv_rank < config.get("IV_RANK_MIN", 25):
             logger.info(f"[DHURANDHAR] {asset} IV Rank {iv_rank:.1f} < {config.get('IV_RANK_MIN', 25)}. Waiting for sufficient volatility before entry.")
@@ -377,8 +383,9 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
             return asset_state
 
         otm_pct = config.get("OTM_PCT", 0.18)
-        logger.info(f"[DHURANDHAR] {asset}: IV Rank {iv_rank:.1f} >= 25. Deploying Deep OTM Strangle (~0.08 Delta / {otm_pct*100:.0f}% OTM, 92% Win Prob)...")
-        res = dx.place_strangle(asset, contracts=config.get("option_contracts", 1), otm_pct=otm_pct)
+        safe_lots = max(1, min(int(config.get("option_contracts", 1)), 2))
+        logger.info(f"[DHURANDHAR] {asset}: IV Rank {iv_rank:.1f} >= 25. Deploying Deep OTM Strangle ({safe_lots} Lot per leg, ~0.08 Delta / {otm_pct*100:.0f}% OTM)...")
+        res = dx.place_strangle(asset, contracts=safe_lots, otm_pct=otm_pct)
         if res.get("success"):
             strangle_info = res.get("strangle_info", {})
             init_prem = res.get("initial_total_premium") or 80.0
