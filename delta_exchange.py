@@ -34,6 +34,16 @@ if sys.platform == "win32":
 
 logger = logging.getLogger(__name__)
 
+
+def safe_float(val, default=0.0) -> float:
+    """Safely convert any value to float, returning default on error."""
+    try:
+        if val is None or val == "":
+            return float(default)
+        return float(val)
+    except Exception:
+        return float(default)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 

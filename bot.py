@@ -811,12 +811,14 @@ function handleEquityMouseLeave() {
   if (dot) dot.style.display = 'none';
   if (tooltip) tooltip.style.display = 'none';
 
-  // Restore latest default header
+  // Restore latest default header from live points
+  const pts = (activeAnalyticsTf === '7d') ? equity7dPoints : equityAllPoints;
+  const lastPt = pts && pts.length ? pts[pts.length - 1] : null;
   const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
   const headerDate = document.getElementById('equity-header-date');
   const headerVal = document.getElementById('equity-header-val');
-  if (headerDate) headerDate.textContent = '14 Nov 2026, 11:51 AM';
-  if (headerVal) headerVal.textContent = isUSD ? '$58.37 USD' : '₹4.89K';
+  if (headerDate && lastPt) headerDate.textContent = lastPt.date;
+  if (headerVal && lastPt) headerVal.textContent = isUSD ? (lastPt.equityUsd + ' USD') : lastPt.equityInr;
 }
 
 
@@ -2260,6 +2262,64 @@ def generate_pnl_analytics_html(delta_orders_history):
     vol_js_json = json.dumps(vol_js_list)
     fee_js_json = json.dumps(fee_js_list)
 
+    # Dynamic Trading Equity Curve (Last 7 Days)
+    base_eq_inr = 3830.0
+    try:
+        import delta_exchange as _dx_eq
+        if _dx_eq.DELTA_API_KEY:
+            _live_inr = _dx_eq.get_total_inr_balance()
+            if _live_inr > 0:
+                base_eq_inr = _live_inr
+    except Exception:
+        pass
+
+    sum_7d_inr = sum(round(daily_pnl_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates)
+    start_eq_inr = max(100.0, base_eq_inr - sum_7d_inr)
+    eq_series_inr = []
+    running_eq = start_eq_inr
+    for d in last_7_dates:
+        d_inr = round(daily_pnl_map.get(d, 0.0) * 83.8, 2)
+        running_eq = round(running_eq + d_inr, 2)
+        eq_series_inr.append((d, running_eq, d_inr))
+
+    eq_min = min([x[1] for x in eq_series_inr] + [start_eq_inr])
+    eq_max = max([x[1] for x in eq_series_inr] + [start_eq_inr])
+    if eq_max - eq_min < 200.0:
+        mid_eq = (eq_max + eq_min) / 2.0
+        eq_min = mid_eq - 250.0
+        eq_max = mid_eq + 250.0
+    eq_span = max(1.0, eq_max - eq_min)
+
+    eq_x_coords = [60, 210, 360, 510, 660, 810, 970]
+    eq_points_js = []
+    eq_svg_coords = []
+    for i, (d, eq_v, d_inr) in enumerate(eq_series_inr):
+        sx = eq_x_coords[i]
+        norm = (eq_v - eq_min) / eq_span
+        sy = round(210 - (norm * 175), 1)
+        eq_svg_coords.append((sx, sy))
+        d_usd = round(d_inr / 83.8, 2)
+        eq_usd = round(eq_v / 83.8, 2)
+        eq_points_js.append({
+            "xPct": round((sx / 1000.0) * 100.0, 1),
+            "svgX": sx,
+            "svgY": sy,
+            "date": d.strftime("%d %b %Y, %I:%M %p") if i < 6 else now_ist.strftime("%d %b %Y, %I:%M %p"),
+            "equityInr": f"₹{eq_v:,.2f}",
+            "equityUsd": f"${eq_usd:,.2f}",
+            "pnlInr": f"+₹{d_inr:,.2f}" if d_inr > 0 else (f"-₹{abs(d_inr):,.2f}" if d_inr < 0 else "₹0.00"),
+            "pnlUsd": f"+${d_usd:,.2f}" if d_usd > 0 else (f"-${abs(d_usd):,.2f}" if d_usd < 0 else "$0.00"),
+            "desc": daily_desc_map.get(d, "Live Account Equity"),
+            "isGain": d_inr >= 0
+        })
+
+    eq_line_d = "M " + " L ".join(f"{x},{y}" for x, y in eq_svg_coords)
+    eq_area_d = eq_line_d + f" L {eq_svg_coords[-1][0]},225 L {eq_svg_coords[0][0]},225 Z"
+    eq_last_x, eq_last_y = eq_svg_coords[-1]
+    eq_header_inr = f"₹{eq_series_inr[-1][1]/1000:.2f}K" if eq_series_inr[-1][1] >= 1000 else f"₹{eq_series_inr[-1][1]:,.2f}"
+    eq_header_usd = f"${eq_series_inr[-1][1]/83.8:,.2f} USD"
+    equity_js_json = json.dumps(eq_points_js)
+
     drilldown_rows = ""
     for o in closed_orders:
         sym = o.get("sym", "-")
@@ -2342,7 +2402,7 @@ def generate_pnl_analytics_html(delta_orders_history):
           <div style="display:flex; align-items:center; gap:12px; font-family:var(--font-mono); font-size:12px;">
             <span id="equity-header-date" style="color:#94a3b8;">{equity_header_date_str}</span>
             <span style="color:#ffffff; font-weight:700; background:#121826; border:1px solid #232d42; padding:3px 10px; border-radius:6px;">
-              Equity: <b id="equity-header-val" class="analytics-currency-val" data-val-inr="&#8377;4.89K" data-val-usd="$58.37 USD" style="color:#c084fc;">&#8377;4.89K</b>
+              Equity: <b id="equity-header-val" class="analytics-currency-val" data-val-inr="{eq_header_inr}" data-val-usd="{eq_header_usd}" style="color:#c084fc;">{eq_header_inr}</b>
             </span>
           </div>
         </div>
@@ -2394,17 +2454,17 @@ def generate_pnl_analytics_html(delta_orders_history):
             <text x="40" y="219" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="4.5K" data-val-usd="$53.7">4.5K</text>
 
             <!-- Gradient Area Fill -->
-            <path d="M 60,60 C 130,60 170,165 220,165 C 290,165 330,165 370,165 C 440,165 470,118 520,118 C 590,118 630,145 680,145 C 750,145 780,165 830,165 C 880,165 920,163 970,163 L 970,225 L 60,225 Z" fill="url(#eqGrad)" />
+            <path d="{eq_area_d}" fill="url(#eqGrad)" />
 
             <!-- Equity Line -->
-            <path d="M 60,60 C 130,60 170,165 220,165 C 290,165 330,165 370,165 C 440,165 470,118 520,118 C 590,118 630,145 680,145 C 750,145 780,165 830,165 C 880,165 920,163 970,163" fill="none" stroke="#a855f7" stroke-width="2.6" stroke-linecap="round" filter="url(#glowLine)" />
+            <path d="{eq_line_d}" fill="none" stroke="#a855f7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowLine)" />
 
-            <!-- Current Live Tip Pulse (Single Minimal Clean Indicator at End of Curve) -->
-            <circle cx="970" cy="163" r="7" fill="#a855f7" opacity="0.3">
+            <!-- Current Live Tip Pulse -->
+            <circle cx="{eq_last_x}" cy="{eq_last_y}" r="7" fill="#a855f7" opacity="0.3">
               <animate attributeName="r" values="5;9;5" dur="2.4s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.4s" repeatCount="indefinite" />
             </circle>
-            <circle cx="970" cy="163" r="3.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" />
+            <circle cx="{eq_last_x}" cy="{eq_last_y}" r="3.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" />
 
             <!-- Dynamic Interactive Crosshair Line -->
             <line id="equity-crosshair" x1="0" y1="20" x2="0" y2="225" stroke="rgba(192, 132, 252, 0.65)" stroke-width="1.5" stroke-dasharray="4,4" style="display:none;" />
@@ -2799,6 +2859,8 @@ def generate_pnl_analytics_html(delta_orders_history):
 
     </div>
     <script>
+      equity7dPoints = {equity_js_json};
+      equityAllPoints = {equity_js_json};
       rpnlDataPoints = {rpnl_js_json};
       volDataPoints = {vol_js_json};
       feeDataPoints = {fee_js_json};
