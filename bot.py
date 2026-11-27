@@ -1996,38 +1996,156 @@ def generate_pnl_analytics_html(delta_orders_history):
     - Fees Paid Bar Chart & Funding Card (Options Perpetual Note)
     - All-Time Settled Orders Drilldown Table
     """
-    # 7-day verified values from Delta Exchange
-    pnl_7d_inr = "-₹289.04"
-    pnl_7d_usd = "-$3.45 USD"
-    winrate_7d = "40 %"
-    avg_win_inr = "₹53.95"
-    avg_win_usd = "+$0.64 USD"
-    avg_loss_inr = "-₹132.31"
-    avg_loss_usd = "-$1.58 USD"
-    trades_7d = "5"
-    fees_paid_inr = "₹7.17"
-    fees_paid_usd = "$0.09 USD"
-    volume_inr = "₹1.99L"
-    volume_usd = "$2,374 USD"
+    now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
 
-    # 30-day / All-time values
-    pnl_30d_inr = "-₹1,234.33"
-    pnl_30d_usd = "-$14.73 USD"
-    winrate_30d = "33.3 %"
-    avg_win_30d_inr = "₹39.11"
-    avg_win_30d_usd = "+$0.47 USD"
-    avg_loss_30d_inr = "-₹225.28"
-    avg_loss_30d_usd = "-$2.69 USD"
-    trades_30d = "9"
-    fees_paid_30d_inr = "₹23.93"
-    fees_paid_30d_usd = "$0.29 USD"
-    volume_30d_inr = "₹4.85L"
-    volume_30d_usd = "$5,790 USD"
+    def _parse_dt(t_str):
+        s = str(t_str or "").strip()
+        for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s[:22].strip(), fmt)
+            except Exception:
+                pass
+        return None
+
+    def _num(val_str):
+        s = str(val_str or "0").replace("USD", "").replace("+", "").replace(",", "").strip()
+        try:
+            return float(s)
+        except Exception:
+            return 0.0
 
     # Closed trades list for drilldown
     closed_orders = []
     if delta_orders_history:
-        closed_orders = [o for o in delta_orders_history if "Close" in str(o.get("side", "")) or float(str(o.get("realized_pnl", "0")).replace("USD","").strip() or 0) != 0]
+        closed_orders = [
+            o for o in delta_orders_history
+            if ("Close" in str(o.get("side", "")) or _num(o.get("realized_pnl", 0)) != 0 or _num(o.get("net_pnl", 0)) != 0)
+            and str(o.get("status", "Filled")).lower() != "cancelled"
+        ]
+
+    def _calc_window_kpis(days_limit):
+        w_pnl = 0.0
+        w_fees = 0.0
+        w_vol = 0.0
+        wins_list = []
+        losses_list = []
+        cnt = 0
+        for o in closed_orders:
+            dt = _parse_dt(o.get("time", ""))
+            if dt and (now_ist.date() - dt.date()).days > days_limit:
+                continue
+            net_v = _num(o.get("net_pnl") or o.get("realized_pnl") or 0)
+            fee_v = abs(_num(o.get("trading_fees", 0)))
+            cf_v = abs(_num(o.get("cashflow", 0)))
+            w_pnl += net_v
+            w_fees += fee_v
+            w_vol += cf_v
+            cnt += 1
+            if net_v > 0:
+                wins_list.append(net_v)
+            elif net_v < 0:
+                losses_list.append(net_v)
+        # Also include volume from all filled orders in window
+        for o in (delta_orders_history or []):
+            if str(o.get("status", "")).lower() == "cancelled":
+                continue
+            dt = _parse_dt(o.get("time", ""))
+            if dt and (now_ist.date() - dt.date()).days <= days_limit:
+                w_vol += abs(_num(o.get("cashflow", 0)))
+                w_fees += abs(_num(o.get("trading_fees", 0)))
+
+        tot_wl = len(wins_list) + len(losses_list)
+        wr = round((len(wins_list) / tot_wl) * 100.0, 1) if tot_wl > 0 else 0.0
+        avg_w = (sum(wins_list) / len(wins_list)) if wins_list else 0.0
+        max_w = max(wins_list) if wins_list else 0.0
+        avg_l = (sum(losses_list) / len(losses_list)) if losses_list else 0.0
+        return {
+            "pnl_usd": round(w_pnl, 2),
+            "pnl_inr": round(w_pnl * 83.8, 2),
+            "wr": wr,
+            "wins": len(wins_list),
+            "losses": len(losses_list),
+            "avg_w_usd": round(avg_w, 2),
+            "avg_w_inr": round(avg_w * 83.8, 2),
+            "max_w_inr": round(max_w * 83.8, 2),
+            "avg_l_usd": round(avg_l, 2),
+            "avg_l_inr": round(avg_l * 83.8, 2),
+            "trades": cnt,
+            "fees_usd": round(w_fees, 2),
+            "fees_inr": round(w_fees * 83.8, 2),
+            "vol_usd": round(w_vol, 2),
+            "vol_inr": round(w_vol * 83.8, 2),
+        }
+
+    k7 = _calc_window_kpis(7)
+    k30 = _calc_window_kpis(30)
+
+    def _fmt_inr(v):
+        return f"+₹{v:,.2f}" if v > 0 else (f"-₹{abs(v):,.2f}" if v < 0 else "₹0.00")
+
+    def _fmt_usd(v):
+        return f"+${v:,.2f} USD" if v > 0 else (f"-${abs(v):,.2f} USD" if v < 0 else "$0.00 USD")
+
+    pnl_7d_inr = _fmt_inr(k7["pnl_inr"])
+    pnl_7d_usd = _fmt_usd(k7["pnl_usd"])
+    pnl_7d_col = "#34d399" if k7["pnl_usd"] >= 0 else "#f87171"
+    winrate_7d = f"{k7['wr']} %"
+    wins_7d = k7["wins"]
+    losses_7d = k7["losses"]
+    avg_win_inr = f"₹{k7['avg_w_inr']:,.2f}"
+    avg_win_usd = f"+${k7['avg_w_usd']:,.2f} USD"
+    max_win_inr_str = f"+₹{k7['max_w_inr']:,.0f}"
+    avg_loss_inr = _fmt_inr(k7["avg_l_inr"])
+    avg_loss_usd = _fmt_usd(k7["avg_l_usd"])
+    trades_7d = str(k7["trades"])
+    fees_paid_inr = f"₹{k7['fees_inr']:,.2f}"
+    fees_paid_usd = f"${k7['fees_usd']:,.2f} USD"
+    volume_inr = f"₹{k7['vol_inr']/100000:.2f}L" if k7["vol_inr"] >= 100000 else f"₹{k7['vol_inr']:,.0f}"
+    volume_usd = f"${k7['vol_usd']:,.0f} USD"
+
+    pnl_30d_inr = _fmt_inr(k30["pnl_inr"])
+    pnl_30d_usd = _fmt_usd(k30["pnl_usd"])
+    winrate_30d = f"{k30['wr']} %"
+    avg_win_30d_inr = f"₹{k30['avg_w_inr']:,.2f}"
+    avg_win_30d_usd = f"+${k30['avg_w_usd']:,.2f} USD"
+    avg_loss_30d_inr = _fmt_inr(k30["avg_l_inr"])
+    avg_loss_30d_usd = _fmt_usd(k30["avg_l_usd"])
+    trades_30d = str(k30["trades"])
+    fees_paid_30d_inr = f"₹{k30['fees_inr']:,.2f}"
+    fees_paid_30d_usd = f"${k30['fees_usd']:,.2f} USD"
+    volume_30d_inr = f"₹{k30['vol_inr']/100000:.2f}L" if k30["vol_inr"] >= 100000 else f"₹{k30['vol_inr']:,.0f}"
+    volume_30d_usd = f"${k30['vol_usd']:,.0f} USD"
+
+    # Build daily PnL map for last 14 days for Heatmap & X-axis dates
+    daily_pnl_map = {}
+    for o in closed_orders:
+        dt = _parse_dt(o.get("time", ""))
+        if dt:
+            d_key = dt.date()
+            daily_pnl_map[d_key] = daily_pnl_map.get(d_key, 0.0) + _num(o.get("net_pnl") or o.get("realized_pnl") or 0)
+
+    last_7_dates = [(now_ist.date() - timedelta(days=i)) for i in range(6, -1, -1)]
+    last_7_labels_html = "".join(f"<span>{d.strftime('%d %b')}</span>" for d in last_7_dates)
+    equity_header_date_str = now_ist.strftime("%d %b %Y, %I:%M %p")
+    heatmap_month_str = now_ist.strftime("%B %Y") + " Daily Performance"
+
+    # Dynamic 2-week heatmap columns
+    heatmap_cols_html = ""
+    for w_idx in range(2):
+        start_offset = 13 - (w_idx * 7)
+        col_cells = ""
+        for d_off in range(7):
+            d_day = now_ist.date() - timedelta(days=(start_offset - d_off))
+            d_usd = daily_pnl_map.get(d_day, 0.0)
+            d_inr = round(d_usd * 83.8, 2)
+            d_lbl = d_day.strftime("%a %d %b")
+            if d_inr > 0.01:
+                col_cells += f'<div title="{d_lbl}: +₹{d_inr:,.2f} (+${d_usd:,.2f} USD)" style="width:28px; height:24px; border-radius:4px; background:#065f46; border:1px solid #10b981; cursor:pointer; display:flex; align-items:center; justify-content:center;"><span style="font-size:9px; color:#a7f3d0; font-weight:700;">+{round(d_inr)}</span></div>'
+            elif d_inr < -0.01:
+                col_cells += f'<div title="{d_lbl}: -₹{abs(d_inr):,.2f} (-${abs(d_usd):,.2f} USD)" style="width:28px; height:24px; border-radius:4px; background:#7f1d1d; border:1px solid #ef4444; cursor:pointer; display:flex; align-items:center; justify-content:center;"><span style="font-size:9px; color:#fca5a5; font-weight:700;">-{round(abs(d_inr))}</span></div>'
+            else:
+                col_cells += f'<div title="{d_lbl}: No Settled Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>'
+        heatmap_cols_html += f'<div style="display:flex; flex-direction:column; gap:8px;">{col_cells}</div>'
 
     drilldown_rows = ""
     for o in closed_orders:
@@ -2109,7 +2227,7 @@ def generate_pnl_analytics_html(delta_orders_history):
             <span style="font-size:10px; color:#a855f7; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); padding:2px 7px; border-radius:4px; font-family:var(--font-mono);">INTERACTIVE CROSSHAIR</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px; font-family:var(--font-mono); font-size:12px;">
-            <span id="equity-header-date" style="color:#94a3b8;">14 Nov 2026, 11:51 AM</span>
+            <span id="equity-header-date" style="color:#94a3b8;">{equity_header_date_str}</span>
             <span style="color:#ffffff; font-weight:700; background:#121826; border:1px solid #232d42; padding:3px 10px; border-radius:6px;">
               Equity: <b id="equity-header-val" class="analytics-currency-val" data-val-inr="&#8377;4.89K" data-val-usd="$58.37 USD" style="color:#c084fc;">&#8377;4.89K</b>
             </span>
@@ -2184,15 +2302,9 @@ def generate_pnl_analytics_html(delta_orders_history):
           </svg>
         </div>
 
-        <!-- X-Axis Dates -->
+        <!-- X-Axis Dates (Dynamic Last 7 Days) -->
         <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:8px; padding:0 24px;">
-          <span>08 Nov</span>
-          <span>09 Nov</span>
-          <span>10 Nov</span>
-          <span>11 Nov</span>
-          <span>12 Nov</span>
-          <span>13 Nov</span>
-          <span>14 Nov</span>
+          {last_7_labels_html}
         </div>
       </div>
 
@@ -2207,7 +2319,7 @@ def generate_pnl_analytics_html(delta_orders_history):
             <span>Total Realized PNL</span>
             <span style="font-size:11px; color:#64748b;" title="Cumulative net realized profit or loss from closed trades">&#9432;</span>
           </div>
-          <div class="analytics-currency-val" id="kpi-pnl" data-val-inr="{pnl_7d_inr}" data-val-usd="{pnl_7d_usd}" style="font-size:24px; font-weight:800; color:#f87171; margin-top:10px; font-family:var(--font-mono);">
+          <div class="analytics-currency-val" id="kpi-pnl" data-val-inr="{pnl_7d_inr}" data-val-usd="{pnl_7d_usd}" style="font-size:24px; font-weight:800; color:{pnl_7d_col}; margin-top:10px; font-family:var(--font-mono);">
             {pnl_7d_inr}
           </div>
           <div style="margin-top:6px; font-size:11px; color:#f87171; font-weight:600; font-family:var(--font-mono);">
@@ -2225,7 +2337,7 @@ def generate_pnl_analytics_html(delta_orders_history):
             {winrate_7d}
           </div>
           <div style="margin-top:6px; font-size:11px; color:#34d399; font-weight:600; font-family:var(--font-mono);">
-            2 Wins / 3 Losses
+            {wins_7d} Wins / {losses_7d} Losses
           </div>
         </div>
 
@@ -2239,7 +2351,7 @@ def generate_pnl_analytics_html(delta_orders_history):
             {avg_win_inr}
           </div>
           <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            +&#8377;106 highest win
+            {max_win_inr_str} highest win
           </div>
         </div>
 
@@ -2310,7 +2422,7 @@ def generate_pnl_analytics_html(delta_orders_history):
             <span style="font-size:12px; color:#64748b;">&#9432;</span>
           </div>
           <div style="font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            November 2026 Daily Performance
+            {heatmap_month_str}
           </div>
         </div>
 
@@ -2327,46 +2439,9 @@ def generate_pnl_analytics_html(delta_orders_history):
             <span>Sun</span>
           </div>
 
-          <!-- Heatmap Matrix -->
+          <!-- Heatmap Matrix (Dynamic Last 14 Days) -->
           <div style="display:flex; gap:8px;">
-            <!-- Week 1: 02 - 08 Nov -->
-            <div style="display:flex; flex-direction:column; gap:8px;">
-              <div title="Mon 02 Nov: No PnL" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-              <div title="Tue 03 Nov: +₹10.89 (+0.13 USD)" style="width:28px; height:24px; border-radius:4px; background:rgba(16,185,129,0.3); border:1px solid rgba(16,185,129,0.5); cursor:pointer;"></div>
-              <div title="Wed 04 Nov: No Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-              <div title="Thu 05 Nov: No Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-              <div title="Fri 06 Nov: No Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-              <div title="Sat 07 Nov: No Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-              <div title="Sun 08 Nov: No Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-            </div>
-
-            <!-- Week 2: 09 - 15 Nov (Current Active Week) -->
-            <div style="display:flex; flex-direction:column; gap:8px;">
-              <!-- Mon 09 Nov: -305 INR -->
-              <div title="Mon 09 Nov: -₹305.03 (-$3.64 USD)" style="width:28px; height:24px; border-radius:4px; background:#7f1d1d; border:1px solid #ef4444; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                <span style="font-size:9px; color:#fca5a5; font-weight:700;">-305</span>
-              </div>
-              <!-- Tue 10 Nov: No Trades -->
-              <div title="Tue 10 Nov: Scanning (No closed trades)" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-              <!-- Wed 11 Nov: +106 INR -->
-              <div title="Wed 11 Nov: +₹105.59 (+$1.26 USD)" style="width:28px; height:24px; border-radius:4px; background:#065f46; border:1px solid #10b981; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                <span style="font-size:9px; color:#a7f3d0; font-weight:700;">+106</span>
-              </div>
-              <!-- Thu 12 Nov: -65 INR -->
-              <div title="Thu 12 Nov: -₹65.36 (-$0.78 USD)" style="width:28px; height:24px; border-radius:4px; background:#991b1b; border:1px solid #ef4444; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                <span style="font-size:9px; color:#fca5a5; font-weight:700;">-65</span>
-              </div>
-              <!-- Fri 13 Nov: -19 INR -->
-              <div title="Fri 13 Nov: -₹19.27 (-$0.23 USD)" style="width:28px; height:24px; border-radius:4px; background:#7f1d1d; border:1px solid #ef4444; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                <span style="font-size:9px; color:#fca5a5; font-weight:700;">-19</span>
-              </div>
-              <!-- Sat 14 Nov: +2 INR -->
-              <div title="Sat 14 Nov: +₹1.68 (+$0.02 USD)" style="width:28px; height:24px; border-radius:4px; background:#047857; border:1px solid #34d399; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                <span style="font-size:9px; color:#a7f3d0; font-weight:700;">+2</span>
-              </div>
-              <!-- Sun 15 Nov: Active -->
-              <div title="Sun 15 Nov: Live Session Active" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>
-            </div>
+            {heatmap_cols_html}
           </div>
         </div>
 
@@ -2715,31 +2790,55 @@ def generate_dashboard_html():
         if "Close" in str(o.get("side", "")) or float(str(o.get("realized_pnl", "0")).replace("USD","").strip() or 0) != 0
     ]
     
-    delta_7d_pnl_usd = -3.45
-    delta_7d_pnl_inr = -289.04
-    delta_7d_win_rate = 40.0
+    delta_7d_pnl_usd = 0.0
+    delta_7d_pnl_inr = 0.0
+    delta_7d_win_rate = 0.0
+    now_ist_dash = datetime.utcnow() + timedelta(hours=5, minutes=30)
 
     if delta_closed_trades:
         d_wins = 0
         d_losses = 0
         d_pnl_usd = 0.0
+        all_wins = 0
+        all_losses = 0
+        all_pnl_usd = 0.0
         for ct in delta_closed_trades:
-            net_str = str(ct.get("net_pnl") or ct.get("realized_pnl") or "0").replace("USD", "").replace(",", "").strip()
+            if str(ct.get("status", "Filled")).lower() == "cancelled":
+                continue
+            net_str = str(ct.get("net_pnl") or ct.get("realized_pnl") or "0").replace("USD", "").replace("+", "").replace(",", "").strip()
             try:
                 net_val = float(net_str)
             except Exception:
                 net_val = 0.0
-            t_str = str(ct.get("time", ""))
-            if any(day in t_str for day in ["09 - Nov", "11 - Nov", "12 - Nov", "13 - Nov", "14 - Nov"]):
+            all_pnl_usd += net_val
+            if net_val > 0:
+                all_wins += 1
+            elif net_val < 0:
+                all_losses += 1
+
+            t_str = str(ct.get("time", "")).strip()
+            dt_ct = None
+            for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    dt_ct = datetime.strptime(t_str[:22].strip(), fmt)
+                    break
+                except Exception:
+                    pass
+            if dt_ct is None or (now_ist_dash.date() - dt_ct.date()).days <= 7:
                 d_pnl_usd += net_val
                 if net_val > 0:
                     d_wins += 1
                 elif net_val < 0:
                     d_losses += 1
+
         tot_7d = d_wins + d_losses
         if tot_7d > 0:
             delta_7d_win_rate = round((d_wins / tot_7d) * 100.0, 1)
             delta_7d_pnl_usd = round(d_pnl_usd, 2)
+            delta_7d_pnl_inr = round(delta_7d_pnl_usd * 83.8, 2)
+        elif (all_wins + all_losses) > 0:
+            delta_7d_win_rate = round((all_wins / (all_wins + all_losses)) * 100.0, 1)
+            delta_7d_pnl_usd = round(all_pnl_usd, 2)
             delta_7d_pnl_inr = round(delta_7d_pnl_usd * 83.8, 2)
 
     pnl = delta_7d_pnl_usd
