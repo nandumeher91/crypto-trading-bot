@@ -693,7 +693,7 @@ function toggleBotAutoScan() {
 }
 
 // ── TRADING EQUITY CURVE INTERACTIVE CROSSHAIR & TOOLTIP ──
-const equity7dPoints = [
+let equity7dPoints = [
   { xPct: 6.0,  svgX: 60,  svgY: 60,  date: "08 Nov 2026, 12:00 AM", equityInr: "₹5,180.00", equityUsd: "$61.80", pnlInr: "₹0.00", pnlUsd: "$0.00", desc: "Starting Sandbox Capital", isGain: true },
   { xPct: 22.0, svgX: 220, svgY: 165, date: "09 Nov 2026, 03:25 AM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "-₹308.38", pnlUsd: "-$3.68", desc: "P-ETH-1900 SL Triggered", isGain: false },
   { xPct: 37.0, svgX: 370, svgY: 165, date: "10 Nov 2026, 11:30 PM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "₹0.00", pnlUsd: "$0.00", desc: "Market Scanning (Holding)", isGain: true },
@@ -703,7 +703,7 @@ const equity7dPoints = [
   { xPct: 97.0, svgX: 970, svgY: 163, date: "14 Nov 2026, 11:51 AM", equityInr: "₹4,891.74", equityUsd: "$58.37", pnlInr: "+₹1.68", pnlUsd: "+$0.02", desc: "C-ETH-2450 Take-Profit Hit", isGain: true }
 ];
 
-const equityAllPoints = [
+let equityAllPoints = [
   { xPct: 6.0,  svgX: 60,  svgY: 60,  date: "30 Oct 2026, 05:51 AM", equityInr: "₹5,180.00", equityUsd: "$61.80", pnlInr: "-₹974.59", pnlUsd: "-$11.63", desc: "BTC & ETH Put Liquidation", isGain: false },
   { xPct: 22.0, svgX: 220, svgY: 165, date: "03 Nov 2026, 11:04 AM", equityInr: "₹5,190.89", equityUsd: "$61.93", pnlInr: "+₹10.89", pnlUsd: "+$0.13", desc: "C-ETH-2650 Profit", isGain: true },
   { xPct: 37.0, svgX: 370, svgY: 165, date: "09 Nov 2026, 03:25 AM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "-₹308.38", pnlUsd: "-$3.68", desc: "P-ETH-1900 SL Triggered", isGain: false },
@@ -876,7 +876,7 @@ function switchFeeView(mode) {
 }
 
 // ── INTERACTIVE CONTROLS FOR REALIZED PNL, VOLUME & FEES CHARTS ──
-const rpnlDataPoints = [
+let rpnlDataPoints = [
   { svgX: 109, svgY: 148, barId: 'rpnl-bar-0', bx: 90,  bw: 38, by: 80, bh: 68, date: "Mon 09 Nov 2026", inr: "-₹305.03", usd: "-$3.64 USD", trade: "P-ETH-1900 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
   { svgX: 229, svgY: 44,  barId: 'rpnl-bar-2', bx: 210, bw: 38, by: 44, bh: 36, date: "Wed 11 Nov 2026", inr: "+₹105.59", usd: "+$1.26 USD", trade: "C-ETH-2700 & C-BTC-89000 Win", isWin: true, glowCol: "rgba(16, 185, 129, 0.85)" },
   { svgX: 289, svgY: 102, barId: 'rpnl-bar-3', bx: 270, bw: 38, by: 80, bh: 22, date: "Thu 12 Nov 2026", inr: "-₹65.36",  usd: "-$0.78 USD", trade: "P-BTC-70000 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
@@ -884,7 +884,7 @@ const rpnlDataPoints = [
   { svgX: 409, svgY: 77,  barId: 'rpnl-bar-5', bx: 390, bw: 38, by: 77, bh: 6,  date: "Sat 14 Nov 2026", inr: "+₹1.68",   usd: "+$0.02 USD", trade: "C-ETH-2450 Take-Profit Hit", isWin: true, glowCol: "rgba(16, 185, 129, 0.85)" }
 ];
 
-const volDataPoints = [
+let volDataPoints = [
   { svgX: 109, svgY: 85,  barId: 'vol-bar-0', bx: 90,  bw: 38, by: 85,  bh: 75, date: "Mon 09 Nov 2026", inr: "₹65,200", usd: "$778.04 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
   { svgX: 229, svgY: 65,  barId: 'vol-bar-2', bx: 210, bw: 38, by: 65,  bh: 95, date: "Wed 11 Nov 2026", inr: "₹80,500", usd: "$960.62 USD", desc: "2 Option Contracts Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
   { svgX: 289, svgY: 115, barId: 'vol-bar-3', bx: 270, bw: 38, by: 115, bh: 45, date: "Thu 12 Nov 2026", inr: "₹35,100", usd: "$418.85 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
@@ -892,7 +892,7 @@ const volDataPoints = [
   { svgX: 409, svgY: 152, barId: 'vol-bar-5', bx: 390, bw: 38, by: 152, bh: 10, date: "Sat 14 Nov 2026", inr: "₹4,200",  usd: "$50.12 USD",  desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" }
 ];
 
-const feeDataPoints = [
+let feeDataPoints = [
   { svgX: 109, svgY: 80,  barId: 'fee-bar-0', bx: 90,  bw: 38, by: 80,  bh: 50, date: "Mon 09 Nov 2026", inr: "₹2.51", usd: "$0.03 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
   { svgX: 229, svgY: 112, barId: 'fee-bar-2', bx: 210, bw: 38, by: 112, bh: 18, date: "Wed 11 Nov 2026", inr: "₹0.84", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
   { svgX: 289, svgY: 80,  barId: 'fee-bar-3', bx: 270, bw: 38, by: 80,  bh: 50, date: "Thu 12 Nov 2026", inr: "₹2.51", usd: "$0.03 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
@@ -2000,11 +2000,15 @@ def generate_pnl_analytics_html(delta_orders_history):
 
     def _parse_dt(t_str):
         s = str(t_str or "").strip()
-        for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(s[:22].strip(), fmt)
-            except Exception:
-                pass
+        if not s:
+            return None
+        date_only = s.split(",")[0].strip()
+        for candidate in (s, date_only, s[:19]):
+            for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(candidate.strip(), fmt)
+                except Exception:
+                    pass
         return None
 
     def _num(val_str):
@@ -2146,6 +2150,115 @@ def generate_pnl_analytics_html(delta_orders_history):
             else:
                 col_cells += f'<div title="{d_lbl}: No Settled Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>'
         heatmap_cols_html += f'<div style="display:flex; flex-direction:column; gap:8px;">{col_cells}</div>'
+
+    # Build dynamic daily buckets for Volume, Fees, and Trade descriptions over last 7 days
+    daily_vol_map = {}
+    daily_fee_map = {}
+    daily_desc_map = {}
+    daily_cnt_map = {}
+    for o in (delta_orders_history or []):
+        if str(o.get("status", "")).lower() == "cancelled":
+            continue
+        dt = _parse_dt(o.get("time", ""))
+        if not dt:
+            continue
+        d_key = dt.date()
+        daily_vol_map[d_key] = daily_vol_map.get(d_key, 0.0) + abs(_num(o.get("cashflow", 0)))
+        daily_fee_map[d_key] = daily_fee_map.get(d_key, 0.0) + abs(_num(o.get("trading_fees", 0)))
+        daily_cnt_map[d_key] = daily_cnt_map.get(d_key, 0) + 1
+        if "Close" in str(o.get("side", "")) or _num(o.get("realized_pnl", 0)) != 0:
+            daily_desc_map[d_key] = str(o.get("sym", "Option")) + " Settled"
+
+    # Dynamic Realized PNL Bars (Last 7 Days)
+    rpnl_vals_inr = [round(daily_pnl_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates]
+    max_abs_rpnl = max([abs(v) for v in rpnl_vals_inr] + [100.0])
+    rpnl_pos_grid_inr = f"+{round(max_abs_rpnl)}"
+    rpnl_pos_grid_usd = f"+${max_abs_rpnl/83.8:.1f}"
+    rpnl_neg_grid_inr = f"-{round(max_abs_rpnl)}"
+    rpnl_neg_grid_usd = f"-${max_abs_rpnl/83.8:.1f}"
+
+    rpnl_bars_svg = ""
+    rpnl_js_list = []
+    bar_x_positions = [60, 120, 180, 240, 300, 360, 420]
+    bw = 34
+    for idx, d in enumerate(last_7_dates):
+        bx = bar_x_positions[idx]
+        d_usd = round(daily_pnl_map.get(d, 0.0), 2)
+        d_inr = round(d_usd * 83.8, 2)
+        if abs(d_inr) < 0.01:
+            continue
+        bh = max(4, round((abs(d_inr) / max_abs_rpnl) * 58))
+        is_win = d_inr >= 0
+        by = (80 - bh) if is_win else 80
+        fill_col = "#10b981" if is_win else "#ef4444"
+        bar_id = f"rpnl-bar-{idx}"
+        rpnl_bars_svg += f'<rect id="{bar_id}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="{fill_col}" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />'
+        rpnl_js_list.append({
+            "svgX": bx + (bw // 2),
+            "svgY": by if is_win else (80 + bh),
+            "barId": bar_id,
+            "bx": bx, "bw": bw, "by": by, "bh": bh,
+            "date": d.strftime("%a %d %b %Y"),
+            "inr": f"+₹{d_inr:,.2f}" if is_win else f"-₹{abs(d_inr):,.2f}",
+            "usd": f"+${d_usd:,.2f} USD" if is_win else f"-${abs(d_usd):,.2f} USD",
+            "trade": daily_desc_map.get(d, "Settled Options Trade"),
+            "isWin": is_win,
+            "glowCol": "rgba(16, 185, 129, 0.85)" if is_win else "rgba(239, 68, 68, 0.85)"
+        })
+
+    # Dynamic Volume Bars (Last 7 Days)
+    vol_vals_inr = [round(daily_vol_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates]
+    max_vol = max(vol_vals_inr + [100.0])
+    vol_bars_svg = ""
+    vol_js_list = []
+    for idx, d in enumerate(last_7_dates):
+        bx = bar_x_positions[idx]
+        v_usd = round(daily_vol_map.get(d, 0.0), 2)
+        v_inr = round(v_usd * 83.8, 2)
+        if v_inr < 0.01:
+            continue
+        bh = max(6, round((v_inr / max_vol) * 110))
+        by = 160 - bh
+        bar_id = f"vol-bar-{idx}"
+        vol_bars_svg += f'<rect id="{bar_id}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />'
+        cnt_d = daily_cnt_map.get(d, 1)
+        vol_js_list.append({
+            "svgX": bx + (bw // 2), "svgY": by,
+            "barId": bar_id, "bx": bx, "bw": bw, "by": by, "bh": bh,
+            "date": d.strftime("%a %d %b %Y"),
+            "inr": f"₹{v_inr:,.2f}",
+            "usd": f"${v_usd:,.2f} USD",
+            "desc": f"{cnt_d} Order{'s' if cnt_d != 1 else ''} Executed",
+            "glowCol": "rgba(59, 130, 246, 0.85)"
+        })
+
+    # Dynamic Fees Bars (Last 7 Days)
+    fee_vals_inr = [round(daily_fee_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates]
+    max_fee = max(fee_vals_inr + [1.0])
+    fee_bars_svg = ""
+    fee_js_list = []
+    for idx, d in enumerate(last_7_dates):
+        bx = bar_x_positions[idx]
+        f_usd = round(daily_fee_map.get(d, 0.0), 4)
+        f_inr = round(f_usd * 83.8, 2)
+        if f_inr < 0.01:
+            continue
+        bh = max(6, round((f_inr / max_fee) * 85))
+        by = 130 - bh
+        bar_id = f"fee-bar-{idx}"
+        fee_bars_svg += f'<rect id="{bar_id}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />'
+        fee_js_list.append({
+            "svgX": bx + (bw // 2), "svgY": by,
+            "barId": bar_id, "bx": bx, "bw": bw, "by": by, "bh": bh,
+            "date": d.strftime("%a %d %b %Y"),
+            "inr": f"₹{f_inr:,.2f}",
+            "usd": f"${f_usd:,.2f} USD",
+            "glowCol": "rgba(245, 158, 11, 0.85)"
+        })
+
+    rpnl_js_json = json.dumps(rpnl_js_list)
+    vol_js_json = json.dumps(vol_js_list)
+    fee_js_json = json.dumps(fee_js_list)
 
     drilldown_rows = ""
     for o in closed_orders:
@@ -2495,26 +2608,17 @@ def generate_pnl_analytics_html(delta_orders_history):
               <line x1="40" y1="80" x2="480" y2="80" stroke="#232d42" stroke-width="1.5" />
               <text x="35" y="84" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end">0</text>
 
-              <!-- Positive Gridline +150 -->
+              <!-- Dynamic Positive Gridline -->
               <line x1="40" y1="30" x2="480" y2="30" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-              <text x="35" y="34" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="+150" data-val-usd="+$1.8">+150</text>
+              <text x="35" y="34" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{rpnl_pos_grid_inr}" data-val-usd="{rpnl_pos_grid_usd}">{rpnl_pos_grid_inr}</text>
 
-              <!-- Negative Gridline -300 -->
+              <!-- Dynamic Negative Gridline -->
               <line x1="40" y1="145" x2="480" y2="145" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-              <text x="35" y="149" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="-300" data-val-usd="-$3.6">-300</text>
+              <text x="35" y="149" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{rpnl_neg_grid_inr}" data-val-usd="{rpnl_neg_grid_usd}">{rpnl_neg_grid_inr}</text>
 
-              <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
+              <!-- DYNAMIC DAILY REALIZED PNL BARS -->
               <g id="rpnl-bar-group">
-                <!-- Nov 9: -305 INR -->
-                <rect id="rpnl-bar-0" x="90" y="80" width="38" height="68" fill="#ef4444" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 11: +106 INR -->
-                <rect id="rpnl-bar-2" x="210" y="44" width="38" height="36" fill="#10b981" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 12: -65 INR -->
-                <rect id="rpnl-bar-3" x="270" y="80" width="38" height="22" fill="#ef4444" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 13: -19 INR -->
-                <rect id="rpnl-bar-4" x="330" y="80" width="38" height="10" fill="#ef4444" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 14: +2 INR -->
-                <rect id="rpnl-bar-5" x="390" y="77" width="38" height="3" fill="#10b981" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
+                {rpnl_bars_svg}
               </g>
 
               <!-- Dynamic Hover Crosshair Line -->
@@ -2526,12 +2630,7 @@ def generate_pnl_analytics_html(delta_orders_history):
           </div>
 
           <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
-            <span>09 Nov</span>
-            <span>10 Nov</span>
-            <span>11 Nov</span>
-            <span>12 Nov</span>
-            <span>13 Nov</span>
-            <span>14 Nov</span>
+            {last_7_labels_html}
           </div>
         </div>
 
@@ -2571,16 +2670,7 @@ def generate_pnl_analytics_html(delta_orders_history):
 
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="vol-bar-group">
-                <!-- Nov 9: 65K -->
-                <rect id="vol-bar-0" x="90" y="85" width="38" height="75" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 11: 80K -->
-                <rect id="vol-bar-2" x="210" y="65" width="38" height="95" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 12: 35K -->
-                <rect id="vol-bar-3" x="270" y="115" width="38" height="45" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 13: 19K -->
-                <rect id="vol-bar-4" x="330" y="138" width="38" height="22" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 14: 4.2K -->
-                <rect id="vol-bar-5" x="390" y="152" width="38" height="8" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
+                {vol_bars_svg}
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
@@ -2590,12 +2680,7 @@ def generate_pnl_analytics_html(delta_orders_history):
           </div>
 
           <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
-            <span>09 Nov</span>
-            <span>10 Nov</span>
-            <span>11 Nov</span>
-            <span>12 Nov</span>
-            <span>13 Nov</span>
-            <span>14 Nov</span>
+            {last_7_labels_html}
           </div>
         </div>
       </div>
@@ -2639,16 +2724,7 @@ def generate_pnl_analytics_html(delta_orders_history):
 
               <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
               <g id="fee-bar-group">
-                <!-- Nov 9: ₹2.51 -->
-                <rect id="fee-bar-0" x="90" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 11: ₹0.84 -->
-                <rect id="fee-bar-2" x="210" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 12: ₹2.51 -->
-                <rect id="fee-bar-3" x="270" y="80" width="38" height="50" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 13: ₹0.84 -->
-                <rect id="fee-bar-4" x="330" y="112" width="38" height="18" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
-                <!-- Nov 14: ₹0.47 -->
-                <rect id="fee-bar-5" x="390" y="120" width="38" height="10" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />
+                {fee_bars_svg}
               </g>
 
               <!-- Dynamic Hover Crosshair & Dot -->
@@ -2658,12 +2734,7 @@ def generate_pnl_analytics_html(delta_orders_history):
           </div>
 
           <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
-            <span>09 Nov</span>
-            <span>10 Nov</span>
-            <span>11 Nov</span>
-            <span>12 Nov</span>
-            <span>13 Nov</span>
-            <span>14 Nov</span>
+            {last_7_labels_html}
           </div>
         </div>
 
@@ -2727,6 +2798,11 @@ def generate_pnl_analytics_html(delta_orders_history):
       </div>
 
     </div>
+    <script>
+      rpnlDataPoints = {rpnl_js_json};
+      volDataPoints = {vol_js_json};
+      feeDataPoints = {fee_js_json};
+    </script>
     """
     return html
 
@@ -2818,12 +2894,16 @@ def generate_dashboard_html():
 
             t_str = str(ct.get("time", "")).strip()
             dt_ct = None
-            for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-                try:
-                    dt_ct = datetime.strptime(t_str[:22].strip(), fmt)
+            t_date_only = t_str.split(",")[0].strip() if "," in t_str else t_str
+            for cand in (t_str, t_date_only):
+                for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                    try:
+                        dt_ct = datetime.strptime(cand.strip(), fmt)
+                        break
+                    except Exception:
+                        pass
+                if dt_ct:
                     break
-                except Exception:
-                    pass
             if dt_ct is None or (now_ist_dash.date() - dt_ct.date()).days <= 7:
                 d_pnl_usd += net_val
                 if net_val > 0:
