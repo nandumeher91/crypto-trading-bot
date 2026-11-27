@@ -1302,36 +1302,48 @@ function switchAnalyticsTimeframe(tf) {
     activeBtn.style.borderColor = '#a855f7';
     activeBtn.style.color = '#ffffff';
   }
-  const is30d = (tf === '30d' || tf === '365d');
-  const pnlEl = document.getElementById('kpi-pnl');
-  const winEl = document.getElementById('kpi-winrate');
-  const tradesEl = document.getElementById('kpi-trades');
-  const avgWinEl = document.getElementById('kpi-avg-win');
-  const avgLossEl = document.getElementById('kpi-avg-loss');
-  const feesEl = document.getElementById('kpi-fees');
-  const volEl = document.getElementById('kpi-volume');
+  const d = (window.analyticsKpiData && window.analyticsKpiData[tf]) ? window.analyticsKpiData[tf] : null;
+  if (d) {
+    const pnlEl = document.getElementById('kpi-pnl');
+    const pnlSubEl = document.getElementById('kpi-pnl-sub');
+    const winEl = document.getElementById('kpi-winrate');
+    const winSubEl = document.getElementById('kpi-winrate-sub');
+    const tradesEl = document.getElementById('kpi-trades');
+    const avgWinEl = document.getElementById('kpi-avg-win');
+    const avgWinSubEl = document.getElementById('kpi-avg-win-sub');
+    const avgLossEl = document.getElementById('kpi-avg-loss');
+    const feesEl = document.getElementById('kpi-fees');
+    const volEl = document.getElementById('kpi-volume');
 
-  if (pnlEl) {
-    pnlEl.setAttribute('data-val-inr', is30d ? '-₹1,234.33' : '-₹289.04');
-    pnlEl.setAttribute('data-val-usd', is30d ? '-$14.73 USD' : '-$3.45 USD');
-  }
-  if (winEl) winEl.textContent = is30d ? '33.3 %' : '40 %';
-  if (tradesEl) tradesEl.textContent = is30d ? '9' : '5';
-  if (avgWinEl) {
-    avgWinEl.setAttribute('data-val-inr', is30d ? '₹39.11' : '₹53.95');
-    avgWinEl.setAttribute('data-val-usd', is30d ? '+$0.47 USD' : '+$0.64 USD');
-  }
-  if (avgLossEl) {
-    avgLossEl.setAttribute('data-val-inr', is30d ? '-₹225.28' : '-₹132.31');
-    avgLossEl.setAttribute('data-val-usd', is30d ? '-$2.69 USD' : '-$1.58 USD');
-  }
-  if (feesEl) {
-    feesEl.setAttribute('data-val-inr', is30d ? '₹23.93' : '₹7.17');
-    feesEl.setAttribute('data-val-usd', is30d ? '$0.29 USD' : '$0.09 USD');
-  }
-  if (volEl) {
-    volEl.setAttribute('data-val-inr', is30d ? '₹4.85L' : '₹1.99L');
-    volEl.setAttribute('data-val-usd', is30d ? '$5,790 USD' : '$2,374 USD');
+    if (pnlEl) {
+      pnlEl.setAttribute('data-val-inr', d.pnl_inr);
+      pnlEl.setAttribute('data-val-usd', d.pnl_usd);
+      pnlEl.style.color = d.pnl_col;
+    }
+    if (pnlSubEl) {
+      pnlSubEl.textContent = (d.pnl_col === '#34d399' ? '▲ ' : '▼ ') + 'Settled -' + tf.toUpperCase();
+      pnlSubEl.style.color = d.pnl_col;
+    }
+    if (winEl) winEl.textContent = d.winrate;
+    if (winSubEl) winSubEl.textContent = d.wins + ' Wins / ' + d.losses + ' Losses';
+    if (tradesEl) tradesEl.textContent = d.trades;
+    if (avgWinEl) {
+      avgWinEl.setAttribute('data-val-inr', d.avg_w_inr);
+      avgWinEl.setAttribute('data-val-usd', d.avg_w_usd);
+    }
+    if (avgWinSubEl) avgWinSubEl.textContent = d.max_w_inr + ' highest win';
+    if (avgLossEl) {
+      avgLossEl.setAttribute('data-val-inr', d.avg_l_inr);
+      avgLossEl.setAttribute('data-val-usd', d.avg_l_usd);
+    }
+    if (feesEl) {
+      feesEl.setAttribute('data-val-inr', d.fees_inr);
+      feesEl.setAttribute('data-val-usd', d.fees_usd);
+    }
+    if (volEl) {
+      volEl.setAttribute('data-val-inr', d.vol_inr);
+      volEl.setAttribute('data-val-usd', d.vol_usd);
+    }
   }
   // Re-trigger currency refresh
   const isINR = document.getElementById('btn-curr-inr') && document.getElementById('btn-curr-inr').style.color.includes('52, 211, 153');
@@ -2083,14 +2095,36 @@ def generate_pnl_analytics_html(delta_orders_history):
             "vol_inr": round(w_vol * 83.8, 2),
         }
 
-    k7 = _calc_window_kpis(7)
-    k30 = _calc_window_kpis(30)
-
     def _fmt_inr(v):
         return f"+₹{v:,.2f}" if v > 0 else (f"-₹{abs(v):,.2f}" if v < 0 else "₹0.00")
 
     def _fmt_usd(v):
         return f"+${v:,.2f} USD" if v > 0 else (f"-${abs(v):,.2f} USD" if v < 0 else "$0.00 USD")
+
+    k7 = _calc_window_kpis(7)
+    k30 = _calc_window_kpis(30)
+    k365 = _calc_window_kpis(365)
+
+    def _pack_kpi(k):
+        return {
+            "pnl_inr": _fmt_inr(k["pnl_inr"]),
+            "pnl_usd": _fmt_usd(k["pnl_usd"]),
+            "pnl_col": "#34d399" if k["pnl_usd"] >= 0 else "#f87171",
+            "winrate": f"{k['wr']} %",
+            "wins": k["wins"],
+            "losses": k["losses"],
+            "avg_w_inr": f"₹{k['avg_w_inr']:,.2f}",
+            "avg_w_usd": f"+${k['avg_w_usd']:,.2f} USD",
+            "max_w_inr": f"+₹{k['max_w_inr']:,.0f}",
+            "avg_l_inr": _fmt_inr(k["avg_l_inr"]),
+            "avg_l_usd": _fmt_usd(k["avg_l_usd"]),
+            "trades": str(k["trades"]),
+            "fees_inr": f"₹{k['fees_inr']:,.2f}",
+            "fees_usd": f"${k['fees_usd']:,.2f} USD",
+            "vol_inr": f"₹{k['vol_inr']/100000:.2f}L" if k["vol_inr"] >= 100000 else f"₹{k['vol_inr']:,.0f}",
+            "vol_usd": f"${k['vol_usd']:,.0f} USD",
+        }
+    analytics_kpi_json = json.dumps({"7d": _pack_kpi(k7), "30d": _pack_kpi(k30), "365d": _pack_kpi(k365)})
 
     pnl_7d_inr = _fmt_inr(k7["pnl_inr"])
     pnl_7d_usd = _fmt_usd(k7["pnl_usd"])
@@ -2289,6 +2323,18 @@ def generate_pnl_analytics_html(delta_orders_history):
         eq_min = mid_eq - 250.0
         eq_max = mid_eq + 250.0
     eq_span = max(1.0, eq_max - eq_min)
+    eq_y_labels = []
+    for _step in range(5):
+        _v_inr = eq_max - (eq_span * (_step / 4.0))
+        _v_usd = _v_inr / 83.8
+        _lbl_inr = f"{_v_inr/1000:.2f}K" if _v_inr >= 1000 else f"{_v_inr:,.0f}"
+        _lbl_usd = f"${_v_usd:,.1f}"
+        eq_y_labels.append((25 + (_step * 47), _lbl_inr, _lbl_usd))
+    eq_gridlines_svg = "".join(
+        f'<line x1="50" y1="{yy}" x2="980" y2="{yy}" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />'
+        f'<text x="40" y="{yy+4}" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{li}" data-val-usd="{lu}">{li}</text>'
+        for yy, li, lu in eq_y_labels
+    )
 
     eq_x_coords = [60, 210, 360, 510, 660, 810, 970]
     eq_points_js = []
@@ -2437,21 +2483,8 @@ def generate_pnl_analytics_html(delta_orders_history):
               </filter>
             </defs>
 
-            <!-- Horizontal Gridlines & Y-Axis labels -->
-            <line x1="50" y1="25" x2="980" y2="25" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-            <text x="40" y="29" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="5.3K" data-val-usd="$63.2">5.3K</text>
-
-            <line x1="50" y1="75" x2="980" y2="75" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-            <text x="40" y="79" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="5.1K" data-val-usd="$60.8">5.1K</text>
-
-            <line x1="50" y1="125" x2="980" y2="125" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-            <text x="40" y="129" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="4.9K" data-val-usd="$58.5">4.9K</text>
-
-            <line x1="50" y1="175" x2="980" y2="175" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-            <text x="40" y="179" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="4.7K" data-val-usd="$56.1">4.7K</text>
-
-            <line x1="50" y1="215" x2="980" y2="215" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-            <text x="40" y="219" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="4.5K" data-val-usd="$53.7">4.5K</text>
+            <!-- Dynamic Horizontal Gridlines & Y-Axis labels -->
+            {eq_gridlines_svg}
 
             <!-- Gradient Area Fill -->
             <path d="{eq_area_d}" fill="url(#eqGrad)" />
@@ -2495,8 +2528,8 @@ def generate_pnl_analytics_html(delta_orders_history):
           <div class="analytics-currency-val" id="kpi-pnl" data-val-inr="{pnl_7d_inr}" data-val-usd="{pnl_7d_usd}" style="font-size:24px; font-weight:800; color:{pnl_7d_col}; margin-top:10px; font-family:var(--font-mono);">
             {pnl_7d_inr}
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#f87171; font-weight:600; font-family:var(--font-mono);">
-            &#9660; Settled -7D
+          <div id="kpi-pnl-sub" style="margin-top:6px; font-size:11px; color:{pnl_7d_col}; font-weight:600; font-family:var(--font-mono);">
+            Settled -7D
           </div>
         </div>
 
@@ -2509,7 +2542,7 @@ def generate_pnl_analytics_html(delta_orders_history):
           <div id="kpi-winrate" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">
             {winrate_7d}
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#34d399; font-weight:600; font-family:var(--font-mono);">
+          <div id="kpi-winrate-sub" style="margin-top:6px; font-size:11px; color:#34d399; font-weight:600; font-family:var(--font-mono);">
             {wins_7d} Wins / {losses_7d} Losses
           </div>
         </div>
@@ -2523,7 +2556,7 @@ def generate_pnl_analytics_html(delta_orders_history):
           <div class="analytics-currency-val" id="kpi-avg-win" data-val-inr="{avg_win_inr}" data-val-usd="{avg_win_usd}" style="font-size:24px; font-weight:800; color:#34d399; margin-top:10px; font-family:var(--font-mono);">
             {avg_win_inr}
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
+          <div id="kpi-avg-win-sub" style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
             {max_win_inr_str} highest win
           </div>
         </div>
@@ -2859,6 +2892,7 @@ def generate_pnl_analytics_html(delta_orders_history):
 
     </div>
     <script>
+      window.analyticsKpiData = {analytics_kpi_json};
       equity7dPoints = {equity_js_json};
       equityAllPoints = {equity_js_json};
       rpnlDataPoints = {rpnl_js_json};
