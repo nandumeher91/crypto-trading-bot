@@ -693,25 +693,8 @@ function toggleBotAutoScan() {
 }
 
 // ── TRADING EQUITY CURVE INTERACTIVE CROSSHAIR & TOOLTIP ──
-let equity7dPoints = [
-  { xPct: 6.0,  svgX: 60,  svgY: 60,  date: "08 Nov 2026, 12:00 AM", equityInr: "₹5,180.00", equityUsd: "$61.80", pnlInr: "₹0.00", pnlUsd: "$0.00", desc: "Starting Sandbox Capital", isGain: true },
-  { xPct: 22.0, svgX: 220, svgY: 165, date: "09 Nov 2026, 03:25 AM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "-₹308.38", pnlUsd: "-$3.68", desc: "P-ETH-1900 SL Triggered", isGain: false },
-  { xPct: 37.0, svgX: 370, svgY: 165, date: "10 Nov 2026, 11:30 PM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "₹0.00", pnlUsd: "$0.00", desc: "Market Scanning (Holding)", isGain: true },
-  { xPct: 52.0, svgX: 520, svgY: 118, date: "11 Nov 2026, 07:10 PM", equityInr: "₹4,976.37", equityUsd: "$59.38", pnlInr: "+₹104.75", pnlUsd: "+$1.25", desc: "C-ETH-2700 & C-BTC-89000 Win", isGain: true },
-  { xPct: 68.0, svgX: 680, svgY: 145, date: "12 Nov 2026, 07:51 PM", equityInr: "₹4,909.33", equityUsd: "$58.58", pnlInr: "-₹67.04", pnlUsd: "-$0.80", desc: "P-BTC-70000 Closed", isGain: false },
-  { xPct: 83.0, svgX: 830, svgY: 165, date: "13 Nov 2026, 08:53 AM", equityInr: "₹4,890.06", equityUsd: "$58.35", pnlInr: "-₹19.27", pnlUsd: "-$0.23", desc: "P-ETH-1800 Closed", isGain: false },
-  { xPct: 97.0, svgX: 970, svgY: 163, date: "14 Nov 2026, 11:51 AM", equityInr: "₹4,891.74", equityUsd: "$58.37", pnlInr: "+₹1.68", pnlUsd: "+$0.02", desc: "C-ETH-2450 Take-Profit Hit", isGain: true }
-];
-
-let equityAllPoints = [
-  { xPct: 6.0,  svgX: 60,  svgY: 60,  date: "30 Oct 2026, 05:51 AM", equityInr: "₹5,180.00", equityUsd: "$61.80", pnlInr: "-₹974.59", pnlUsd: "-$11.63", desc: "BTC & ETH Put Liquidation", isGain: false },
-  { xPct: 22.0, svgX: 220, svgY: 165, date: "03 Nov 2026, 11:04 AM", equityInr: "₹5,190.89", equityUsd: "$61.93", pnlInr: "+₹10.89", pnlUsd: "+$0.13", desc: "C-ETH-2650 Profit", isGain: true },
-  { xPct: 37.0, svgX: 370, svgY: 165, date: "09 Nov 2026, 03:25 AM", equityInr: "₹4,871.62", equityUsd: "$58.13", pnlInr: "-₹308.38", pnlUsd: "-$3.68", desc: "P-ETH-1900 SL Triggered", isGain: false },
-  { xPct: 52.0, svgX: 520, svgY: 118, date: "11 Nov 2026, 07:10 PM", equityInr: "₹4,976.37", equityUsd: "$59.38", pnlInr: "+₹104.75", pnlUsd: "+$1.25", desc: "C-ETH-2700 & C-BTC-89000 Win", isGain: true },
-  { xPct: 68.0, svgX: 680, svgY: 145, date: "12 Nov 2026, 07:51 PM", equityInr: "₹4,909.33", equityUsd: "$58.58", pnlInr: "-₹67.04", pnlUsd: "-$0.80", desc: "P-BTC-70000 Closed", isGain: false },
-  { xPct: 83.0, svgX: 830, svgY: 165, date: "13 Nov 2026, 08:53 AM", equityInr: "₹4,890.06", equityUsd: "$58.35", pnlInr: "-₹19.27", pnlUsd: "-$0.23", desc: "P-ETH-1800 Closed", isGain: false },
-  { xPct: 97.0, svgX: 970, svgY: 163, date: "14 Nov 2026, 11:51 AM", equityInr: "₹4,891.74", equityUsd: "$58.37", pnlInr: "+₹1.68", pnlUsd: "+$0.02", desc: "C-ETH-2450 Take-Profit Hit", isGain: true }
-];
+window.equity7dPoints = window.equity7dPoints || [];
+window.equityAllPoints = window.equityAllPoints || [];
 
 let activeAnalyticsTf = '7d';
 
@@ -724,7 +707,7 @@ function handleEquityMouseMove(e) {
   if (mouseX < 0 || mouseX > rect.width) return;
 
   const svgX = (mouseX / rect.width) * 1000;
-  const pts = (activeAnalyticsTf === '7d') ? equity7dPoints : equityAllPoints;
+  const pts = (activeAnalyticsTf === '7d') ? window.equity7dPoints : window.equityAllPoints;
 
   // Find nearest data point along the curve
   let closest = pts[0];
@@ -812,7 +795,7 @@ function handleEquityMouseLeave() {
   if (tooltip) tooltip.style.display = 'none';
 
   // Restore latest default header from live points
-  const pts = (activeAnalyticsTf === '7d') ? equity7dPoints : equityAllPoints;
+  const pts = (activeAnalyticsTf === '7d') ? window.equity7dPoints : window.equityAllPoints;
   const lastPt = pts && pts.length ? pts[pts.length - 1] : null;
   const isUSD = document.getElementById('btn-curr-usd') && document.getElementById('btn-curr-usd').style.color.includes('52, 211, 153');
   const headerDate = document.getElementById('equity-header-date');
@@ -878,29 +861,9 @@ function switchFeeView(mode) {
 }
 
 // ── INTERACTIVE CONTROLS FOR REALIZED PNL, VOLUME & FEES CHARTS ──
-let rpnlDataPoints = [
-  { svgX: 109, svgY: 148, barId: 'rpnl-bar-0', bx: 90,  bw: 38, by: 80, bh: 68, date: "Mon 09 Nov 2026", inr: "-₹305.03", usd: "-$3.64 USD", trade: "P-ETH-1900 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
-  { svgX: 229, svgY: 44,  barId: 'rpnl-bar-2', bx: 210, bw: 38, by: 44, bh: 36, date: "Wed 11 Nov 2026", inr: "+₹105.59", usd: "+$1.26 USD", trade: "C-ETH-2700 & C-BTC-89000 Win", isWin: true, glowCol: "rgba(16, 185, 129, 0.85)" },
-  { svgX: 289, svgY: 102, barId: 'rpnl-bar-3', bx: 270, bw: 38, by: 80, bh: 22, date: "Thu 12 Nov 2026", inr: "-₹65.36",  usd: "-$0.78 USD", trade: "P-BTC-70000 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
-  { svgX: 349, svgY: 90,  barId: 'rpnl-bar-4', bx: 330, bw: 38, by: 80, bh: 10, date: "Fri 13 Nov 2026", inr: "-₹19.27",  usd: "-$0.23 USD", trade: "P-ETH-1800 Closed (Loss)", isWin: false, glowCol: "rgba(239, 68, 68, 0.85)" },
-  { svgX: 409, svgY: 77,  barId: 'rpnl-bar-5', bx: 390, bw: 38, by: 77, bh: 6,  date: "Sat 14 Nov 2026", inr: "+₹1.68",   usd: "+$0.02 USD", trade: "C-ETH-2450 Take-Profit Hit", isWin: true, glowCol: "rgba(16, 185, 129, 0.85)" }
-];
-
-let volDataPoints = [
-  { svgX: 109, svgY: 85,  barId: 'vol-bar-0', bx: 90,  bw: 38, by: 85,  bh: 75, date: "Mon 09 Nov 2026", inr: "₹65,200", usd: "$778.04 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
-  { svgX: 229, svgY: 65,  barId: 'vol-bar-2', bx: 210, bw: 38, by: 65,  bh: 95, date: "Wed 11 Nov 2026", inr: "₹80,500", usd: "$960.62 USD", desc: "2 Option Contracts Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
-  { svgX: 289, svgY: 115, barId: 'vol-bar-3', bx: 270, bw: 38, by: 115, bh: 45, date: "Thu 12 Nov 2026", inr: "₹35,100", usd: "$418.85 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
-  { svgX: 349, svgY: 138, barId: 'vol-bar-4', bx: 330, bw: 38, by: 138, bh: 22, date: "Fri 13 Nov 2026", inr: "₹18,800", usd: "$224.34 USD", desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" },
-  { svgX: 409, svgY: 152, barId: 'vol-bar-5', bx: 390, bw: 38, by: 152, bh: 10, date: "Sat 14 Nov 2026", inr: "₹4,200",  usd: "$50.12 USD",  desc: "1 Option Contract Traded", glowCol: "rgba(59, 130, 246, 0.85)" }
-];
-
-let feeDataPoints = [
-  { svgX: 109, svgY: 80,  barId: 'fee-bar-0', bx: 90,  bw: 38, by: 80,  bh: 50, date: "Mon 09 Nov 2026", inr: "₹2.51", usd: "$0.03 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
-  { svgX: 229, svgY: 112, barId: 'fee-bar-2', bx: 210, bw: 38, by: 112, bh: 18, date: "Wed 11 Nov 2026", inr: "₹0.84", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
-  { svgX: 289, svgY: 80,  barId: 'fee-bar-3', bx: 270, bw: 38, by: 80,  bh: 50, date: "Thu 12 Nov 2026", inr: "₹2.51", usd: "$0.03 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
-  { svgX: 349, svgY: 112, barId: 'fee-bar-4', bx: 330, bw: 38, by: 112, bh: 18, date: "Fri 13 Nov 2026", inr: "₹0.84", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" },
-  { svgX: 409, svgY: 120, barId: 'fee-bar-5', bx: 390, bw: 38, by: 120, bh: 10, date: "Sat 14 Nov 2026", inr: "₹0.47", usd: "$0.01 USD", glowCol: "rgba(245, 158, 11, 0.85)" }
-];
+window.rpnlDataPoints = window.rpnlDataPoints || [];
+window.volDataPoints = window.volDataPoints || [];
+window.feeDataPoints = window.feeDataPoints || [];
 
 // Active hovered bar tracker to eliminate any frame jerk or re-flow
 let activeRpnlBarId = null;
@@ -926,8 +889,8 @@ function handleRpnlMouseMove(e) {
 
   // STRICT HIT TEST WITH HYSTERESIS BUFFER (Prevents pop-out oscillation/jerk)
   let touchedBar = null;
-  for (let i = 0; i < rpnlDataPoints.length; i++) {
-    const p = rpnlDataPoints[i];
+  for (let i = 0; i < window.rpnlDataPoints.length; i++) {
+    const p = window.rpnlDataPoints[i];
     const hitBuffer = (activeRpnlBarId === p.barId) ? 8 : 2;
     if (svgX >= (p.bx - hitBuffer) && svgX <= (p.bx + p.bw + hitBuffer) && svgY >= (p.by - hitBuffer) && svgY <= (p.by + p.bh + hitBuffer)) {
       touchedBar = p;
@@ -960,7 +923,7 @@ function handleRpnlMouseMove(e) {
   // SUBTLE POP & GENTLE DIM (Zero jhatka, buttery smooth pop)
   if (activeRpnlBarId !== touchedBar.barId) {
     activeRpnlBarId = touchedBar.barId;
-    rpnlDataPoints.forEach(p => {
+    window.rpnlDataPoints.forEach(p => {
       if (p.barId) {
         const b = document.getElementById(p.barId);
         if (b) {
@@ -1008,7 +971,7 @@ function handleRpnlMouseLeave() {
   if (tooltip) tooltip.style.display = 'none';
   if (activeRpnlBarId !== null) {
     activeRpnlBarId = null;
-    rpnlDataPoints.forEach(p => {
+    window.rpnlDataPoints.forEach(p => {
       if (p.barId) {
         const b = document.getElementById(p.barId);
         if (b) {
@@ -1040,8 +1003,8 @@ function handleVolMouseMove(e) {
 
   // STRICT HIT TEST WITH HYSTERESIS BUFFER
   let touchedBar = null;
-  for (let i = 0; i < volDataPoints.length; i++) {
-    const p = volDataPoints[i];
+  for (let i = 0; i < window.volDataPoints.length; i++) {
+    const p = window.volDataPoints[i];
     const hitBuffer = (activeVolBarId === p.barId) ? 8 : 2;
     if (svgX >= (p.bx - hitBuffer) && svgX <= (p.bx + p.bw + hitBuffer) && svgY >= (p.by - hitBuffer) && svgY <= (p.by + p.bh + hitBuffer)) {
       touchedBar = p;
@@ -1071,7 +1034,7 @@ function handleVolMouseMove(e) {
   // SUBTLE POP & GENTLE DIM (Zero jhatka, buttery smooth pop)
   if (activeVolBarId !== touchedBar.barId) {
     activeVolBarId = touchedBar.barId;
-    volDataPoints.forEach(p => {
+    window.volDataPoints.forEach(p => {
       if (p.barId) {
         const b = document.getElementById(p.barId);
         if (b) {
@@ -1116,7 +1079,7 @@ function handleVolMouseLeave() {
   if (tooltip) tooltip.style.display = 'none';
   if (activeVolBarId !== null) {
     activeVolBarId = null;
-    volDataPoints.forEach(p => {
+    window.volDataPoints.forEach(p => {
       if (p.barId) {
         const b = document.getElementById(p.barId);
         if (b) {
@@ -1148,8 +1111,8 @@ function handleFeeMouseMove(e) {
 
   // STRICT HIT TEST WITH HYSTERESIS BUFFER
   let touchedBar = null;
-  for (let i = 0; i < feeDataPoints.length; i++) {
-    const p = feeDataPoints[i];
+  for (let i = 0; i < window.feeDataPoints.length; i++) {
+    const p = window.feeDataPoints[i];
     const hitBuffer = (activeFeeBarId === p.barId) ? 8 : 2;
     if (svgX >= (p.bx - hitBuffer) && svgX <= (p.bx + p.bw + hitBuffer) && svgY >= (p.by - hitBuffer) && svgY <= (p.by + p.bh + hitBuffer)) {
       touchedBar = p;
@@ -1179,7 +1142,7 @@ function handleFeeMouseMove(e) {
   // SUBTLE POP & GENTLE DIM (Zero jhatka, buttery smooth pop)
   if (activeFeeBarId !== touchedBar.barId) {
     activeFeeBarId = touchedBar.barId;
-    feeDataPoints.forEach(p => {
+    window.feeDataPoints.forEach(p => {
       if (p.barId) {
         const b = document.getElementById(p.barId);
         if (b) {
@@ -1223,7 +1186,7 @@ function handleFeeMouseLeave() {
   if (tooltip) tooltip.style.display = 'none';
   if (activeFeeBarId !== null) {
     activeFeeBarId = null;
-    feeDataPoints.forEach(p => {
+    window.feeDataPoints.forEach(p => {
       if (p.barId) {
         const b = document.getElementById(p.barId);
         if (b) {
@@ -2893,11 +2856,11 @@ def generate_pnl_analytics_html(delta_orders_history):
     </div>
     <script>
       window.analyticsKpiData = {analytics_kpi_json};
-      equity7dPoints = {equity_js_json};
-      equityAllPoints = {equity_js_json};
-      rpnlDataPoints = {rpnl_js_json};
-      volDataPoints = {vol_js_json};
-      feeDataPoints = {fee_js_json};
+      window.equity7dPoints = {equity_js_json};
+      window.equityAllPoints = {equity_js_json};
+      window.rpnlDataPoints = {rpnl_js_json};
+      window.volDataPoints = {vol_js_json};
+      window.feeDataPoints = {fee_js_json};
     </script>
     """
     return html
