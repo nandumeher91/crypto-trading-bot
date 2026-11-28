@@ -648,6 +648,13 @@ def sell_option(product_id: int, symbol: str, contracts: int = 1) -> dict:
                 })
             except Exception as rec_err:
                 logger.warning(f"[DELTA] Could not record sell_option to history: {rec_err}")
+
+            # Automatically attach an Exchange-Side Reduce-Only Stop-Loss BEFORE Liquidation Price
+            try:
+                place_option_sl_order(product_id, symbol, contracts, fallback_entry=float(sell_price or 1.0))
+            except Exception as sl_err:
+                logger.warning(f"[DELTA] Exchange SL placement notice for {symbol}: {sl_err}")
+
             return {"success": True, "order_id": order_id, "symbol": symbol, "size": contracts}
         else:
             logger.error(f"[DELTA] Option sell response: {response}")
@@ -655,6 +662,48 @@ def sell_option(product_id: int, symbol: str, contracts: int = 1) -> dict:
 
     except Exception as e:
         logger.error(f"[DELTA] sell_option error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+
+
+def place_option_sl_order(product_id: int, symbol: str, contracts: int, fallback_entry: float = 1.0) -> dict:
+    """
+    Places an exchange-side reduce-only Stop-Loss Market order on Delta Exchange
+    at 70% of the distance from Entry to Liquidation Price (capped at 1.8x Entry),
+    so the exchange exits cleanly BEFORE liquidation penalty!
+    """
+    try:
+        time_module.sleep(0.6)
+        client = _get_client()
+        entry_p = fallback_entry
+        liq_p = 0.0
+        for p in get_all_positions():
+            if p.get("symbol") == symbol:
+                entry_p = float(p.get("entry_price") or fallback_entry)
+                liq_p = float(p.get("est_liq_price") or 0.0)
+                break
+
+        if liq_p > entry_p > 0:
+            sl_trigger = min(entry_p * 1.80, entry_p + 0.70 * (liq_p - entry_p))
+        else:
+            sl_trigger = entry_p * 1.80
+        sl_trigger = round(max(sl_trigger, entry_p * 1.10), 1)
+
+        order_payload = {
+            "product_id": int(product_id),
+            "size": max(1, int(contracts)),
+            "side": "buy",
+            "order_type": "market_order",
+            "stop_order_type": "stop_loss_order",
+            "stop_price": str(sl_trigger),
+            "reduce_only": "true",
+        }
+        sl_res = client.create_order(order_payload)
+        logger.info(f"[DELTA] 🛡️ Exchange SL armed for {symbol}: Stop @ ${sl_trigger:,.1f} (Entry=${entry_p:,.1f}, Liq=${liq_p:,.1f}) | Res={sl_res}")
+        return {"success": True, "stop_price": sl_trigger, "response": sl_res}
+    except Exception as e:
+        logger.warning(f"[DELTA] place_option_sl_order({symbol}) notice: {e}")
         return {"success": False, "error": str(e)}
 
 

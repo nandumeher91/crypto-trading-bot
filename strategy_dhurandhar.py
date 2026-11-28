@@ -281,6 +281,22 @@ def _run_delta_hedged_cycle(asset: str, config: dict, state: dict) -> dict:
     time_key   = f"{asset_key}_strangle_time"
     active_key = f"{asset_key}_strangle_active"
 
+    # ── LIVE PRE-LIQUIDATION WATCHDOG (Protects ALL live short options even across restarts) ──
+    try:
+        for lp in dx.get_all_positions():
+            lp_sym = str(lp.get("symbol", ""))
+            lp_size = float(lp.get("size", 0))
+            if lp.get("is_option") and f"-{asset.upper()}-" in lp_sym and lp_size < 0:
+                lp_entry = float(lp.get("entry_price") or 0)
+                lp_mark = float(lp.get("mark_price") or 0)
+                lp_liq = float(lp.get("est_liq_price") or 0)
+                pre_liq_sl = min(lp_entry * 1.85, lp_entry + 0.70 * (lp_liq - lp_entry)) if (lp_liq > lp_entry > 0) else (lp_entry * 1.85)
+                if lp_entry > 0 and lp_mark >= pre_liq_sl:
+                    logger.warning(f"[DHURANDHAR] 🚨 PRE-LIQUIDATION SL TRIGGERED for {lp_sym}: Mark=${lp_mark:,.2f} >= SafeSL=${pre_liq_sl:,.2f} (Liq=${lp_liq:,.2f}). Closing before liquidation!")
+                    dx.close_any_position(lp_sym, lp.get("product_id"), abs(int(lp_size)))
+    except Exception as wd_err:
+        logger.debug(f"[DHURANDHAR] Pre-liq watchdog notice: {wd_err}")
+
     # Verify if Strangle is currently open in ledger
     is_strangle_open = False
     if get_open_trades:
