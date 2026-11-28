@@ -1248,7 +1248,76 @@ _FALLBACK_ORDERS = [
 ]
 
 
-def get_order_history(page_size: int = 50) -> list:
+
+
+_ANALYTICS_CACHE = {"ts": 0.0, "data": None}
+
+
+def get_full_analytics_data(force_refresh: bool = False) -> dict:
+    """
+    Fetch paginated live fills (/v2/fills) and wallet transactions (/v2/wallet/transactions)
+    from Delta Exchange API to mirror Delta's PNL Analytics (7D / 30D / 365D) accurately.
+    Cached for 45 seconds so dashboard loads stay fast.
+    """
+    now_ts = time_module.time()
+    if not force_refresh and _ANALYTICS_CACHE["data"] and (now_ts - _ANALYTICS_CACHE["ts"] < 45.0):
+        return _ANALYTICS_CACHE["data"]
+
+    fills_all = []
+    txns_all = []
+    if not DELTA_API_KEY:
+        return {"fills": [], "txns": [], "ok": False}
+
+    try:
+        client = _get_client()
+
+        # 1. Paginate /v2/fills (up to 6 pages x 100 = 600 fills)
+        after_cursor = None
+        for _ in range(6):
+            q = {"page_size": 100}
+            if after_cursor:
+                q["after"] = after_cursor
+            res_f = client.request("GET", "/v2/fills", query=q, auth=True)
+            raw_f = res_f.json() if hasattr(res_f, "json") else (res_f if isinstance(res_f, dict) else {})
+            batch = raw_f.get("result", []) if isinstance(raw_f, dict) else []
+            if not batch:
+                break
+            fills_all.extend(batch)
+            meta = raw_f.get("meta") or {}
+            after_cursor = meta.get("after")
+            if not after_cursor or len(batch) < 100:
+                break
+
+        # 2. Paginate /v2/wallet/transactions (up to 6 pages x 100 = 600 txns)
+        after_tx = None
+        for _ in range(6):
+            q = {"page_size": 100}
+            if after_tx:
+                q["after"] = after_tx
+            res_t = client.request("GET", "/v2/wallet/transactions", query=q, auth=True)
+            raw_t = res_t.json() if hasattr(res_t, "json") else (res_t if isinstance(res_t, dict) else {})
+            batch_t = raw_t.get("result", []) if isinstance(raw_t, dict) else []
+            if not batch_t:
+                break
+            txns_all.extend(batch_t)
+            meta_t = raw_t.get("meta") or {}
+            after_tx = meta_t.get("after")
+            if not after_tx or len(batch_t) < 100:
+                break
+
+        data = {"fills": fills_all, "txns": txns_all, "ok": True}
+        _ANALYTICS_CACHE["ts"] = now_ts
+        _ANALYTICS_CACHE["data"] = data
+        logger.info(f"[DELTA] Analytics synced: {len(fills_all)} fills, {len(txns_all)} wallet txns")
+        return data
+    except Exception as e:
+        logger.warning(f"[DELTA] get_full_analytics_data notice: {e}")
+        if _ANALYTICS_CACHE["data"]:
+            return _ANALYTICS_CACHE["data"]
+        return {"fills": fills_all, "txns": txns_all, "ok": False}
+
+
+def get_order_history(page_size: int = 100) -> list:
     """
     Return comprehensive Order History directly from Delta Exchange API (/v2/orders/history + /v2/fills).
     Live Delta API data always takes priority over local cache so status, fees, cashflow, and PnL match Delta UI.

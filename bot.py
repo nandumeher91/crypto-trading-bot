@@ -1308,6 +1308,56 @@ function switchAnalyticsTimeframe(tf) {
       volEl.setAttribute('data-val-usd', d.vol_usd);
     }
   }
+
+  // Dynamically swap all 4 charts (Trading Equity, Realized PNL, Volume, Fees) for the selected timeframe
+  const tfCharts = (window.analyticsChartsByTf && window.analyticsChartsByTf[tf]) ? window.analyticsChartsByTf[tf] : null;
+  if (tfCharts) {
+    window.equity7dPoints = tfCharts.eq_points || [];
+    window.equityAllPoints = tfCharts.eq_points || [];
+    window.rpnlDataPoints = tfCharts.rpnl_points || [];
+    window.volDataPoints = tfCharts.vol_points || [];
+    window.feeDataPoints = tfCharts.fee_points || [];
+
+    const eqArea = document.getElementById('eq-area-path');
+    const eqLine = document.getElementById('eq-line-path');
+    const eqPulse = document.getElementById('eq-tip-pulse');
+    const eqDot = document.getElementById('eq-tip-dot');
+    const eqGrid = document.getElementById('eq-grid-group');
+    const eqX = document.getElementById('eq-xaxis-labels');
+    const eqHDate = document.getElementById('equity-header-date');
+    const eqHVal = document.getElementById('equity-header-val');
+    if (eqArea) eqArea.setAttribute('d', tfCharts.eq_area_d);
+    if (eqLine) eqLine.setAttribute('d', tfCharts.eq_line_d);
+    if (eqPulse) { eqPulse.setAttribute('cx', tfCharts.eq_last_x); eqPulse.setAttribute('cy', tfCharts.eq_last_y); }
+    if (eqDot) { eqDot.setAttribute('cx', tfCharts.eq_last_x); eqDot.setAttribute('cy', tfCharts.eq_last_y); }
+    if (eqGrid) eqGrid.innerHTML = tfCharts.eq_grid_svg;
+    if (eqX) eqX.innerHTML = tfCharts.x_labels_html;
+    if (eqHDate) eqHDate.textContent = tfCharts.eq_header_date;
+    if (eqHVal) {
+      eqHVal.setAttribute('data-val-inr', tfCharts.eq_header_inr);
+      eqHVal.setAttribute('data-val-usd', tfCharts.eq_header_usd);
+    }
+
+    const rpnlGrp = document.getElementById('rpnl-bar-group');
+    const rpnlX = document.getElementById('rpnl-xaxis-labels');
+    const rpnlPos = document.getElementById('rpnl-pos-lbl');
+    const rpnlNeg = document.getElementById('rpnl-neg-lbl');
+    if (rpnlGrp) rpnlGrp.innerHTML = tfCharts.rpnl_bars_svg;
+    if (rpnlX) rpnlX.innerHTML = tfCharts.x_labels_html;
+    if (rpnlPos) { rpnlPos.setAttribute('data-val-inr', tfCharts.rpnl_pos_inr); rpnlPos.setAttribute('data-val-usd', tfCharts.rpnl_pos_usd); rpnlPos.textContent = tfCharts.rpnl_pos_inr; }
+    if (rpnlNeg) { rpnlNeg.setAttribute('data-val-inr', tfCharts.rpnl_neg_inr); rpnlNeg.setAttribute('data-val-usd', tfCharts.rpnl_neg_usd); rpnlNeg.textContent = tfCharts.rpnl_neg_inr; }
+
+    const volGrp = document.getElementById('vol-bar-group');
+    const volX = document.getElementById('vol-xaxis-labels');
+    if (volGrp) volGrp.innerHTML = tfCharts.vol_bars_svg;
+    if (volX) volX.innerHTML = tfCharts.x_labels_html;
+
+    const feeGrp = document.getElementById('fee-bar-group');
+    const feeX = document.getElementById('fee-xaxis-labels');
+    if (feeGrp) feeGrp.innerHTML = tfCharts.fee_bars_svg;
+    if (feeX) feeX.innerHTML = tfCharts.x_labels_html;
+  }
+
   // Re-trigger currency refresh
   const isINR = document.getElementById('btn-curr-inr') && document.getElementById('btn-curr-inr').style.color.includes('52, 211, 153');
   switchAnalyticsCurrency(isINR ? 'inr' : 'usd');
@@ -1964,24 +2014,24 @@ def generate_dynamic_pnl_chart(delta_orders_history, ledger, total_true_profit, 
 
 def generate_pnl_analytics_html(delta_orders_history):
     """
-    Renders Delta Exchange's exact PNL Analytics Interface:
-    - Top Bar: Back button, Timeframe filters (7 days, 30 days, 365 days), Currency toggle (INR / USD)
-    - TRADING EQUITY SVG curve matching Delta's exact equity trajectory
-    - 7 Core KPI cards: Total Realized PNL (-₹289.04 / -$3.45), Win Rate (40%), Avg Win (₹53.95), Avg Loss (-₹132.31), # Trades (5), Fees Discount (₹0), Fees Saved (₹0)
-    - PNL Heatmap calendar grid with daily tiles and hover tooltips
-    - Realized PNL Per Day Bar Chart & Volume Traded Bar Chart
-    - Fees Paid Bar Chart & Funding Card (Options Perpetual Note)
-    - All-Time Settled Orders Drilldown Table
+    Renders Delta Exchange's exact PNL Analytics Interface directly from live paginated
+    /v2/fills + /v2/wallet/transactions + /v2/orders/history across 7D, 30D, and 365D.
     """
+    import calendar
     now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
 
     def _parse_dt(t_str):
         s = str(t_str or "").strip()
         if not s:
             return None
+        if "T" in s and len(s) >= 19:
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00")) + timedelta(hours=5, minutes=30)
+            except Exception:
+                pass
         date_only = s.split(",")[0].strip()
         for candidate in (s, date_only, s[:19]):
-            for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            for fmt in ("%d - %b - %y, %I:%M:%S %p", "%d - %b - %y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
                 try:
                     return datetime.strptime(candidate.strip(), fmt)
                 except Exception:
@@ -1995,14 +2045,109 @@ def generate_pnl_analytics_html(delta_orders_history):
         except Exception:
             return 0.0
 
-    # Closed trades list for drilldown
-    closed_orders = []
-    if delta_orders_history:
-        closed_orders = [
-            o for o in delta_orders_history
-            if ("Close" in str(o.get("side", "")) or _num(o.get("realized_pnl", 0)) != 0 or _num(o.get("net_pnl", 0)) != 0)
-            and str(o.get("status", "Filled")).lower() != "cancelled"
-        ]
+    # Fetch paginated fills & wallet transactions from Delta Exchange
+    fills_raw = []
+    txns_raw = []
+    live_eq_inr = 0.0
+    try:
+        import delta_exchange as _dx_an
+        if _dx_an.DELTA_API_KEY and hasattr(_dx_an, "get_full_analytics_data"):
+            an_data = _dx_an.get_full_analytics_data()
+            fills_raw = an_data.get("fills") or []
+            txns_raw = an_data.get("txns") or []
+            _tot_inr = _dx_an.get_total_inr_balance()
+            if _tot_inr > 0:
+                live_eq_inr = _tot_inr
+    except Exception as _an_err:
+        logger.warning(f"[PNL ANALYTICS] Live analytics fetch notice: {_an_err}")
+
+    # Build unified event list from live /v2/fills (most accurate) or fallback to delta_orders_history
+    trade_events = []
+    if fills_raw:
+        for fl in fills_raw:
+            dt = _parse_dt(fl.get("created_at") or fl.get("updated_at") or "")
+            if not dt:
+                continue
+            dt_naive = dt.replace(tzinfo=None)
+            prod = fl.get("product") or {}
+            sym = prod.get("symbol") or fl.get("product_symbol") or fl.get("symbol") or "-"
+            meta = fl.get("meta_data") or {}
+            pnl_usd = safe_float(fl.get("realized_pnl") or meta.get("pnl") or 0.0)
+            fee_usd = abs(safe_float(fl.get("commission") or fl.get("trading_fee") or 0.0))
+            size_f = abs(safe_float(fl.get("size") or 0.0))
+            c_val = safe_float(prod.get("contract_value") or (0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)))
+            spot_p = safe_float(meta.get("spot_price") or fl.get("underlying_price") or prod.get("strike_price") or 0.0)
+            if spot_p <= 0 and ("BTC" in sym or "ETH" in sym):
+                # Extract strike from symbol like C-BTC-71000-041226
+                parts = sym.split("-")
+                if len(parts) >= 3 and parts[2].isdigit():
+                    spot_p = float(parts[2])
+            exec_p = safe_float(fl.get("price") or 0.0)
+            notional_usd = safe_float(meta.get("notional") or 0.0)
+            if notional_usd <= 0:
+                ref_px = spot_p if spot_p > 0 else exec_p
+                notional_usd = ref_px * size_f * c_val
+            trade_events.append({
+                "dt": dt_naive,
+                "sym": sym,
+                "pnl_usd": pnl_usd,
+                "fee_usd": fee_usd,
+                "vol_usd": notional_usd,
+                "is_close": (abs(pnl_usd) > 1e-6) or ("liquidation" in str(fl.get("fill_type", "")).lower()),
+                "desc": f"{sym} ({fl.get('fill_type', 'Fill')})"
+            })
+    else:
+        for o in (delta_orders_history or []):
+            if str(o.get("status", "")).lower() == "cancelled":
+                continue
+            dt = _parse_dt(o.get("time", ""))
+            if not dt:
+                continue
+            sym = str(o.get("sym", "-"))
+            pnl_usd = _num(o.get("net_pnl") or o.get("realized_pnl") or 0.0)
+            fee_usd = abs(_num(o.get("trading_fees", 0.0)))
+            qty_f = abs(_num(o.get("filled") or o.get("qty") or 1))
+            c_val = 0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)
+            parts = sym.split("-")
+            strike_p = float(parts[2]) if (len(parts) >= 3 and parts[2].isdigit()) else _num(o.get("exec", 0))
+            vol_usd = strike_p * qty_f * c_val if strike_p > 0 else abs(_num(o.get("cashflow", 0.0)))
+            trade_events.append({
+                "dt": dt.replace(tzinfo=None),
+                "sym": sym,
+                "pnl_usd": pnl_usd,
+                "fee_usd": fee_usd,
+                "vol_usd": vol_usd,
+                "is_close": ("Close" in str(o.get("side", "")) or abs(pnl_usd) > 1e-6),
+                "desc": f"{sym} Settled"
+            })
+
+    # Also build daily realized PnL & balance history from /v2/wallet/transactions when available
+    daily_pnl_usd = {}
+    daily_vol_usd = {}
+    daily_fee_usd = {}
+    daily_desc = {}
+    daily_cnt = {}
+    eq_snapshots_by_date = {}
+
+    for ev in trade_events:
+        d_key = ev["dt"].date()
+        daily_pnl_usd[d_key] = daily_pnl_usd.get(d_key, 0.0) + ev["pnl_usd"]
+        daily_vol_usd[d_key] = daily_vol_usd.get(d_key, 0.0) + ev["vol_usd"]
+        daily_fee_usd[d_key] = daily_fee_usd.get(d_key, 0.0) + ev["fee_usd"]
+        daily_cnt[d_key] = daily_cnt.get(d_key, 0) + 1
+        if ev["is_close"]:
+            daily_desc[d_key] = ev["desc"]
+
+    for tx in txns_raw:
+        dt_t = _parse_dt(tx.get("created_at") or "")
+        if not dt_t:
+            continue
+        d_k = dt_t.replace(tzinfo=None).date()
+        bal_v = safe_float(tx.get("balance") or 0.0)
+        if bal_v > 0 and d_k not in eq_snapshots_by_date:
+            # Determine if balance is USD or INR
+            asset_sym = str((tx.get("asset") or {}).get("symbol") or tx.get("asset_symbol") or "USD").upper()
+            eq_snapshots_by_date[d_k] = bal_v if asset_sym == "INR" else round(bal_v * 83.8, 2)
 
     def _calc_window_kpis(days_limit):
         w_pnl = 0.0
@@ -2011,62 +2156,42 @@ def generate_pnl_analytics_html(delta_orders_history):
         wins_list = []
         losses_list = []
         cnt = 0
-        for o in closed_orders:
-            dt = _parse_dt(o.get("time", ""))
-            if dt and (now_ist.date() - dt.date()).days > days_limit:
+        for ev in trade_events:
+            if (now_ist.date() - ev["dt"].date()).days > days_limit:
                 continue
-            net_v = _num(o.get("net_pnl") or o.get("realized_pnl") or 0)
-            fee_v = abs(_num(o.get("trading_fees", 0)))
-            cf_v = abs(_num(o.get("cashflow", 0)))
-            w_pnl += net_v
-            w_fees += fee_v
-            w_vol += cf_v
-            cnt += 1
-            if net_v > 0:
-                wins_list.append(net_v)
-            elif net_v < 0:
-                losses_list.append(net_v)
-        # Also include volume from all filled orders in window
-        for o in (delta_orders_history or []):
-            if str(o.get("status", "")).lower() == "cancelled":
-                continue
-            dt = _parse_dt(o.get("time", ""))
-            if dt and (now_ist.date() - dt.date()).days <= days_limit:
-                w_vol += abs(_num(o.get("cashflow", 0)))
-                w_fees += abs(_num(o.get("trading_fees", 0)))
-
+            w_fees += ev["fee_usd"]
+            w_vol += ev["vol_usd"]
+            if ev["is_close"]:
+                cnt += 1
+                p = ev["pnl_usd"] - ev["fee_usd"]
+                w_pnl += p
+                if p > 0:
+                    wins_list.append(p)
+                elif p < 0:
+                    losses_list.append(p)
         tot_wl = len(wins_list) + len(losses_list)
-        wr = round((len(wins_list) / tot_wl) * 100.0, 1) if tot_wl > 0 else 0.0
+        wr = round((len(wins_list) / tot_wl) * 100.0, 2) if tot_wl > 0 else 0.0
         avg_w = (sum(wins_list) / len(wins_list)) if wins_list else 0.0
         max_w = max(wins_list) if wins_list else 0.0
         avg_l = (sum(losses_list) / len(losses_list)) if losses_list else 0.0
         return {
-            "pnl_usd": round(w_pnl, 2),
-            "pnl_inr": round(w_pnl * 83.8, 2),
-            "wr": wr,
-            "wins": len(wins_list),
-            "losses": len(losses_list),
-            "avg_w_usd": round(avg_w, 2),
-            "avg_w_inr": round(avg_w * 83.8, 2),
+            "pnl_usd": round(w_pnl, 2), "pnl_inr": round(w_pnl * 83.8, 2),
+            "wr": wr, "wins": len(wins_list), "losses": len(losses_list),
+            "avg_w_usd": round(avg_w, 2), "avg_w_inr": round(avg_w * 83.8, 2),
             "max_w_inr": round(max_w * 83.8, 2),
-            "avg_l_usd": round(avg_l, 2),
-            "avg_l_inr": round(avg_l * 83.8, 2),
+            "avg_l_usd": round(avg_l, 2), "avg_l_inr": round(avg_l * 83.8, 2),
             "trades": cnt,
-            "fees_usd": round(w_fees, 2),
-            "fees_inr": round(w_fees * 83.8, 2),
-            "vol_usd": round(w_vol, 2),
-            "vol_inr": round(w_vol * 83.8, 2),
+            "fees_usd": round(w_fees, 2), "fees_inr": round(w_fees * 83.8, 2),
+            "vol_usd": round(w_vol, 2), "vol_inr": round(w_vol * 83.8, 2),
         }
 
     def _fmt_inr(v):
+        if abs(v) >= 1000:
+            return f"+₹{v/1000:.2f}K" if v > 0 else f"-₹{abs(v)/1000:.2f}K"
         return f"+₹{v:,.2f}" if v > 0 else (f"-₹{abs(v):,.2f}" if v < 0 else "₹0.00")
 
     def _fmt_usd(v):
         return f"+${v:,.2f} USD" if v > 0 else (f"-${abs(v):,.2f} USD" if v < 0 else "$0.00 USD")
-
-    k7 = _calc_window_kpis(7)
-    k30 = _calc_window_kpis(30)
-    k365 = _calc_window_kpis(365)
 
     def _pack_kpi(k):
         return {
@@ -2074,261 +2199,247 @@ def generate_pnl_analytics_html(delta_orders_history):
             "pnl_usd": _fmt_usd(k["pnl_usd"]),
             "pnl_col": "#34d399" if k["pnl_usd"] >= 0 else "#f87171",
             "winrate": f"{k['wr']} %",
-            "wins": k["wins"],
-            "losses": k["losses"],
-            "avg_w_inr": f"₹{k['avg_w_inr']:,.2f}",
-            "avg_w_usd": f"+${k['avg_w_usd']:,.2f} USD",
+            "wins": k["wins"], "losses": k["losses"],
+            "avg_w_inr": f"₹{k['avg_w_inr']:,.2f}", "avg_w_usd": f"+${k['avg_w_usd']:,.2f} USD",
             "max_w_inr": f"+₹{k['max_w_inr']:,.0f}",
-            "avg_l_inr": _fmt_inr(k["avg_l_inr"]),
+            "avg_l_inr": f"-₹{abs(k['avg_l_inr']):,.2f}" if k["avg_l_inr"] < 0 else "₹0.00",
             "avg_l_usd": _fmt_usd(k["avg_l_usd"]),
             "trades": str(k["trades"]),
-            "fees_inr": f"₹{k['fees_inr']:,.2f}",
-            "fees_usd": f"${k['fees_usd']:,.2f} USD",
+            "fees_inr": f"₹{k['fees_inr']:,.2f}", "fees_usd": f"${k['fees_usd']:,.2f} USD",
             "vol_inr": f"₹{k['vol_inr']/100000:.2f}L" if k["vol_inr"] >= 100000 else f"₹{k['vol_inr']:,.0f}",
             "vol_usd": f"${k['vol_usd']:,.0f} USD",
         }
+
+    k7 = _calc_window_kpis(7)
+    k30 = _calc_window_kpis(30)
+    k365 = _calc_window_kpis(365)
     analytics_kpi_json = json.dumps({"7d": _pack_kpi(k7), "30d": _pack_kpi(k30), "365d": _pack_kpi(k365)})
 
-    pnl_7d_inr = _fmt_inr(k7["pnl_inr"])
-    pnl_7d_usd = _fmt_usd(k7["pnl_usd"])
-    pnl_7d_col = "#34d399" if k7["pnl_usd"] >= 0 else "#f87171"
-    winrate_7d = f"{k7['wr']} %"
-    wins_7d = k7["wins"]
-    losses_7d = k7["losses"]
-    avg_win_inr = f"₹{k7['avg_w_inr']:,.2f}"
-    avg_win_usd = f"+${k7['avg_w_usd']:,.2f} USD"
-    max_win_inr_str = f"+₹{k7['max_w_inr']:,.0f}"
-    avg_loss_inr = _fmt_inr(k7["avg_l_inr"])
-    avg_loss_usd = _fmt_usd(k7["avg_l_usd"])
-    trades_7d = str(k7["trades"])
-    fees_paid_inr = f"₹{k7['fees_inr']:,.2f}"
-    fees_paid_usd = f"${k7['fees_usd']:,.2f} USD"
-    volume_inr = f"₹{k7['vol_inr']/100000:.2f}L" if k7["vol_inr"] >= 100000 else f"₹{k7['vol_inr']:,.0f}"
-    volume_usd = f"${k7['vol_usd']:,.0f} USD"
+    # Helper to build chart SVG + JS arrays for any N-day window (7d or 30d)
+    def _build_tf_charts(num_days):
+        dates = [(now_ist.date() - timedelta(days=i)) for i in range(num_days - 1, -1, -1)]
+        # X-axis labels (7 evenly spaced labels so 30d stays clean like Delta)
+        step_lbl = max(1, (num_days - 1) // 6)
+        x_labels = "".join(f"<span>{dates[idx].strftime('%d %b')}</span>" for idx in range(0, num_days, step_lbl))
+        if (num_days - 1) % step_lbl != 0:
+            x_labels += f"<span>{dates[-1].strftime('%d %b')}</span>"
 
-    pnl_30d_inr = _fmt_inr(k30["pnl_inr"])
-    pnl_30d_usd = _fmt_usd(k30["pnl_usd"])
-    winrate_30d = f"{k30['wr']} %"
-    avg_win_30d_inr = f"₹{k30['avg_w_inr']:,.2f}"
-    avg_win_30d_usd = f"+${k30['avg_w_usd']:,.2f} USD"
-    avg_loss_30d_inr = _fmt_inr(k30["avg_l_inr"])
-    avg_loss_30d_usd = _fmt_usd(k30["avg_l_usd"])
-    trades_30d = str(k30["trades"])
-    fees_paid_30d_inr = f"₹{k30['fees_inr']:,.2f}"
-    fees_paid_30d_usd = f"${k30['fees_usd']:,.2f} USD"
-    volume_30d_inr = f"₹{k30['vol_inr']/100000:.2f}L" if k30["vol_inr"] >= 100000 else f"₹{k30['vol_inr']:,.0f}"
-    volume_30d_usd = f"${k30['vol_usd']:,.0f} USD"
-
-    # Build daily PnL map for last 14 days for Heatmap & X-axis dates
-    daily_pnl_map = {}
-    for o in closed_orders:
-        dt = _parse_dt(o.get("time", ""))
-        if dt:
-            d_key = dt.date()
-            daily_pnl_map[d_key] = daily_pnl_map.get(d_key, 0.0) + _num(o.get("net_pnl") or o.get("realized_pnl") or 0)
-
-    last_7_dates = [(now_ist.date() - timedelta(days=i)) for i in range(6, -1, -1)]
-    last_7_labels_html = "".join(f"<span>{d.strftime('%d %b')}</span>" for d in last_7_dates)
-    equity_header_date_str = now_ist.strftime("%d %b %Y, %I:%M %p")
-    heatmap_month_str = now_ist.strftime("%B %Y") + " Daily Performance"
-
-    # Dynamic 2-week heatmap columns
-    heatmap_cols_html = ""
-    for w_idx in range(2):
-        start_offset = 13 - (w_idx * 7)
-        col_cells = ""
-        for d_off in range(7):
-            d_day = now_ist.date() - timedelta(days=(start_offset - d_off))
-            d_usd = daily_pnl_map.get(d_day, 0.0)
-            d_inr = round(d_usd * 83.8, 2)
-            d_lbl = d_day.strftime("%a %d %b")
-            if d_inr > 0.01:
-                col_cells += f'<div title="{d_lbl}: +₹{d_inr:,.2f} (+${d_usd:,.2f} USD)" style="width:28px; height:24px; border-radius:4px; background:#065f46; border:1px solid #10b981; cursor:pointer; display:flex; align-items:center; justify-content:center;"><span style="font-size:9px; color:#a7f3d0; font-weight:700;">+{round(d_inr)}</span></div>'
-            elif d_inr < -0.01:
-                col_cells += f'<div title="{d_lbl}: -₹{abs(d_inr):,.2f} (-${abs(d_usd):,.2f} USD)" style="width:28px; height:24px; border-radius:4px; background:#7f1d1d; border:1px solid #ef4444; cursor:pointer; display:flex; align-items:center; justify-content:center;"><span style="font-size:9px; color:#fca5a5; font-weight:700;">-{round(abs(d_inr))}</span></div>'
+        # 1. Equity curve
+        base_eq = live_eq_inr if live_eq_inr > 0 else 2840.0
+        win_sum_inr = sum(round(daily_pnl_usd.get(d, 0.0) * 83.8, 2) for d in dates)
+        run_eq = max(100.0, base_eq - win_sum_inr)
+        eq_series = []
+        for idx, d in enumerate(dates):
+            d_inr = round(daily_pnl_usd.get(d, 0.0) * 83.8, 2)
+            if d in eq_snapshots_by_date:
+                run_eq = eq_snapshots_by_date[d]
             else:
-                col_cells += f'<div title="{d_lbl}: No Settled Trades" style="width:28px; height:24px; border-radius:4px; background:#111622; border:1px solid #1e2538;"></div>'
-        heatmap_cols_html += f'<div style="display:flex; flex-direction:column; gap:8px;">{col_cells}</div>'
+                run_eq = round(run_eq + d_inr, 2)
+            if idx == num_days - 1 and live_eq_inr > 0:
+                run_eq = live_eq_inr
+            eq_series.append((d, run_eq, d_inr))
 
-    # Build dynamic daily buckets for Volume, Fees, and Trade descriptions over last 7 days
-    daily_vol_map = {}
-    daily_fee_map = {}
-    daily_desc_map = {}
-    daily_cnt_map = {}
-    for o in (delta_orders_history or []):
-        if str(o.get("status", "")).lower() == "cancelled":
-            continue
-        dt = _parse_dt(o.get("time", ""))
-        if not dt:
-            continue
-        d_key = dt.date()
-        daily_vol_map[d_key] = daily_vol_map.get(d_key, 0.0) + abs(_num(o.get("cashflow", 0)))
-        daily_fee_map[d_key] = daily_fee_map.get(d_key, 0.0) + abs(_num(o.get("trading_fees", 0)))
-        daily_cnt_map[d_key] = daily_cnt_map.get(d_key, 0) + 1
-        if "Close" in str(o.get("side", "")) or _num(o.get("realized_pnl", 0)) != 0:
-            daily_desc_map[d_key] = str(o.get("sym", "Option")) + " Settled"
+        eq_min = min([x[1] for x in eq_series])
+        eq_max = max([x[1] for x in eq_series])
+        if eq_max - eq_min < 200.0:
+            mid = (eq_max + eq_min) / 2.0
+            eq_min, eq_max = mid - 250.0, mid + 250.0
+        eq_span = max(1.0, eq_max - eq_min)
 
-    # Dynamic Realized PNL Bars (Last 7 Days)
-    rpnl_vals_inr = [round(daily_pnl_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates]
-    max_abs_rpnl = max([abs(v) for v in rpnl_vals_inr] + [100.0])
-    rpnl_pos_grid_inr = f"+{round(max_abs_rpnl)}"
-    rpnl_pos_grid_usd = f"+${max_abs_rpnl/83.8:.1f}"
-    rpnl_neg_grid_inr = f"-{round(max_abs_rpnl)}"
-    rpnl_neg_grid_usd = f"-${max_abs_rpnl/83.8:.1f}"
+        eq_grid_svg = ""
+        for _s in range(5):
+            yy = 25 + (_s * 47)
+            _vi = eq_max - (eq_span * (_s / 4.0))
+            _vu = _vi / 83.8
+            _li = f"{_vi/1000:.2f}K" if _vi >= 1000 else f"{_vi:,.0f}"
+            _lu = f"${_vu:,.1f}"
+            eq_grid_svg += f'<line x1="50" y1="{yy}" x2="980" y2="{yy}" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" /><text x="40" y="{yy+4}" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{_li}" data-val-usd="{_lu}">{_li}</text>'
 
-    rpnl_bars_svg = ""
-    rpnl_js_list = []
-    bar_x_positions = [60, 120, 180, 240, 300, 360, 420]
-    bw = 34
-    for idx, d in enumerate(last_7_dates):
-        bx = bar_x_positions[idx]
-        d_usd = round(daily_pnl_map.get(d, 0.0), 2)
-        d_inr = round(d_usd * 83.8, 2)
-        if abs(d_inr) < 0.01:
-            continue
-        bh = max(4, round((abs(d_inr) / max_abs_rpnl) * 58))
-        is_win = d_inr >= 0
-        by = (80 - bh) if is_win else 80
-        fill_col = "#10b981" if is_win else "#ef4444"
-        bar_id = f"rpnl-bar-{idx}"
-        rpnl_bars_svg += f'<rect id="{bar_id}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="{fill_col}" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />'
-        rpnl_js_list.append({
-            "svgX": bx + (bw // 2),
-            "svgY": by if is_win else (80 + bh),
-            "barId": bar_id,
-            "bx": bx, "bw": bw, "by": by, "bh": bh,
-            "date": d.strftime("%a %d %b %Y"),
-            "inr": f"+₹{d_inr:,.2f}" if is_win else f"-₹{abs(d_inr):,.2f}",
-            "usd": f"+${d_usd:,.2f} USD" if is_win else f"-${abs(d_usd):,.2f} USD",
-            "trade": daily_desc_map.get(d, "Settled Options Trade"),
-            "isWin": is_win,
-            "glowCol": "rgba(16, 185, 129, 0.85)" if is_win else "rgba(239, 68, 68, 0.85)"
-        })
+        eq_pts = []
+        eq_coords = []
+        for idx, (d, eq_v, d_inr) in enumerate(eq_series):
+            sx = round(60 + (idx / max(1, num_days - 1)) * 910, 1)
+            sy = round(210 - (((eq_v - eq_min) / eq_span) * 175), 1)
+            eq_coords.append((sx, sy))
+            d_usd = round(d_inr / 83.8, 2)
+            eq_pts.append({
+                "xPct": round((sx / 1000.0) * 100.0, 1), "svgX": sx, "svgY": sy,
+                "date": d.strftime("%d %b %Y, %I:%M %p") if idx < num_days - 1 else now_ist.strftime("%d %b %Y, %I:%M %p"),
+                "equityInr": f"₹{eq_v:,.2f}", "equityUsd": f"${eq_v/83.8:,.2f}",
+                "pnlInr": f"+₹{d_inr:,.2f}" if d_inr > 0 else (f"-₹{abs(d_inr):,.2f}" if d_inr < 0 else "₹0.00"),
+                "pnlUsd": f"+${d_usd:,.2f}" if d_usd > 0 else (f"-${abs(d_usd):,.2f}" if d_usd < 0 else "$0.00"),
+                "desc": daily_desc.get(d, "Live Account Equity"),
+                "isGain": d_inr >= 0
+            })
+        eq_line_d = "M " + " L ".join(f"{x},{y}" for x, y in eq_coords)
+        eq_area_d = eq_line_d + f" L {eq_coords[-1][0]},225 L {eq_coords[0][0]},225 Z"
 
-    # Dynamic Volume Bars (Last 7 Days)
-    vol_vals_inr = [round(daily_vol_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates]
-    max_vol = max(vol_vals_inr + [100.0])
-    vol_bars_svg = ""
-    vol_js_list = []
-    for idx, d in enumerate(last_7_dates):
-        bx = bar_x_positions[idx]
-        v_usd = round(daily_vol_map.get(d, 0.0), 2)
-        v_inr = round(v_usd * 83.8, 2)
-        if v_inr < 0.01:
-            continue
-        bh = max(6, round((v_inr / max_vol) * 110))
-        by = 160 - bh
-        bar_id = f"vol-bar-{idx}"
-        vol_bars_svg += f'<rect id="{bar_id}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />'
-        cnt_d = daily_cnt_map.get(d, 1)
-        vol_js_list.append({
-            "svgX": bx + (bw // 2), "svgY": by,
-            "barId": bar_id, "bx": bx, "bw": bw, "by": by, "bh": bh,
-            "date": d.strftime("%a %d %b %Y"),
-            "inr": f"₹{v_inr:,.2f}",
-            "usd": f"${v_usd:,.2f} USD",
-            "desc": f"{cnt_d} Order{'s' if cnt_d != 1 else ''} Executed",
-            "glowCol": "rgba(59, 130, 246, 0.85)"
-        })
+        # 2. Bar charts (Realized PNL, Volume, Fees) scaled dynamically across num_days
+        slot_w = 420.0 / max(1, num_days)
+        bw = max(6, min(34, int(slot_w * 0.62)))
 
-    # Dynamic Fees Bars (Last 7 Days)
-    fee_vals_inr = [round(daily_fee_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates]
-    max_fee = max(fee_vals_inr + [1.0])
-    fee_bars_svg = ""
-    fee_js_list = []
-    for idx, d in enumerate(last_7_dates):
-        bx = bar_x_positions[idx]
-        f_usd = round(daily_fee_map.get(d, 0.0), 4)
-        f_inr = round(f_usd * 83.8, 2)
-        if f_inr < 0.01:
-            continue
-        bh = max(6, round((f_inr / max_fee) * 85))
-        by = 130 - bh
-        bar_id = f"fee-bar-{idx}"
-        fee_bars_svg += f'<rect id="{bar_id}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease, filter 0.22s ease; cursor:pointer;" />'
-        fee_js_list.append({
-            "svgX": bx + (bw // 2), "svgY": by,
-            "barId": bar_id, "bx": bx, "bw": bw, "by": by, "bh": bh,
-            "date": d.strftime("%a %d %b %Y"),
-            "inr": f"₹{f_inr:,.2f}",
-            "usd": f"${f_usd:,.2f} USD",
-            "glowCol": "rgba(245, 158, 11, 0.85)"
-        })
+        rpnl_vals = [round(daily_pnl_usd.get(d, 0.0) * 83.8, 2) for d in dates]
+        max_rpnl = max([abs(v) for v in rpnl_vals] + [100.0])
+        rpnl_bars_svg = ""
+        rpnl_pts = []
 
-    rpnl_js_json = json.dumps(rpnl_js_list)
-    vol_js_json = json.dumps(vol_js_list)
-    fee_js_json = json.dumps(fee_js_list)
+        vol_vals = [round(daily_vol_usd.get(d, 0.0) * 83.8, 2) for d in dates]
+        max_vol = max(vol_vals + [100.0])
+        vol_bars_svg = ""
+        vol_pts = []
 
-    # Dynamic Trading Equity Curve (Last 7 Days)
-    base_eq_inr = 3830.0
-    try:
-        import delta_exchange as _dx_eq
-        if _dx_eq.DELTA_API_KEY:
-            _live_inr = _dx_eq.get_total_inr_balance()
-            if _live_inr > 0:
-                base_eq_inr = _live_inr
-    except Exception:
-        pass
+        fee_vals = [round(daily_fee_usd.get(d, 0.0) * 83.8, 2) for d in dates]
+        max_fee = max(fee_vals + [1.0])
+        fee_bars_svg = ""
+        fee_pts = []
 
-    sum_7d_inr = sum(round(daily_pnl_map.get(d, 0.0) * 83.8, 2) for d in last_7_dates)
-    start_eq_inr = max(100.0, base_eq_inr - sum_7d_inr)
-    eq_series_inr = []
-    running_eq = start_eq_inr
-    for d in last_7_dates:
-        d_inr = round(daily_pnl_map.get(d, 0.0) * 83.8, 2)
-        running_eq = round(running_eq + d_inr, 2)
-        eq_series_inr.append((d, running_eq, d_inr))
+        for idx, d in enumerate(dates):
+            bx = round(50 + idx * slot_w + (slot_w - bw) / 2.0, 1)
+            cx = round(bx + bw / 2.0, 1)
 
-    eq_min = min([x[1] for x in eq_series_inr] + [start_eq_inr])
-    eq_max = max([x[1] for x in eq_series_inr] + [start_eq_inr])
-    if eq_max - eq_min < 200.0:
-        mid_eq = (eq_max + eq_min) / 2.0
-        eq_min = mid_eq - 250.0
-        eq_max = mid_eq + 250.0
-    eq_span = max(1.0, eq_max - eq_min)
-    eq_y_labels = []
-    for _step in range(5):
-        _v_inr = eq_max - (eq_span * (_step / 4.0))
-        _v_usd = _v_inr / 83.8
-        _lbl_inr = f"{_v_inr/1000:.2f}K" if _v_inr >= 1000 else f"{_v_inr:,.0f}"
-        _lbl_usd = f"${_v_usd:,.1f}"
-        eq_y_labels.append((25 + (_step * 47), _lbl_inr, _lbl_usd))
-    eq_gridlines_svg = "".join(
-        f'<line x1="50" y1="{yy}" x2="980" y2="{yy}" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />'
-        f'<text x="40" y="{yy+4}" fill="#64748b" font-size="11" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{li}" data-val-usd="{lu}">{li}</text>'
-        for yy, li, lu in eq_y_labels
-    )
+            # Realized PNL bar
+            d_inr = rpnl_vals[idx]
+            d_usd = round(d_inr / 83.8, 2)
+            if abs(d_inr) >= 0.01:
+                bh = max(4, round((abs(d_inr) / max_rpnl) * 58))
+                is_win = d_inr >= 0
+                by = (80 - bh) if is_win else 80
+                col = "#10b981" if is_win else "#ef4444"
+                bid = f"rpnl-bar-{idx}"
+                rpnl_bars_svg += f'<rect id="{bid}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="{col}" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease; cursor:pointer;" />'
+                rpnl_pts.append({
+                    "svgX": cx, "svgY": by if is_win else (80 + bh), "barId": bid,
+                    "bx": bx, "bw": bw, "by": by, "bh": bh,
+                    "date": d.strftime("%a %d %b %Y"),
+                    "inr": f"+₹{d_inr:,.2f}" if is_win else f"-₹{abs(d_inr):,.2f}",
+                    "usd": f"+${d_usd:,.2f} USD" if is_win else f"-${abs(d_usd):,.2f} USD",
+                    "trade": daily_desc.get(d, "Settled Options Trade"),
+                    "isWin": is_win, "glowCol": "rgba(16,185,129,0.85)" if is_win else "rgba(239,68,68,0.85)"
+                })
 
-    eq_x_coords = [60, 210, 360, 510, 660, 810, 970]
-    eq_points_js = []
-    eq_svg_coords = []
-    for i, (d, eq_v, d_inr) in enumerate(eq_series_inr):
-        sx = eq_x_coords[i]
-        norm = (eq_v - eq_min) / eq_span
-        sy = round(210 - (norm * 175), 1)
-        eq_svg_coords.append((sx, sy))
-        d_usd = round(d_inr / 83.8, 2)
-        eq_usd = round(eq_v / 83.8, 2)
-        eq_points_js.append({
-            "xPct": round((sx / 1000.0) * 100.0, 1),
-            "svgX": sx,
-            "svgY": sy,
-            "date": d.strftime("%d %b %Y, %I:%M %p") if i < 6 else now_ist.strftime("%d %b %Y, %I:%M %p"),
-            "equityInr": f"₹{eq_v:,.2f}",
-            "equityUsd": f"${eq_usd:,.2f}",
-            "pnlInr": f"+₹{d_inr:,.2f}" if d_inr > 0 else (f"-₹{abs(d_inr):,.2f}" if d_inr < 0 else "₹0.00"),
-            "pnlUsd": f"+${d_usd:,.2f}" if d_usd > 0 else (f"-${abs(d_usd):,.2f}" if d_usd < 0 else "$0.00"),
-            "desc": daily_desc_map.get(d, "Live Account Equity"),
-            "isGain": d_inr >= 0
-        })
+            # Volume bar
+            v_inr = vol_vals[idx]
+            v_usd = round(v_inr / 83.8, 2)
+            if v_inr >= 0.01:
+                bh = max(6, round((v_inr / max_vol) * 110))
+                by = 160 - bh
+                bid = f"vol-bar-{idx}"
+                vol_bars_svg += f'<rect id="{bid}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="#3b82f6" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease; cursor:pointer;" />'
+                cnt_d = daily_cnt.get(d, 1)
+                v_inr_str = f"₹{v_inr/100000:.2f}L" if v_inr >= 100000 else f"₹{v_inr:,.0f}"
+                vol_pts.append({
+                    "svgX": cx, "svgY": by, "barId": bid, "bx": bx, "bw": bw, "by": by, "bh": bh,
+                    "date": d.strftime("%a %d %b %Y"), "inr": v_inr_str, "usd": f"${v_usd:,.2f} USD",
+                    "desc": f"{cnt_d} Order{'s' if cnt_d != 1 else ''} Executed", "glowCol": "rgba(59,130,246,0.85)"
+                })
 
-    eq_line_d = "M " + " L ".join(f"{x},{y}" for x, y in eq_svg_coords)
-    eq_area_d = eq_line_d + f" L {eq_svg_coords[-1][0]},225 L {eq_svg_coords[0][0]},225 Z"
-    eq_last_x, eq_last_y = eq_svg_coords[-1]
-    eq_header_inr = f"₹{eq_series_inr[-1][1]/1000:.2f}K" if eq_series_inr[-1][1] >= 1000 else f"₹{eq_series_inr[-1][1]:,.2f}"
-    eq_header_usd = f"${eq_series_inr[-1][1]/83.8:,.2f} USD"
-    equity_js_json = json.dumps(eq_points_js)
+            # Fee bar
+            f_inr = fee_vals[idx]
+            f_usd = round(f_inr / 83.8, 2)
+            if f_inr >= 0.01:
+                bh = max(6, round((f_inr / max_fee) * 85))
+                by = 130 - bh
+                bid = f"fee-bar-{idx}"
+                fee_bars_svg += f'<rect id="{bid}" x="{bx}" y="{by}" width="{bw}" height="{bh}" fill="#f59e0b" opacity="0.88" style="transform-box:fill-box; transform-origin:50% 50%; transition:transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease; cursor:pointer;" />'
+                fee_pts.append({
+                    "svgX": cx, "svgY": by, "barId": bid, "bx": bx, "bw": bw, "by": by, "bh": bh,
+                    "date": d.strftime("%a %d %b %Y"), "inr": f"₹{f_inr:,.2f}", "usd": f"${f_usd:,.2f} USD",
+                    "glowCol": "rgba(245,158,11,0.85)"
+                })
 
+        return {
+            "x_labels_html": x_labels,
+            "eq_area_d": eq_area_d, "eq_line_d": eq_line_d,
+            "eq_last_x": eq_coords[-1][0], "eq_last_y": eq_coords[-1][1],
+            "eq_grid_svg": eq_grid_svg, "eq_points": eq_pts,
+            "eq_header_date": now_ist.strftime("%d %b %Y, %I:%M %p"),
+            "eq_header_inr": f"₹{eq_series[-1][1]/1000:.2f}K" if eq_series[-1][1] >= 1000 else f"₹{eq_series[-1][1]:,.2f}",
+            "eq_header_usd": f"${eq_series[-1][1]/83.8:,.2f} USD",
+            "rpnl_bars_svg": rpnl_bars_svg, "rpnl_points": rpnl_pts,
+            "rpnl_pos_inr": f"+{round(max_rpnl)}", "rpnl_pos_usd": f"+${max_rpnl/83.8:.1f}",
+            "rpnl_neg_inr": f"-{round(max_rpnl)}", "rpnl_neg_usd": f"-${max_rpnl/83.8:.1f}",
+            "vol_bars_svg": vol_bars_svg, "vol_points": vol_pts,
+            "fee_bars_svg": fee_bars_svg, "fee_points": fee_pts,
+        }
+
+    c7 = _build_tf_charts(7)
+    c30 = _build_tf_charts(30)
+    charts_by_tf_json = json.dumps({"7d": c7, "30d": c30, "365d": c30})
+
+    # Month-by-Month Calendar Heatmap (matching Delta Exchange October '26 & November '26 style)
+    cur_m = now_ist.month
+    cur_y = now_ist.year
+    prev_m = 12 if cur_m == 1 else cur_m - 1
+    prev_y = cur_y - 1 if cur_m == 1 else cur_y
+    heatmap_months_html = ""
+    for m_yr, m_mo in [(prev_y, prev_m), (cur_y, cur_m)]:
+        first_wd, days_in_m = calendar.monthrange(m_yr, m_mo)  # Mon=0..Sun=6
+        month_title = datetime(m_yr, m_mo, 1).strftime("%B '%y")
+        weeks = []
+        cur_week = [None] * 7
+        for day_num in range(1, days_in_m + 1):
+            d_obj = datetime(m_yr, m_mo, day_num).date()
+            wd = d_obj.weekday()
+            cur_week[wd] = d_obj
+            if wd == 6 or day_num == days_in_m:
+                weeks.append(cur_week)
+                cur_week = [None] * 7
+
+        m_tot_inr = 0.0
+        cols_html = ""
+        for wk in weeks:
+            cells_html = ""
+            for d_obj in wk:
+                if d_obj is None:
+                    cells_html += '<div style="width:18px; height:18px;"></div>'
+                else:
+                    d_usd = daily_pnl_usd.get(d_obj, 0.0)
+                    d_inr = round(d_usd * 83.8, 2)
+                    m_tot_inr += d_inr
+                    d_lbl = d_obj.strftime("%a %d %b")
+                    if d_inr > 0.5:
+                        cells_html += f'<div title="{d_lbl}: +₹{d_inr:,.2f}" style="width:18px; height:18px; border-radius:3px; background:#065f46; border:1px solid #10b981; cursor:pointer;"></div>'
+                    elif d_inr < -0.5:
+                        cells_html += f'<div title="{d_lbl}: -₹{abs(d_inr):,.2f}" style="width:18px; height:18px; border-radius:3px; background:#7f1d1d; border:1px solid #ef4444; cursor:pointer;"></div>'
+                    else:
+                        cells_html += f'<div title="{d_lbl}: No Settled PnL" style="width:18px; height:18px; border-radius:3px; background:#111622; border:1px solid #1e2538;"></div>'
+            cols_html += f'<div style="display:flex; flex-direction:column; gap:5px;">{cells_html}</div>'
+
+        m_tot_str = f"+₹{m_tot_inr:,.2f}" if m_tot_inr > 0 else (f"-₹{abs(m_tot_inr)/1000:.2f}K" if m_tot_inr <= -1000 else f"-₹{abs(m_tot_inr):,.2f}")
+        m_tot_col = "#34d399" if m_tot_inr >= 0 else "#f87171"
+        heatmap_months_html += f"""
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="font-size:11px; color:#94a3b8; font-weight:600;">{month_title}</div>
+          <div style="display:flex; gap:5px;">{cols_html}</div>
+          <div style="font-size:11px; color:{m_tot_col}; font-family:var(--font-mono); font-weight:700; margin-top:2px;">{m_tot_str}</div>
+        </div>
+        """
+
+    # Default initial display values (7D)
+    p7 = _pack_kpi(k7)
+    pnl_7d_inr = p7["pnl_inr"]
+    pnl_7d_usd = p7["pnl_usd"]
+    pnl_7d_col = p7["pnl_col"]
+    winrate_7d = p7["winrate"]
+    wins_7d = p7["wins"]
+    losses_7d = p7["losses"]
+    avg_win_inr = p7["avg_w_inr"]
+    avg_win_usd = p7["avg_w_usd"]
+    max_win_inr_str = p7["max_w_inr"]
+    avg_loss_inr = p7["avg_l_inr"]
+    avg_loss_usd = p7["avg_l_usd"]
+    trades_7d = p7["trades"]
+    fees_paid_inr = p7["fees_inr"]
+    fees_paid_usd = p7["fees_usd"]
+    volume_inr = p7["vol_inr"]
+    volume_usd = p7["vol_usd"]
+
+    # Closed trades drilldown table
+    closed_orders = [
+        o for o in (delta_orders_history or [])
+        if ("Close" in str(o.get("side", "")) or _num(o.get("realized_pnl", 0)) != 0 or _num(o.get("net_pnl", 0)) != 0)
+        and str(o.get("status", "Filled")).lower() != "cancelled"
+    ]
     drilldown_rows = ""
     for o in closed_orders:
         sym = o.get("sym", "-")
@@ -2340,17 +2451,11 @@ def generate_pnl_analytics_html(delta_orders_history):
         net_str = str(o.get("net_pnl", "0 USD"))
         fees_str = str(o.get("trading_fees", "0 USD"))
         time_str = str(o.get("time", "-"))
-        
-        try:
-            val_f = float(rpnl_str.replace("USD","").replace("+","").strip())
-            rpnl_col = "#34d399" if val_f > 0 else ("#f87171" if val_f < 0 else "#94a3b8")
-            val_inr_str = f"+₹{val_f*83.8:,.2f}" if val_f > 0 else (f"-₹{abs(val_f*83.8):,.2f}" if val_f < 0 else "₹0.00")
-        except Exception:
-            rpnl_col = "#94a3b8"
-            val_inr_str = "₹0.00"
-
+        val_f = _num(rpnl_str)
+        rpnl_col = "#34d399" if val_f > 0 else ("#f87171" if val_f < 0 else "#94a3b8")
+        val_inr_str = f"+₹{val_f*83.8:,.2f}" if val_f > 0 else (f"-₹{abs(val_f*83.8):,.2f}" if val_f < 0 else "₹0.00")
         drilldown_rows += f"""
-        <tr style="border-bottom:1px solid #161b26; font-size:12px; transition:background 0.15s;">
+        <tr style="border-bottom:1px solid #161b26; font-size:12px;">
           <td style="padding:10px 14px; font-weight:700; color:#ffffff; font-family:var(--font-mono);">{sym}</td>
           <td style="padding:10px 14px; font-weight:600; color:{side_color}; font-family:var(--font-mono);">{side}</td>
           <td style="padding:10px 14px; font-family:var(--font-mono); color:#cbd5e1;">{size}</td>
@@ -2364,11 +2469,9 @@ def generate_pnl_analytics_html(delta_orders_history):
 
     html = f"""
     <div style="max-width:1760px; margin:0 auto; padding:0 24px 60px;">
-      
-      <!-- TOP ACTION BAR: Back + Title + Filter Pills + Currency Switcher -->
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px; padding-bottom:18px; border-bottom:1px solid #1e2538;">
         <div style="display:flex; align-items:center; gap:14px;">
-          <button onclick="closePnlAnalytics()" style="background:#161b26; border:1px solid #2d3748; color:#cbd5e1; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; transition:all 0.2s;" onmouseover="this.style.borderColor='#a855f7'; this.style.color='#ffffff';" onmouseout="this.style.borderColor='#2d3748'; this.style.color='#cbd5e1';">
+          <button onclick="closePnlAnalytics()" style="background:#161b26; border:1px solid #2d3748; color:#cbd5e1; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px;">
             <span>&larr;</span> Back to Dashboard
           </button>
           <div>
@@ -2377,20 +2480,16 @@ def generate_pnl_analytics_html(delta_orders_history):
               <span style="font-size:11px; font-weight:700; color:#a855f7; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:2px 8px; border-radius:4px;">DELTA TESTNET LIVE</span>
             </div>
             <div style="font-size:12px; color:#94a3b8; margin-top:2px;">
-              Delta Exchange India &bull; Direct Settlement &amp; Performance Ledger
+              Delta Exchange India &bull; Direct Live /v2/fills &amp; Wallet Settlement Mirror
             </div>
           </div>
         </div>
-
         <div style="display:flex; align-items:center; gap:12px;">
-          <!-- Timeframe selector -->
           <div style="background:#090d16; border:1px solid #1e2538; border-radius:8px; padding:3px; display:flex; gap:4px;">
             <button class="timeframe-pill active" id="tf-pill-7d" onclick="switchAnalyticsTimeframe('7d')" style="background:rgba(168,85,247,0.22); border:1px solid #a855f7; color:#ffffff; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">7 days</button>
             <button class="timeframe-pill" id="tf-pill-30d" onclick="switchAnalyticsTimeframe('30d')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">30 days</button>
             <button class="timeframe-pill" id="tf-pill-365d" onclick="switchAnalyticsTimeframe('365d')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">365 days</button>
           </div>
-
-          <!-- Currency Toggle: INR vs USD -->
           <div style="background:#090d16; border:1px solid #1e2538; border-radius:8px; padding:3px; display:flex; gap:4px;">
             <button class="curr-pill active" id="btn-curr-inr" onclick="switchAnalyticsCurrency('inr')" style="background:rgba(52,211,153,0.18); border:1px solid #34d399; color:#34d399; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">&#8377; INR</button>
             <button class="curr-pill" id="btn-curr-usd" onclick="switchAnalyticsCurrency('usd')" style="background:transparent; border:1px solid transparent; color:#94a3b8; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;">$ USD</button>
@@ -2398,39 +2497,33 @@ def generate_pnl_analytics_html(delta_orders_history):
         </div>
       </div>
 
-      <!-- ============================================== -->
-      <!-- 1. TRADING EQUITY CHART (Matching Screenshot 2)-->
-      <!-- ============================================== -->
+      <!-- 1. TRADING EQUITY CHART -->
       <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; margin-bottom:22px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:14px; font-weight:700; color:#cbd5e1; letter-spacing:0.04em;">TRADING EQUITY</span>
-            <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover across curve to inspect real-time capital &amp; PnL at each point">&#9432;</span>
             <span style="font-size:10px; color:#a855f7; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); padding:2px 7px; border-radius:4px; font-family:var(--font-mono);">INTERACTIVE CROSSHAIR</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px; font-family:var(--font-mono); font-size:12px;">
-            <span id="equity-header-date" style="color:#94a3b8;">{equity_header_date_str}</span>
+            <span id="equity-header-date" style="color:#94a3b8;">{c7['eq_header_date']}</span>
             <span style="color:#ffffff; font-weight:700; background:#121826; border:1px solid #232d42; padding:3px 10px; border-radius:6px;">
-              Equity: <b id="equity-header-val" class="analytics-currency-val" data-val-inr="{eq_header_inr}" data-val-usd="{eq_header_usd}" style="color:#c084fc;">{eq_header_inr}</b>
+              Equity: <b id="equity-header-val" class="analytics-currency-val" data-val-inr="{c7['eq_header_inr']}" data-val-usd="{c7['eq_header_usd']}" style="color:#c084fc;">{c7['eq_header_inr']}</b>
             </span>
           </div>
         </div>
 
-        <!-- SVG Equity Curve (Responsive Interactive SVG Container) -->
         <div id="equity-chart-container" onmousemove="handleEquityMouseMove(event)" onmouseleave="handleEquityMouseLeave()" ontouchmove="handleEquityMouseMove(event.touches[0])" ontouchend="handleEquityMouseLeave()" style="position:relative; width:100%; height:260px; overflow:visible; cursor:crosshair; user-select:none;">
-          
-          <!-- Floating Crosshair Tooltip Badge -->
-          <div id="equity-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:rgba(9,13,22,0.95); border:1px solid #a855f7; border-radius:10px; padding:10px 14px; box-shadow:0 8px 30px rgba(0,0,0,0.85), 0 0 16px rgba(168,85,247,0.35); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(8px);">
-            <div id="eq-tt-date" style="font-size:11px; color:#94a3b8; font-weight:600; margin-bottom:5px;">09 Nov 2026, 03:25 AM</div>
+          <div id="equity-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:rgba(9,13,22,0.95); border:1px solid #a855f7; border-radius:10px; padding:10px 14px; box-shadow:0 8px 30px rgba(0,0,0,0.85); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap;">
+            <div id="eq-tt-date" style="font-size:11px; color:#94a3b8; font-weight:600; margin-bottom:5px;">-</div>
             <div style="display:flex; align-items:baseline; justify-content:space-between; gap:14px;">
               <span style="font-size:11px; color:#cbd5e1; font-weight:600;">Capital / Equity:</span>
-              <span id="eq-tt-capital" style="font-size:16px; font-weight:800; color:#34d399;">&#8377;4,871.62</span>
+              <span id="eq-tt-capital" style="font-size:16px; font-weight:800; color:#34d399;">-</span>
             </div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:5px; font-size:11px;">
               <span style="color:#64748b;">Daily Settled PnL:</span>
-              <span id="eq-tt-pnl" style="font-weight:700; color:#f87171;">-&#8377;308.38</span>
+              <span id="eq-tt-pnl" style="font-weight:700;">-</span>
             </div>
-            <div id="eq-tt-desc" style="font-size:10px; color:#c084fc; margin-top:5px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px; font-weight:500;">P-ETH-1900 Closed</div>
+            <div id="eq-tt-desc" style="font-size:10px; color:#c084fc; margin-top:5px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px; font-weight:500;">-</div>
           </div>
 
           <svg id="equity-svg" viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
@@ -2445,397 +2538,212 @@ def generate_pnl_analytics_html(delta_orders_history):
                 <feComposite in="SourceGraphic" in2="blur" operator="over" />
               </filter>
             </defs>
-
-            <!-- Dynamic Horizontal Gridlines & Y-Axis labels -->
-            {eq_gridlines_svg}
-
-            <!-- Gradient Area Fill -->
-            <path d="{eq_area_d}" fill="url(#eqGrad)" />
-
-            <!-- Equity Line -->
-            <path d="{eq_line_d}" fill="none" stroke="#a855f7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowLine)" />
-
-            <!-- Current Live Tip Pulse -->
-            <circle cx="{eq_last_x}" cy="{eq_last_y}" r="7" fill="#a855f7" opacity="0.3">
+            <g id="eq-grid-group">{c7['eq_grid_svg']}</g>
+            <path id="eq-area-path" d="{c7['eq_area_d']}" fill="url(#eqGrad)" />
+            <path id="eq-line-path" d="{c7['eq_line_d']}" fill="none" stroke="#a855f7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowLine)" />
+            <circle id="eq-tip-pulse" cx="{c7['eq_last_x']}" cy="{c7['eq_last_y']}" r="7" fill="#a855f7" opacity="0.3">
               <animate attributeName="r" values="5;9;5" dur="2.4s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.4s" repeatCount="indefinite" />
             </circle>
-            <circle cx="{eq_last_x}" cy="{eq_last_y}" r="3.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" />
-
-            <!-- Dynamic Interactive Crosshair Line -->
+            <circle id="eq-tip-dot" cx="{c7['eq_last_x']}" cy="{c7['eq_last_y']}" r="3.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" />
             <line id="equity-crosshair" x1="0" y1="20" x2="0" y2="225" stroke="rgba(192, 132, 252, 0.65)" stroke-width="1.5" stroke-dasharray="4,4" style="display:none;" />
-
-            <!-- Dynamic Snapping Hover Marker Dot with Glow -->
             <circle id="equity-cursor-dot-glow" cx="0" cy="0" r="11" fill="rgba(168, 85, 247, 0.35)" style="display:none;" />
             <circle id="equity-cursor-dot" cx="0" cy="0" r="5" fill="#ffffff" stroke="#c084fc" stroke-width="2.5" style="display:none;" />
           </svg>
         </div>
-
-        <!-- X-Axis Dates (Dynamic Last 7 Days) -->
-        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:8px; padding:0 24px;">
-          {last_7_labels_html}
+        <div id="eq-xaxis-labels" style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:8px; padding:0 24px;">
+          {c7['x_labels_html']}
         </div>
       </div>
 
-      <!-- ============================================== -->
-      <!-- 2. CORE KPI CARDS (Matching Screenshot 3)      -->
-      <!-- ============================================== -->
+      <!-- 2. CORE KPI CARDS -->
       <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin-bottom:22px;">
-        
-        <!-- KPI 1: Total Realized PNL -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span>Total Realized PNL</span>
-            <span style="font-size:11px; color:#64748b;" title="Cumulative net realized profit or loss from closed trades">&#9432;</span>
-          </div>
-          <div class="analytics-currency-val" id="kpi-pnl" data-val-inr="{pnl_7d_inr}" data-val-usd="{pnl_7d_usd}" style="font-size:24px; font-weight:800; color:{pnl_7d_col}; margin-top:10px; font-family:var(--font-mono);">
-            {pnl_7d_inr}
-          </div>
-          <div id="kpi-pnl-sub" style="margin-top:6px; font-size:11px; color:{pnl_7d_col}; font-weight:600; font-family:var(--font-mono);">
-            Settled -7D
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;">Total Realized PNL</div>
+          <div class="analytics-currency-val" id="kpi-pnl" data-val-inr="{pnl_7d_inr}" data-val-usd="{pnl_7d_usd}" style="font-size:24px; font-weight:800; color:{pnl_7d_col}; margin-top:10px; font-family:var(--font-mono);">{pnl_7d_inr}</div>
+          <div id="kpi-pnl-sub" style="margin-top:6px; font-size:11px; color:{pnl_7d_col}; font-weight:600; font-family:var(--font-mono);">Settled -7D</div>
         </div>
-
-        <!-- KPI 2: Win Rate -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span>Win Rate</span>
-            <span style="font-size:11px; color:#64748b;" title="Percentage of winning closed positions">&#9432;</span>
-          </div>
-          <div id="kpi-winrate" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">
-            {winrate_7d}
-          </div>
-          <div id="kpi-winrate-sub" style="margin-top:6px; font-size:11px; color:#34d399; font-weight:600; font-family:var(--font-mono);">
-            {wins_7d} Wins / {losses_7d} Losses
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;">Win Rate</div>
+          <div id="kpi-winrate" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">{winrate_7d}</div>
+          <div id="kpi-winrate-sub" style="margin-top:6px; font-size:11px; color:#34d399; font-weight:600; font-family:var(--font-mono);">{wins_7d} Wins / {losses_7d} Losses</div>
         </div>
-
-        <!-- KPI 3: Average Win -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span>Average Win</span>
-            <span style="font-size:11px; color:#64748b;">&#9432;</span>
-          </div>
-          <div class="analytics-currency-val" id="kpi-avg-win" data-val-inr="{avg_win_inr}" data-val-usd="{avg_win_usd}" style="font-size:24px; font-weight:800; color:#34d399; margin-top:10px; font-family:var(--font-mono);">
-            {avg_win_inr}
-          </div>
-          <div id="kpi-avg-win-sub" style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            {max_win_inr_str} highest win
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;">Average Win</div>
+          <div class="analytics-currency-val" id="kpi-avg-win" data-val-inr="{avg_win_inr}" data-val-usd="{avg_win_usd}" style="font-size:24px; font-weight:800; color:#34d399; margin-top:10px; font-family:var(--font-mono);">{avg_win_inr}</div>
+          <div id="kpi-avg-win-sub" style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">{max_win_inr_str} highest win</div>
         </div>
-
-        <!-- KPI 4: Average Loss -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span>Average Loss</span>
-            <span style="font-size:11px; color:#64748b;">&#9432;</span>
-          </div>
-          <div class="analytics-currency-val" id="kpi-avg-loss" data-val-inr="{avg_loss_inr}" data-val-usd="{avg_loss_usd}" style="font-size:24px; font-weight:800; color:#f87171; margin-top:10px; font-family:var(--font-mono);">
-            {avg_loss_inr}
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            Avg SL / Liq impact
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;">Average Loss</div>
+          <div class="analytics-currency-val" id="kpi-avg-loss" data-val-inr="{avg_loss_inr}" data-val-usd="{avg_loss_usd}" style="font-size:24px; font-weight:800; color:#f87171; margin-top:10px; font-family:var(--font-mono);">{avg_loss_inr}</div>
+          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">Avg SL / Liq impact</div>
         </div>
-
-        <!-- KPI 5: # Trades -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span># Trades</span>
-            <span style="font-size:11px; color:#64748b;">&#9432;</span>
-          </div>
-          <div id="kpi-trades" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">
-            {trades_7d}
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            Closed &amp; Settled
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;"># Trades</div>
+          <div id="kpi-trades" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">{trades_7d}</div>
+          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">Closed &amp; Settled</div>
         </div>
-
-        <!-- KPI 6: Fees Discount -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span>Fees Discount</span>
-            <span style="font-size:11px; color:#64748b;">&#9432;</span>
-          </div>
-          <div class="analytics-currency-val" data-val-inr="&#8377;0" data-val-usd="$0.00" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">
-            &#8377;0
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            Standard Tier
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;">Fees Discount</div>
+          <div class="analytics-currency-val" data-val-inr="&#8377;0" data-val-usd="$0.00" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">&#8377;0</div>
+          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">Standard Tier</div>
         </div>
-
-        <!-- KPI 7: Fees Saved -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:12px; padding:18px 20px;">
-          <div style="font-size:12px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px;">
-            <span>Fees Saved</span>
-            <span style="font-size:11px; color:#64748b;">&#9432;</span>
-          </div>
-          <div class="analytics-currency-val" data-val-inr="&#8377;0" data-val-usd="$0.00" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">
-            &#8377;0
-          </div>
-          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            Delta Maker Rebates
-          </div>
+          <div style="font-size:12px; color:#94a3b8; font-weight:600;">Fees Saved</div>
+          <div class="analytics-currency-val" data-val-inr="&#8377;0" data-val-usd="$0.00" style="font-size:24px; font-weight:800; color:#ffffff; margin-top:10px; font-family:var(--font-mono);">&#8377;0</div>
+          <div style="margin-top:6px; font-size:11px; color:#64748b; font-family:var(--font-mono);">Delta Maker Rebates</div>
         </div>
       </div>
 
-      <!-- ============================================== -->
-      <!-- 3. PNL HEATMAP (Matching Screenshot 3)        -->
-      <!-- ============================================== -->
+      <!-- 3. MONTH-BY-MONTH PNL HEATMAP -->
       <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; margin-bottom:22px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:14px; font-weight:700; color:#cbd5e1;">PNL Heatmap</span>
-            <span style="font-size:12px; color:#64748b;">&#9432;</span>
-          </div>
-          <div style="font-size:11px; color:#64748b; font-family:var(--font-mono);">
-            {heatmap_month_str}
-          </div>
+          <span style="font-size:14px; font-weight:700; color:#cbd5e1;">PNL Heatmap</span>
+          <span style="font-size:11px; color:#64748b; font-family:var(--font-mono);">Monthly Calendar Settlement</span>
         </div>
-
-        <!-- Heatmap Grid -->
-        <div style="display:flex; gap:14px; align-items:flex-start; overflow-x:auto; padding-bottom:8px;">
-          <!-- Day Labels -->
-          <div style="display:flex; flex-direction:column; gap:8px; font-size:11px; color:#64748b; font-family:var(--font-mono); padding-top:4px;">
-            <span>Mon</span>
-            <span>Tue</span>
-            <span>Wed</span>
-            <span>Thu</span>
-            <span>Fri</span>
-            <span>Sat</span>
-            <span>Sun</span>
+        <div style="display:flex; gap:18px; align-items:flex-start; overflow-x:auto; padding-bottom:8px;">
+          <div style="display:flex; flex-direction:column; gap:5px; font-size:11px; color:#64748b; font-family:var(--font-mono); padding-top:22px;">
+            <span style="height:18px; line-height:18px;">Mon</span>
+            <span style="height:18px; line-height:18px;">Tue</span>
+            <span style="height:18px; line-height:18px;">Wed</span>
+            <span style="height:18px; line-height:18px;">Thu</span>
+            <span style="height:18px; line-height:18px;">Fri</span>
+            <span style="height:18px; line-height:18px;">Sat</span>
+            <span style="height:18px; line-height:18px;">Sun</span>
           </div>
-
-          <!-- Heatmap Matrix (Dynamic Last 14 Days) -->
-          <div style="display:flex; gap:8px;">
-            {heatmap_cols_html}
+          <div style="display:flex; gap:26px;">
+            {heatmap_months_html}
           </div>
-        </div>
-
-        <!-- Legend -->
-        <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:14px; font-size:11px; color:#64748b;">
-          <span>Loss</span>
-          <div style="width:12px; height:12px; border-radius:2px; background:#7f1d1d;"></div>
-          <div style="width:12px; height:12px; border-radius:2px; background:#991b1b;"></div>
-          <span style="margin:0 4px;">|</span>
-          <div style="width:12px; height:12px; border-radius:2px; background:#111622; border:1px solid #1e2538;"></div>
-          <span style="margin:0 4px;">|</span>
-          <div style="width:12px; height:12px; border-radius:2px; background:#047857;"></div>
-          <div style="width:12px; height:12px; border-radius:2px; background:#065f46;"></div>
-          <span>Profit</span>
         </div>
       </div>
 
-      <!-- ============================================== -->
-      <!-- 4. ROW: REALIZED PNL BARS & VOLUME TRADED      -->
-      <!-- ============================================== -->
+      <!-- 4. REALIZED PNL & VOLUME TRADED -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px;">
-        
-        <!-- Left: Realized PNL Bar Chart (Clean Straight Rectangular Bars matching Delta Exchange) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Realized PNL</span>
-              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars to inspect settled daily P&amp;L">&#9432;</span>
-            </div>
-            <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">Daily Net Settlement</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Realized PNL</span>
+            <span style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">Daily Net Settlement</span>
           </div>
-
-          <!-- Interactive Realized PnL Container -->
           <div id="rpnl-chart-container" onmousemove="handleRpnlMouseMove(event)" onmouseleave="handleRpnlMouseLeave()" ontouchmove="handleRpnlMouseMove(event.touches[0])" ontouchend="handleRpnlMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
-            
-            <!-- Floating Realized PnL Tooltip Badge (Ultra Premium Glassmorphism) -->
-            <div id="rpnl-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:linear-gradient(135deg, rgba(14,20,32,0.97) 0%, rgba(8,11,18,0.98) 100%); border:1px solid rgba(168,85,247,0.45); border-radius:10px; padding:10px 14px; box-shadow:0 14px 36px rgba(0,0,0,0.9), 0 0 20px rgba(168,85,247,0.25), inset 0 1px 0 rgba(255,255,255,0.12); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(10px); min-width:160px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
-                <span id="rpnl-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1; letter-spacing:0.02em;">Mon 09 Nov</span>
-                <span style="font-size:9px; font-weight:700; color:#a855f7; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3); padding:2px 6px; border-radius:4px;">SETTLED</span>
+            <div id="rpnl-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:rgba(14,20,32,0.97); border:1px solid rgba(168,85,247,0.45); border-radius:10px; padding:10px 14px; font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; min-width:160px;">
+              <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
+                <span id="rpnl-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1;">-</span>
+                <span style="font-size:9px; font-weight:700; color:#a855f7;">SETTLED</span>
               </div>
-              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
-                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Realized PnL:</span>
-                <span id="rpnl-tt-val" style="font-size:16px; font-weight:800; color:#f87171;">-&#8377;305.03</span>
+              <div style="display:flex; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; color:#94a3b8;">Realized PnL:</span>
+                <span id="rpnl-tt-val" style="font-size:16px; font-weight:800;">-</span>
               </div>
-              <div id="rpnl-tt-trade" style="font-size:10px; color:#c084fc; margin-top:5px; border-top:1px solid rgba(255,255,255,0.08); padding-top:4px; font-weight:500;">P-ETH-1900 Closed</div>
+              <div id="rpnl-tt-trade" style="font-size:10px; color:#c084fc; margin-top:5px;">-</div>
             </div>
-
             <svg id="rpnl-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
-              <!-- Zero Axis Line -->
               <line x1="40" y1="80" x2="480" y2="80" stroke="#232d42" stroke-width="1.5" />
               <text x="35" y="84" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end">0</text>
-
-              <!-- Dynamic Positive Gridline -->
               <line x1="40" y1="30" x2="480" y2="30" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-              <text x="35" y="34" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{rpnl_pos_grid_inr}" data-val-usd="{rpnl_pos_grid_usd}">{rpnl_pos_grid_inr}</text>
-
-              <!-- Dynamic Negative Gridline -->
+              <text id="rpnl-pos-lbl" x="35" y="34" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{c7['rpnl_pos_inr']}" data-val-usd="{c7['rpnl_pos_usd']}">{c7['rpnl_pos_inr']}</text>
               <line x1="40" y1="145" x2="480" y2="145" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-              <text x="35" y="149" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{rpnl_neg_grid_inr}" data-val-usd="{rpnl_neg_grid_usd}">{rpnl_neg_grid_inr}</text>
-
-              <!-- DYNAMIC DAILY REALIZED PNL BARS -->
-              <g id="rpnl-bar-group">
-                {rpnl_bars_svg}
-              </g>
-
-              <!-- Dynamic Hover Crosshair Line -->
+              <text id="rpnl-neg-lbl" x="35" y="149" fill="#64748b" font-size="10" font-family="monospace" text-anchor="end" class="analytics-currency-val" data-val-inr="{c7['rpnl_neg_inr']}" data-val-usd="{c7['rpnl_neg_usd']}">{c7['rpnl_neg_inr']}</text>
+              <g id="rpnl-bar-group">{c7['rpnl_bars_svg']}</g>
               <line id="rpnl-crosshair" x1="0" y1="20" x2="0" y2="165" stroke="rgba(168,85,247,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none; pointer-events:none;" />
-              
-              <!-- Snapping Cursor Dot -->
               <circle id="rpnl-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#a855f7" stroke-width="2" style="display:none; pointer-events:none;" />
             </svg>
           </div>
-
-          <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
-            {last_7_labels_html}
+          <div id="rpnl-xaxis-labels" style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
+            {c7['x_labels_html']}
           </div>
         </div>
 
-        <!-- Right: Volume Traded Bar Chart (Clean Straight Rectangular Bars matching Delta Exchange) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Volume Traded</span>
-              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars to view daily traded options volume">&#9432;</span>
-            </div>
-            
-            <div class="analytics-currency-val" id="kpi-volume" data-val-inr="{volume_inr}" data-val-usd="{volume_usd}" style="font-size:14px; font-weight:800; color:#ffffff; font-family:var(--font-mono);">
-              {volume_inr}
-            </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Volume Traded</span>
+            <div class="analytics-currency-val" id="kpi-volume" data-val-inr="{volume_inr}" data-val-usd="{volume_usd}" style="font-size:14px; font-weight:800; color:#ffffff; font-family:var(--font-mono);">{volume_inr}</div>
           </div>
-
-          <!-- Interactive Volume Chart Container -->
           <div id="vol-chart-container" onmousemove="handleVolMouseMove(event)" onmouseleave="handleVolMouseLeave()" ontouchmove="handleVolMouseMove(event.touches[0])" ontouchend="handleVolMouseLeave()" style="position:relative; width:100%; height:190px; cursor:crosshair;">
-            
-            <!-- Floating Volume Tooltip Badge (Ultra Premium Glassmorphism) -->
-            <div id="vol-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:linear-gradient(135deg, rgba(14,20,32,0.97) 0%, rgba(8,11,18,0.98) 100%); border:1px solid rgba(59,130,246,0.45); border-radius:10px; padding:10px 14px; box-shadow:0 14px 36px rgba(0,0,0,0.9), 0 0 20px rgba(59,130,246,0.25), inset 0 1px 0 rgba(255,255,255,0.12); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(10px); min-width:160px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
-                <span id="vol-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1; letter-spacing:0.02em;">Wed 11 Nov</span>
-                <span style="font-size:9px; font-weight:700; color:#60a5fa; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); padding:2px 6px; border-radius:4px;">VOLUME</span>
+            <div id="vol-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:rgba(14,20,32,0.97); border:1px solid rgba(59,130,246,0.45); border-radius:10px; padding:10px 14px; font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; min-width:160px;">
+              <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
+                <span id="vol-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1;">-</span>
+                <span style="font-size:9px; font-weight:700; color:#60a5fa;">VOLUME</span>
               </div>
-              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
-                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Notional:</span>
-                <span id="vol-tt-val" style="font-size:16px; font-weight:800; color:#60a5fa;">&#8377;80,500</span>
+              <div style="display:flex; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; color:#94a3b8;">Notional:</span>
+                <span id="vol-tt-val" style="font-size:16px; font-weight:800; color:#60a5fa;">-</span>
               </div>
-              <div id="vol-tt-desc" style="font-size:10px; color:#93c5fd; margin-top:5px; border-top:1px solid rgba(255,255,255,0.08); padding-top:4px; font-weight:500;">2 Contracts Traded</div>
+              <div id="vol-tt-desc" style="font-size:10px; color:#93c5fd; margin-top:5px;">-</div>
             </div>
-
             <svg id="vol-svg" viewBox="0 0 500 180" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
               <line x1="40" y1="160" x2="480" y2="160" stroke="#232d42" stroke-width="1" />
               <line x1="40" y1="100" x2="480" y2="100" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
               <line x1="40" y1="40" x2="480" y2="40" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-
-              <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
-              <g id="vol-bar-group">
-                {vol_bars_svg}
-              </g>
-
-              <!-- Dynamic Hover Crosshair & Dot -->
+              <g id="vol-bar-group">{c7['vol_bars_svg']}</g>
               <line id="vol-crosshair" x1="0" y1="20" x2="0" y2="160" stroke="rgba(96,165,250,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none; pointer-events:none;" />
               <circle id="vol-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#3b82f6" stroke-width="2" style="display:none; pointer-events:none;" />
             </svg>
           </div>
-
-          <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
-            {last_7_labels_html}
+          <div id="vol-xaxis-labels" style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
+            {c7['x_labels_html']}
           </div>
         </div>
       </div>
 
-      <!-- ============================================== -->
-      <!-- 5. ROW: FEES PAID & FUNDING (Matching Screenshot 5)-->
-      <!-- ============================================== -->
+      <!-- 5. FEES PAID & FUNDING -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px;">
-        
-        <!-- Left: Fees Paid Bar Chart (Clean Straight Rectangular Bars matching Delta Exchange) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Fees Paid</span>
-              <span style="font-size:12px; color:#64748b; cursor:help;" title="Hover over bars to view exchange fees incurred">&#9432;</span>
-            </div>
-            
-            <div class="analytics-currency-val" id="kpi-fees" data-val-inr="{fees_paid_inr}" data-val-usd="{fees_paid_usd}" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:var(--font-mono);">
-              {fees_paid_inr}
-            </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Fees Paid</span>
+            <div class="analytics-currency-val" id="kpi-fees" data-val-inr="{fees_paid_inr}" data-val-usd="{fees_paid_usd}" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:var(--font-mono);">{fees_paid_inr}</div>
           </div>
-
-          <!-- Interactive Fees Chart Container -->
           <div id="fee-chart-container" onmousemove="handleFeeMouseMove(event)" onmouseleave="handleFeeMouseLeave()" ontouchmove="handleFeeMouseMove(event.touches[0])" ontouchend="handleFeeMouseLeave()" style="position:relative; width:100%; height:160px; cursor:crosshair;">
-            
-            <!-- Floating Fees Tooltip Badge (Ultra Premium Glassmorphism) -->
-            <div id="fee-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:linear-gradient(135deg, rgba(14,20,32,0.97) 0%, rgba(8,11,18,0.98) 100%); border:1px solid rgba(245,158,11,0.45); border-radius:10px; padding:10px 14px; box-shadow:0 14px 36px rgba(0,0,0,0.9), 0 0 20px rgba(245,158,11,0.25), inset 0 1px 0 rgba(255,255,255,0.12); font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; backdrop-filter:blur(10px); min-width:150px;">
-              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
-                <span id="fee-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1; letter-spacing:0.02em;">Mon 09 Nov</span>
-                <span style="font-size:9px; font-weight:700; color:#fbbf24; background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); padding:2px 6px; border-radius:4px;">FEES</span>
+            <div id="fee-tooltip" style="display:none; position:absolute; pointer-events:none; z-index:60; background:rgba(14,20,32,0.97); border:1px solid rgba(245,158,11,0.45); border-radius:10px; padding:10px 14px; font-family:var(--font-mono); transform:translate(-50%, -125%); white-space:nowrap; min-width:150px;">
+              <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:5px;">
+                <span id="fee-tt-date" style="font-size:11px; font-weight:700; color:#cbd5e1;">-</span>
+                <span style="font-size:9px; font-weight:700; color:#fbbf24;">FEES</span>
               </div>
-              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
-                <span style="font-size:11px; color:#94a3b8; font-weight:600;">Exchange Fee:</span>
-                <span id="fee-tt-val" style="font-size:16px; font-weight:800; color:#fbbf24;">&#8377;2.51</span>
+              <div style="display:flex; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; color:#94a3b8;">Exchange Fee:</span>
+                <span id="fee-tt-val" style="font-size:16px; font-weight:800; color:#fbbf24;">-</span>
               </div>
             </div>
-
             <svg id="fee-svg" viewBox="0 0 500 150" preserveAspectRatio="none" style="width:100%; height:100%; display:block; overflow:visible;">
               <line x1="40" y1="130" x2="480" y2="130" stroke="#232d42" stroke-width="1" />
               <line x1="40" y1="75" x2="480" y2="75" stroke="#141c2c" stroke-width="1" stroke-dasharray="3,3" />
-
-              <!-- CLEAN CRISP RECTANGULAR BARS (No curved pill corners) -->
-              <g id="fee-bar-group">
-                {fee_bars_svg}
-              </g>
-
-              <!-- Dynamic Hover Crosshair & Dot -->
+              <g id="fee-bar-group">{c7['fee_bars_svg']}</g>
               <line id="fee-crosshair" x1="0" y1="20" x2="0" y2="130" stroke="rgba(251,191,36,0.6)" stroke-width="1.5" stroke-dasharray="3,3" style="display:none; pointer-events:none;" />
               <circle id="fee-cursor-dot" cx="0" cy="0" r="4.5" fill="#ffffff" stroke="#f59e0b" stroke-width="2" style="display:none; pointer-events:none;" />
             </svg>
           </div>
-
-          <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
-            {last_7_labels_html}
+          <div id="fee-xaxis-labels" style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; font-family:var(--font-mono); margin-top:6px; padding:0 24px;">
+            {c7['x_labels_html']}
           </div>
         </div>
 
-        <!-- Right: Funding Card (Matching Screenshot 5: Data not Found) -->
         <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6); display:flex; flex-direction:column; justify-content:space-between;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Funding</span>
-              <span style="font-size:12px; color:#64748b;">&#9432;</span>
-            </div>
+            <span style="font-size:14px; font-weight:700; color:#cbd5e1;">Funding</span>
             <span style="font-size:11px; color:#64748b; font-family:var(--font-mono);">Options Only</span>
           </div>
-
           <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:35px 0;">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <div style="font-size:14px; font-weight:600; color:#64748b; margin-top:10px;">Data not Found</div>
+            <div style="font-size:14px; font-weight:600; color:#64748b;">Data not Found</div>
             <div style="font-size:11px; color:#475569; margin-top:4px; max-width:280px; text-align:center;">
-              Funding rates apply exclusively to Perpetual Futures contracts. European Options expire cash-settled without 8-hour funding.
+              Funding rates apply exclusively to Perpetual Futures contracts.
             </div>
           </div>
-
-          <div style="font-size:10px; color:#475569; text-align:right; font-family:var(--font-mono);">
-            Delta Exchange Options Module
-          </div>
+          <div style="font-size:10px; color:#475569; text-align:right; font-family:var(--font-mono);">Delta Exchange Options Module</div>
         </div>
       </div>
 
-      <!-- ============================================== -->
-      <!-- 6. CLOSED TRADES DRILLDOWN TABLE               -->
-      <!-- ============================================== -->
+      <!-- 6. CLOSED TRADES DRILLDOWN TABLE -->
       <div style="background:#080b12; border:1px solid #1a2233; border-radius:14px; padding:22px 24px; box-shadow:0 4px 20px rgba(0,0,0,0.6);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:14px; font-weight:700; color:#ffffff;">Settled Closed Trades Ledger</span>
             <span style="font-size:11px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.3); padding:2px 8px; border-radius:4px;">{len(closed_orders)} EXECUTIONS</span>
           </div>
-          <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">
-            * Real-time mirror of Delta Exchange Order History
-          </div>
+          <div style="font-size:11px; color:#94a3b8; font-family:var(--font-mono);">* Real-time mirror of Delta Exchange /v2/fills</div>
         </div>
-
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:left;">
             <thead>
-              <tr style="border-bottom:1px solid #1e2538; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em;">
+              <tr style="border-bottom:1px solid #1e2538; font-size:11px; color:#64748b; text-transform:uppercase;">
                 <th style="padding:10px 14px;">Symbol</th>
                 <th style="padding:10px 14px;">Side</th>
                 <th style="padding:10px 14px;">Size</th>
@@ -2846,21 +2754,19 @@ def generate_pnl_analytics_html(delta_orders_history):
                 <th style="padding:10px 14px;">Time</th>
               </tr>
             </thead>
-            <tbody>
-              {drilldown_rows}
-            </tbody>
+            <tbody>{drilldown_rows}</tbody>
           </table>
         </div>
       </div>
-
     </div>
     <script>
       window.analyticsKpiData = {analytics_kpi_json};
-      window.equity7dPoints = {equity_js_json};
-      window.equityAllPoints = {equity_js_json};
-      window.rpnlDataPoints = {rpnl_js_json};
-      window.volDataPoints = {vol_js_json};
-      window.feeDataPoints = {fee_js_json};
+      window.analyticsChartsByTf = {charts_by_tf_json};
+      window.equity7dPoints = window.analyticsChartsByTf['7d'].eq_points;
+      window.equityAllPoints = window.analyticsChartsByTf['30d'].eq_points;
+      window.rpnlDataPoints = window.analyticsChartsByTf['7d'].rpnl_points;
+      window.volDataPoints = window.analyticsChartsByTf['7d'].vol_points;
+      window.feeDataPoints = window.analyticsChartsByTf['7d'].fee_points;
     </script>
     """
     return html
