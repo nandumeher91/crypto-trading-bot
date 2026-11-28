@@ -1273,7 +1273,7 @@ def get_full_analytics_data(force_refresh: bool = False) -> dict:
 
         # 1. Paginate /v2/fills (up to 6 pages x 100 = 600 fills)
         after_cursor = None
-        for _ in range(6):
+        for _ in range(10):
             q = {"page_size": 100}
             if after_cursor:
                 q["after"] = after_cursor
@@ -1290,7 +1290,7 @@ def get_full_analytics_data(force_refresh: bool = False) -> dict:
 
         # 2. Paginate /v2/wallet/transactions (up to 6 pages x 100 = 600 txns)
         after_tx = None
-        for _ in range(6):
+        for _ in range(10):
             q = {"page_size": 100}
             if after_tx:
                 q["after"] = after_tx
@@ -1338,7 +1338,8 @@ def get_order_history(page_size: int = 100) -> list:
                     if not f_oid:
                         continue
                     meta = fl.get("meta_data") or {}
-                    f_pnl = safe_float(fl.get("realized_pnl") or meta.get("pnl") or 0.0)
+                    new_pos = meta.get("new_position") or {}
+                    f_pnl = safe_float(fl.get("realized_pnl") or new_pos.get("realized_pnl") or meta.get("pnl") or 0.0)
                     f_fee = safe_float(fl.get("commission") or fl.get("trading_fee") or 0.0)
                     f_cf = safe_float(fl.get("cashflow") or meta.get("cashflow") or 0.0)
                     f_price = safe_float(fl.get("price") or 0.0)

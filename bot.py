@@ -2072,13 +2072,15 @@ def generate_pnl_analytics_html(delta_orders_history):
             prod = fl.get("product") or {}
             sym = prod.get("symbol") or fl.get("product_symbol") or fl.get("symbol") or "-"
             meta = fl.get("meta_data") or {}
-            pnl_usd = safe_float(fl.get("realized_pnl") or meta.get("pnl") or 0.0)
+            new_pos = meta.get("new_position") or {}
+            raw_pos_pnl = new_pos.get("realized_pnl")
+            has_realized = (raw_pos_pnl is not None and str(raw_pos_pnl) != "") or (fl.get("realized_pnl") is not None)
+            pnl_usd = safe_float(fl.get("realized_pnl") or raw_pos_pnl or meta.get("pnl") or 0.0)
             fee_usd = abs(safe_float(fl.get("commission") or fl.get("trading_fee") or 0.0))
             size_f = abs(safe_float(fl.get("size") or 0.0))
             c_val = safe_float(prod.get("contract_value") or (0.001 if "BTC" in sym else (0.01 if "ETH" in sym else 1.0)))
-            spot_p = safe_float(meta.get("spot_price") or fl.get("underlying_price") or prod.get("strike_price") or 0.0)
+            spot_p = safe_float(meta.get("spot") or meta.get("spot_price") or fl.get("underlying_price") or prod.get("strike_price") or 0.0)
             if spot_p <= 0 and ("BTC" in sym or "ETH" in sym):
-                # Extract strike from symbol like C-BTC-71000-041226
                 parts = sym.split("-")
                 if len(parts) >= 3 and parts[2].isdigit():
                     spot_p = float(parts[2])
@@ -2093,7 +2095,7 @@ def generate_pnl_analytics_html(delta_orders_history):
                 "pnl_usd": pnl_usd,
                 "fee_usd": fee_usd,
                 "vol_usd": notional_usd,
-                "is_close": (abs(pnl_usd) > 1e-6) or ("liquidation" in str(fl.get("fill_type", "")).lower()),
+                "is_close": bool(has_realized) or ("liquidation" in str(fl.get("fill_type", "")).lower()),
                 "desc": f"{sym} ({fl.get('fill_type', 'Fill')})"
             })
     else:
@@ -2138,16 +2140,20 @@ def generate_pnl_analytics_html(delta_orders_history):
         if ev["is_close"]:
             daily_desc[d_key] = ev["desc"]
 
-    for tx in txns_raw:
+    # txns_raw is newest-first; iterate reversed (oldest -> newest) so end-of-day balance is stored per date
+    earliest_eq_inr = None
+    for tx in reversed(txns_raw):
         dt_t = _parse_dt(tx.get("created_at") or "")
         if not dt_t:
             continue
         d_k = dt_t.replace(tzinfo=None).date()
         bal_v = safe_float(tx.get("balance") or 0.0)
-        if bal_v > 0 and d_k not in eq_snapshots_by_date:
-            # Determine if balance is USD or INR
+        if bal_v > 0:
             asset_sym = str((tx.get("asset") or {}).get("symbol") or tx.get("asset_symbol") or "USD").upper()
-            eq_snapshots_by_date[d_k] = bal_v if asset_sym == "INR" else round(bal_v * 83.8, 2)
+            bal_inr = bal_v if asset_sym == "INR" else round(bal_v * 83.8, 2)
+            if earliest_eq_inr is None:
+                earliest_eq_inr = bal_inr
+            eq_snapshots_by_date[d_k] = bal_inr
 
     def _calc_window_kpis(days_limit):
         w_pnl = 0.0
@@ -2226,8 +2232,14 @@ def generate_pnl_analytics_html(delta_orders_history):
 
         # 1. Equity curve
         base_eq = live_eq_inr if live_eq_inr > 0 else 2840.0
-        win_sum_inr = sum(round(daily_pnl_usd.get(d, 0.0) * 83.8, 2) for d in dates)
-        run_eq = max(100.0, base_eq - win_sum_inr)
+        first_snap = next((eq_snapshots_by_date[d] for d in dates if d in eq_snapshots_by_date), None)
+        if first_snap is not None:
+            run_eq = first_snap
+        elif earliest_eq_inr is not None:
+            run_eq = earliest_eq_inr
+        else:
+            win_sum_inr = sum(round(daily_pnl_usd.get(d, 0.0) * 83.8, 2) for d in dates)
+            run_eq = max(100.0, base_eq - win_sum_inr)
         eq_series = []
         for idx, d in enumerate(dates):
             d_inr = round(daily_pnl_usd.get(d, 0.0) * 83.8, 2)
@@ -4844,33 +4856,6 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                 "market_state": state,
                 "stats": stats
             }).encode('utf-8'))
-            return
-
-        # API: Diagnostic schema check for Delta /v2/fills & /v2/wallet/transactions
-        if parsed.path == "/api/debug_delta_schema":
-            import delta_exchange as _dx_dbg
-            an = _dx_dbg.get_full_analytics_data(force_refresh=True)
-            fills = an.get("fills") or []
-            txns = an.get("txns") or []
-            tx_types = {}
-            for t in txns:
-                tt = str(t.get("transaction_type", "?"))
-                tx_types[tt] = tx_types.get(tt, 0) + 1
-            sample_fills = [
-                {k: v for k, v in fl.items() if k in ("id", "symbol", "product_symbol", "side", "size", "price", "commission", "realized_pnl", "fill_type", "role", "meta_data", "created_at")}
-                for fl in fills[:5]
-            ]
-            sample_txns = txns[:8]
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                "fills_count": len(fills),
-                "txns_count": len(txns),
-                "tx_types": tx_types,
-                "sample_fills": sample_fills,
-                "sample_txns": sample_txns,
-            }, default=str).encode('utf-8'))
             return
 
         # API: Emergency Kill Switch
