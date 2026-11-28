@@ -4846,6 +4846,33 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             }).encode('utf-8'))
             return
 
+        # API: Diagnostic schema check for Delta /v2/fills & /v2/wallet/transactions
+        if parsed.path == "/api/debug_delta_schema":
+            import delta_exchange as _dx_dbg
+            an = _dx_dbg.get_full_analytics_data(force_refresh=True)
+            fills = an.get("fills") or []
+            txns = an.get("txns") or []
+            tx_types = {}
+            for t in txns:
+                tt = str(t.get("transaction_type", "?"))
+                tx_types[tt] = tx_types.get(tt, 0) + 1
+            sample_fills = [
+                {k: v for k, v in fl.items() if k in ("id", "symbol", "product_symbol", "side", "size", "price", "commission", "realized_pnl", "fill_type", "role", "meta_data", "created_at")}
+                for fl in fills[:5]
+            ]
+            sample_txns = txns[:8]
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "fills_count": len(fills),
+                "txns_count": len(txns),
+                "tx_types": tx_types,
+                "sample_fills": sample_fills,
+                "sample_txns": sample_txns,
+            }, default=str).encode('utf-8'))
+            return
+
         # API: Emergency Kill Switch
         if parsed.path == "/api/kill_switch":
             success, msg = emergency_kill_switch()
