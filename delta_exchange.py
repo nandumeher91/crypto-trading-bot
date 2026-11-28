@@ -804,14 +804,21 @@ def close_any_position(symbol: str, product_id: int = None, size: int = None) ->
     try:
         client = _get_client()
         pos_size = None
-        if not product_id or size is None:
+        # Always check live position so we know exact signed direction (+ long vs - short)
+        try:
             positions = get_all_positions()
             for p in positions:
                 if p.get("symbol") == symbol:
                     product_id = p.get("product_id") or product_id
-                    pos_size = float(p.get("size", 1))
-                    size = abs(int(pos_size))
+                    pos_size = float(p.get("size", 0))
+                    if size is None:
+                        size = abs(int(pos_size))
                     break
+        except Exception:
+            pass
+
+        if pos_size == 0:
+            return True, f"{symbol} already closed on Delta Exchange" 
 
         if not product_id:
             try:
